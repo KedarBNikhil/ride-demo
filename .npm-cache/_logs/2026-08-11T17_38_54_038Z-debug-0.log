@@ -1,0 +1,573 @@
+0 verbose cli /opt/homebrew/Cellar/node/26.5.0_1/bin/node /opt/homebrew/bin/npm
+1 info using npm@11.17.0
+2 info using node@v26.5.0
+3 silly config load:file:/opt/homebrew/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/.npmrc
+5 silly config load:file:/Users/kedarbnikhil/.npmrc
+6 silly config load:file:/opt/homebrew/etc/npmrc
+7 verbose title npm install
+8 verbose argv "install" "--no-audit" "--no-fund" "--loglevel" "error"
+9 verbose logfile logs-max:10 dir:/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/.npm-cache/_logs/2026-08-11T17_38_54_038Z-
+10 verbose logfile /Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/.npm-cache/_logs/2026-08-11T17_38_54_038Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:2248146944 maxSize:562036736 maxEntrySize:281018368
+13 silly idealTree buildDeps
+14 silly fetch manifest react-native@0.81.5
+15 silly packumentCache full:https://registry.npmjs.org/react-native cache-miss
+16 http cache https://registry.npmjs.org/react-native 27ms (cache hit)
+17 silly packumentCache full:https://registry.npmjs.org/react-native set size:15651235 disposed:false
+18 silly fetch manifest @types/react@~19.1.0
+19 silly packumentCache full:https://registry.npmjs.org/@types%2freact cache-miss
+20 http cache https://registry.npmjs.org/@types%2freact 5ms (cache hit)
+21 silly packumentCache full:https://registry.npmjs.org/@types%2freact set size:2637439 disposed:false
+22 silly fetch manifest react@19.1.0
+23 silly packumentCache full:https://registry.npmjs.org/react cache-miss
+24 http cache https://registry.npmjs.org/react 14ms (cache hit)
+25 silly packumentCache full:https://registry.npmjs.org/react set size:6883336 disposed:false
+26 silly placeDep ROOT react-native@0.81.5 REPLACE for: nandyal-ride-demo@1.0.0 want: 0.81.5
+27 silly fetch manifest lightningcss-darwin-x64@1.33.0
+28 silly packumentCache full:https://registry.npmjs.org/lightningcss-darwin-x64 cache-miss
+29 http cache https://registry.npmjs.org/lightningcss-darwin-x64 2ms (cache hit)
+30 silly packumentCache full:https://registry.npmjs.org/lightningcss-darwin-x64 set size:80374 disposed:false
+31 silly fetch manifest lightningcss-linux-x64-gnu@1.33.0
+32 silly packumentCache full:https://registry.npmjs.org/lightningcss-linux-x64-gnu cache-miss
+33 http cache https://registry.npmjs.org/lightningcss-linux-x64-gnu 2ms (cache hit)
+34 silly packumentCache full:https://registry.npmjs.org/lightningcss-linux-x64-gnu set size:81819 disposed:false
+35 silly fetch manifest lightningcss-win32-x64-msvc@1.33.0
+36 silly packumentCache full:https://registry.npmjs.org/lightningcss-win32-x64-msvc cache-miss
+37 http cache https://registry.npmjs.org/lightningcss-win32-x64-msvc 2ms (cache hit)
+38 silly packumentCache full:https://registry.npmjs.org/lightningcss-win32-x64-msvc set size:81347 disposed:false
+39 silly fetch manifest lightningcss-win32-arm64-msvc@1.33.0
+40 silly packumentCache full:https://registry.npmjs.org/lightningcss-win32-arm64-msvc cache-miss
+41 http cache https://registry.npmjs.org/lightningcss-win32-arm64-msvc 3ms (cache hit)
+42 silly packumentCache full:https://registry.npmjs.org/lightningcss-win32-arm64-msvc set size:28346 disposed:false
+43 silly fetch manifest lightningcss-linux-arm64-gnu@1.33.0
+44 silly packumentCache full:https://registry.npmjs.org/lightningcss-linux-arm64-gnu cache-miss
+45 http cache https://registry.npmjs.org/lightningcss-linux-arm64-gnu 2ms (cache hit)
+46 silly packumentCache full:https://registry.npmjs.org/lightningcss-linux-arm64-gnu set size:82397 disposed:false
+47 silly fetch manifest lightningcss-linux-arm-gnueabihf@1.33.0
+48 silly packumentCache full:https://registry.npmjs.org/lightningcss-linux-arm-gnueabihf cache-miss
+49 http cache https://registry.npmjs.org/lightningcss-linux-arm-gnueabihf 1ms (cache hit)
+50 silly packumentCache full:https://registry.npmjs.org/lightningcss-linux-arm-gnueabihf set size:82635 disposed:false
+51 silly fetch manifest lightningcss-linux-arm64-musl@1.33.0
+52 silly packumentCache full:https://registry.npmjs.org/lightningcss-linux-arm64-musl cache-miss
+53 http cache https://registry.npmjs.org/lightningcss-linux-arm64-musl 3ms (cache hit)
+54 silly packumentCache full:https://registry.npmjs.org/lightningcss-linux-arm64-musl set size:82617 disposed:false
+55 silly fetch manifest lightningcss-linux-x64-musl@1.33.0
+56 silly packumentCache full:https://registry.npmjs.org/lightningcss-linux-x64-musl cache-miss
+57 http cache https://registry.npmjs.org/lightningcss-linux-x64-musl 2ms (cache hit)
+58 silly packumentCache full:https://registry.npmjs.org/lightningcss-linux-x64-musl set size:82032 disposed:false
+59 silly fetch manifest lightningcss-freebsd-x64@1.33.0
+60 silly packumentCache full:https://registry.npmjs.org/lightningcss-freebsd-x64 cache-miss
+61 http cache https://registry.npmjs.org/lightningcss-freebsd-x64 2ms (cache hit)
+62 silly packumentCache full:https://registry.npmjs.org/lightningcss-freebsd-x64 set size:44564 disposed:false
+63 silly fetch manifest lightningcss-android-arm64@1.33.0
+64 silly packumentCache full:https://registry.npmjs.org/lightningcss-android-arm64 cache-miss
+65 http cache https://registry.npmjs.org/lightningcss-android-arm64 1ms (cache hit)
+66 silly packumentCache full:https://registry.npmjs.org/lightningcss-android-arm64 set size:9371 disposed:false
+67 silly placeDep ROOT lightningcss-android-arm64@1.33.0 OK for: lightningcss@1.33.0 want: 1.33.0
+68 silly placeDep ROOT lightningcss-darwin-x64@1.33.0 OK for: lightningcss@1.33.0 want: 1.33.0
+69 silly placeDep ROOT lightningcss-freebsd-x64@1.33.0 OK for: lightningcss@1.33.0 want: 1.33.0
+70 silly placeDep ROOT lightningcss-linux-arm-gnueabihf@1.33.0 OK for: lightningcss@1.33.0 want: 1.33.0
+71 silly placeDep ROOT lightningcss-linux-arm64-gnu@1.33.0 OK for: lightningcss@1.33.0 want: 1.33.0
+72 silly placeDep ROOT lightningcss-linux-arm64-musl@1.33.0 OK for: lightningcss@1.33.0 want: 1.33.0
+73 silly placeDep ROOT lightningcss-linux-x64-gnu@1.33.0 OK for: lightningcss@1.33.0 want: 1.33.0
+74 silly placeDep ROOT lightningcss-linux-x64-musl@1.33.0 OK for: lightningcss@1.33.0 want: 1.33.0
+75 silly placeDep ROOT lightningcss-win32-arm64-msvc@1.33.0 OK for: lightningcss@1.33.0 want: 1.33.0
+76 silly placeDep ROOT lightningcss-win32-x64-msvc@1.33.0 OK for: lightningcss@1.33.0 want: 1.33.0
+77 silly reify mark retired [
+77 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/react-native'
+77 silly reify ]
+78 silly reify mark retired [
+78 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/acorn',
+78 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/acorn'
+78 silly reify ]
+79 silly reify mark retired [
+79 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/babel-plugin-polyfill-corejs2/node_modules/semver',
+79 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/babel-plugin-polyfill-corejs2/node_modules/.bin/semver'
+79 silly reify ]
+80 silly reify mark retired [
+80 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/baseline-browser-mapping',
+80 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/baseline-browser-mapping'
+80 silly reify ]
+81 silly reify mark retired [
+81 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/browserslist',
+81 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/browserslist'
+81 silly reify ]
+82 silly reify mark retired [
+82 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/chrome-launcher',
+82 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/print-chrome-path'
+82 silly reify ]
+83 silly reify mark retired [
+83 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/esprima',
+83 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/esparse',
+83 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/esvalidate'
+83 silly reify ]
+84 silly reify mark retired [
+84 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/expo',
+84 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/expo',
+84 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/expo-modules-autolinking',
+84 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/fingerprint'
+84 silly reify ]
+85 silly reify mark retired [
+85 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/expo-modules-autolinking',
+85 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/expo-modules-autolinking'
+85 silly reify ]
+86 silly reify mark retired [
+86 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/image-size',
+86 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/image-size'
+86 silly reify ]
+87 silly reify mark retired [
+87 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/is-docker',
+87 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/is-docker'
+87 silly reify ]
+88 silly reify mark retired [
+88 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/istanbul-lib-instrument/node_modules/semver',
+88 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/istanbul-lib-instrument/node_modules/.bin/semver'
+88 silly reify ]
+89 silly reify mark retired [
+89 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/js-yaml',
+89 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/js-yaml'
+89 silly reify ]
+90 silly reify mark retired [
+90 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/jsesc',
+90 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/jsesc'
+90 silly reify ]
+91 silly reify mark retired [
+91 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/json5',
+91 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/json5'
+91 silly reify ]
+92 silly reify mark retired [
+92 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/lan-network',
+92 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/lan-network'
+92 silly reify ]
+93 silly reify mark retired [
+93 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/loose-envify',
+93 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/loose-envify'
+93 silly reify ]
+94 silly reify mark retired [
+94 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/metro',
+94 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/metro'
+94 silly reify ]
+95 silly reify mark retired [
+95 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/metro-symbolicate',
+95 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/metro-symbolicate'
+95 silly reify ]
+96 silly reify mark retired [
+96 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/mime',
+96 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/mime'
+96 silly reify ]
+97 silly reify mark retired [
+97 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/mkdirp',
+97 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/mkdirp'
+97 silly reify ]
+98 silly reify mark retired [
+98 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/nanoid',
+98 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/nanoid'
+98 silly reify ]
+99 silly reify mark retired [
+99 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/qrcode-terminal',
+99 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/qrcode-terminal'
+99 silly reify ]
+100 silly reify mark retired [
+100 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/rc',
+100 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/rc'
+100 silly reify ]
+101 silly reify mark retired [
+101 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/regjsparser',
+101 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/regjsparser'
+101 silly reify ]
+102 silly reify mark retired [
+102 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/resolve',
+102 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/resolve'
+102 silly reify ]
+103 silly reify mark retired [
+103 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/rimraf',
+103 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/rimraf'
+103 silly reify ]
+104 silly reify mark retired [
+104 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/semver',
+104 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/semver'
+104 silly reify ]
+105 silly reify mark retired [
+105 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/sucrase',
+105 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/sucrase',
+105 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/sucrase-node'
+105 silly reify ]
+106 silly reify mark retired [
+106 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/terser',
+106 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/terser'
+106 silly reify ]
+107 silly reify mark retired [
+107 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/typescript',
+107 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/tsc',
+107 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/tsserver'
+107 silly reify ]
+108 silly reify mark retired [
+108 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/update-browserslist-db',
+108 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/update-browserslist-db'
+108 silly reify ]
+109 silly reify mark retired [
+109 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/uuid',
+109 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/uuid'
+109 silly reify ]
+110 silly reify mark retired [
+110 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/which',
+110 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/node-which'
+110 silly reify ]
+111 silly reify mark retired [
+111 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/yaml',
+111 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/yaml'
+111 silly reify ]
+112 silly reify mark retired [
+112 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-compilation-targets/node_modules/semver',
+112 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-compilation-targets/node_modules/.bin/semver'
+112 silly reify ]
+113 silly reify mark retired [
+113 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-create-regexp-features-plugin/node_modules/semver',
+113 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-create-regexp-features-plugin/node_modules/.bin/semver'
+113 silly reify ]
+114 silly reify mark retired [
+114 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/core/node_modules/semver',
+114 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/core/node_modules/.bin/semver'
+114 silly reify ]
+115 silly reify mark retired [
+115 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-create-class-features-plugin/node_modules/semver',
+115 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-create-class-features-plugin/node_modules/.bin/semver'
+115 silly reify ]
+116 silly reify mark retired [
+116 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/parser',
+116 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/parser'
+116 silly reify ]
+117 silly reify mark retired [
+117 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/plugin-transform-runtime/node_modules/semver',
+117 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/plugin-transform-runtime/node_modules/.bin/semver'
+117 silly reify ]
+118 silly reify mark retired [
+118 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@expo/fingerprint',
+118 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/fingerprint'
+118 silly reify ]
+119 silly reify mark retired [
+119 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@expo/xcpretty',
+119 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/excpretty'
+119 silly reify ]
+120 silly reify moves {
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/react-native': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.react-native-JHFvb7eY',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/acorn': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.acorn-NGth8tWJ',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/acorn': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.acorn-HCfxaLb1',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/babel-plugin-polyfill-corejs2/node_modules/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/babel-plugin-polyfill-corejs2/node_modules/.semver-2YrXUXYL',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/babel-plugin-polyfill-corejs2/node_modules/.bin/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/babel-plugin-polyfill-corejs2/node_modules/.bin/.semver-Mm3TgYg3',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/baseline-browser-mapping': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.baseline-browser-mapping-WmBxpbt4',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/baseline-browser-mapping': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.baseline-browser-mapping-ecu2UFGh',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/browserslist': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.browserslist-rwqmBNte',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/browserslist': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.browserslist-itrm385P',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/chrome-launcher': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.chrome-launcher-ptHAuLzg',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/print-chrome-path': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.print-chrome-path-4jkYWwhl',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/esprima': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.esprima-Omtd2u67',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/esparse': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.esparse-SVxMl7yj',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/esvalidate': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.esvalidate-ZQoAx5FY',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/expo': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.expo-f2xF3PFG',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/expo': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.expo-9uWBbXt4',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/expo-modules-autolinking': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.expo-modules-autolinking-kTWr5meK',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/fingerprint': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.fingerprint-K0Gu7uvf',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/expo-modules-autolinking': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.expo-modules-autolinking-XcPVAOrT',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/image-size': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.image-size-UwFIDGde',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/image-size': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.image-size-3cy1VvW1',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/is-docker': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.is-docker-K1tUdbgq',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/is-docker': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.is-docker-q724vxAD',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/istanbul-lib-instrument/node_modules/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/istanbul-lib-instrument/node_modules/.semver-852NGafS',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/istanbul-lib-instrument/node_modules/.bin/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/istanbul-lib-instrument/node_modules/.bin/.semver-y6OmqXdr',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/js-yaml': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.js-yaml-p7llBscS',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/js-yaml': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.js-yaml-Nq6HJtdp',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/jsesc': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.jsesc-cL7c0jKu',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/jsesc': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.jsesc-t0SAj8Hn',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/json5': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.json5-5Jt8RjnV',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/json5': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.json5-BQzAn7df',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/lan-network': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.lan-network-1GSDCvCC',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/lan-network': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.lan-network-PJk9SNsj',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/loose-envify': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.loose-envify-lL4L3TqW',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/loose-envify': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.loose-envify-gY8eqNlO',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/metro': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.metro-nwugZyY0',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/metro': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.metro-gE7TSofX',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/metro-symbolicate': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.metro-symbolicate-cOIYYefi',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/metro-symbolicate': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.metro-symbolicate-bWt64MaZ',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/mime': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.mime-Fa31zAfz',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/mime': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.mime-GHEPrQ0f',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/mkdirp': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.mkdirp-0eVcvVb8',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/mkdirp': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.mkdirp-uIWQ6uNA',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/nanoid': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.nanoid-hxXS1V4x',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/nanoid': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.nanoid-m77yss4h',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/qrcode-terminal': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.qrcode-terminal-D1srWdnp',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/qrcode-terminal': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.qrcode-terminal-aMrHAhTz',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/rc': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.rc-RX728uV4',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/rc': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.rc-q0VI9BAX',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/regjsparser': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.regjsparser-999Js3a9',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/regjsparser': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.regjsparser-eXTjEnZW',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/resolve': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.resolve-YWGucpqT',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/resolve': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.resolve-NXXsWHXa',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/rimraf': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.rimraf-VwfYBlAt',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/rimraf': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.rimraf-KT4NQloB',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.semver-eDwf1tye',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.semver-TxbQnxPD',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/sucrase': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.sucrase-vGRSwZs2',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/sucrase': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.sucrase-n3r3C51V',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/sucrase-node': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.sucrase-node-uO1NQLva',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/terser': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.terser-cl5BGyB6',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/terser': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.terser-zbcL9Rso',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/typescript': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.typescript-ldJGlSPR',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/tsc': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.tsc-O3piHb3j',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/tsserver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.tsserver-AW3WlMCi',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/update-browserslist-db': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.update-browserslist-db-DineuHEl',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/update-browserslist-db': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.update-browserslist-db-rCEMQJNg',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/uuid': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.uuid-YPx2uRWg',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/uuid': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.uuid-2TMnEILr',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/which': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.which-P2KER3A6',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/node-which': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.node-which-8OF82JUb',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/yaml': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.yaml-ftn7EqUq',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/yaml': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.yaml-94a09Qee',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-compilation-targets/node_modules/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-compilation-targets/node_modules/.semver-nDWNGgLH',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-compilation-targets/node_modules/.bin/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-compilation-targets/node_modules/.bin/.semver-jlRPNU2F',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-create-regexp-features-plugin/node_modules/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-create-regexp-features-plugin/node_modules/.semver-iafzBBlc',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-create-regexp-features-plugin/node_modules/.bin/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-create-regexp-features-plugin/node_modules/.bin/.semver-XzxNPBg9',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/core/node_modules/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/core/node_modules/.semver-Yqp4sJIF',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/core/node_modules/.bin/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/core/node_modules/.bin/.semver-w8bIsz3k',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-create-class-features-plugin/node_modules/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-create-class-features-plugin/node_modules/.semver-ZULgklpQ',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-create-class-features-plugin/node_modules/.bin/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/helper-create-class-features-plugin/node_modules/.bin/.semver-MyDVI9bv',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/parser': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/.parser-tSvTuQmT',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/parser': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.parser-8CTeZE2Z',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/plugin-transform-runtime/node_modules/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/plugin-transform-runtime/node_modules/.semver-yf3Fhxk9',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/plugin-transform-runtime/node_modules/.bin/semver': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@babel/plugin-transform-runtime/node_modules/.bin/.semver-IS4JMnKi',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@expo/fingerprint': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@expo/.fingerprint-fS8iPrfW',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@expo/xcpretty': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/@expo/.xcpretty-QGnLnJV5',
+120 silly reify   '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/excpretty': '/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/node_modules/.bin/.excpretty-MEJsgD6u'
+120 silly reify }
+121 silly packumentCache corgi:https://registry.npmjs.org/@expo%2fxcpretty cache-miss
+122 silly packumentCache corgi:https://registry.npmjs.org/yaml cache-miss
+123 silly packumentCache corgi:https://registry.npmjs.org/@expo%2ffingerprint cache-miss
+124 silly packumentCache corgi:https://registry.npmjs.org/@babel%2fparser cache-miss
+125 silly packumentCache corgi:https://registry.npmjs.org/which cache-miss
+126 silly packumentCache corgi:https://registry.npmjs.org/update-browserslist-db cache-miss
+127 silly packumentCache corgi:https://registry.npmjs.org/terser cache-miss
+128 silly packumentCache corgi:https://registry.npmjs.org/typescript cache-miss
+129 silly packumentCache corgi:https://registry.npmjs.org/sucrase cache-miss
+130 silly packumentCache corgi:https://registry.npmjs.org/regjsparser cache-miss
+131 silly packumentCache corgi:https://registry.npmjs.org/qrcode-terminal cache-miss
+132 silly packumentCache corgi:https://registry.npmjs.org/rimraf cache-miss
+133 silly packumentCache corgi:https://registry.npmjs.org/rc cache-miss
+134 silly packumentCache corgi:https://registry.npmjs.org/semver cache-miss
+135 silly packumentCache corgi:https://registry.npmjs.org/nanoid cache-miss
+136 silly packumentCache corgi:https://registry.npmjs.org/uuid cache-miss
+137 silly packumentCache corgi:https://registry.npmjs.org/metro-symbolicate cache-miss
+138 silly packumentCache corgi:https://registry.npmjs.org/mkdirp cache-miss
+139 silly packumentCache corgi:https://registry.npmjs.org/loose-envify cache-miss
+140 silly packumentCache corgi:https://registry.npmjs.org/resolve cache-miss
+141 silly packumentCache corgi:https://registry.npmjs.org/json5 cache-miss
+142 silly packumentCache corgi:https://registry.npmjs.org/js-yaml cache-miss
+143 silly packumentCache corgi:https://registry.npmjs.org/image-size cache-miss
+144 silly packumentCache corgi:https://registry.npmjs.org/lan-network cache-miss
+145 silly packumentCache corgi:https://registry.npmjs.org/is-docker cache-miss
+146 silly packumentCache corgi:https://registry.npmjs.org/esprima cache-miss
+147 silly packumentCache corgi:https://registry.npmjs.org/chrome-launcher cache-miss
+148 silly packumentCache corgi:https://registry.npmjs.org/jsesc cache-miss
+149 silly packumentCache corgi:https://registry.npmjs.org/expo cache-miss
+150 silly packumentCache corgi:https://registry.npmjs.org/mime cache-miss
+151 silly packumentCache corgi:https://registry.npmjs.org/acorn cache-miss
+152 silly packumentCache corgi:https://registry.npmjs.org/browserslist cache-miss
+153 silly packumentCache corgi:https://registry.npmjs.org/expo-modules-autolinking cache-miss
+154 http cache react-native@https://registry.npmjs.org/react-native/-/react-native-0.81.5.tgz 0ms (cache hit)
+155 silly packumentCache corgi:https://registry.npmjs.org/baseline-browser-mapping cache-miss
+156 silly packumentCache corgi:https://registry.npmjs.org/metro cache-miss
+157 silly packumentCache corgi:https://registry.npmjs.org/js-yaml cache-miss
+158 silly packumentCache corgi:https://registry.npmjs.org/semver cache-miss
+159 silly packumentCache corgi:https://registry.npmjs.org/semver cache-miss
+160 silly packumentCache corgi:https://registry.npmjs.org/semver cache-miss
+161 silly packumentCache corgi:https://registry.npmjs.org/semver cache-miss
+162 silly packumentCache corgi:https://registry.npmjs.org/semver cache-miss
+163 silly packumentCache corgi:https://registry.npmjs.org/semver cache-miss
+164 silly packumentCache corgi:https://registry.npmjs.org/semver cache-miss
+165 silly packumentCache corgi:https://registry.npmjs.org/@expo%2fcli cache-miss
+166 silly tarball no local data for react-native@https://registry.npmjs.org/react-native/-/react-native-0.81.5.tgz. Extracting by manifest.
+167 http cache https://registry.npmjs.org/uuid 49ms (cache hit)
+168 silly packumentCache corgi:https://registry.npmjs.org/uuid set size:82973 disposed:false
+169 http cache https://registry.npmjs.org/image-size 50ms (cache hit)
+170 silly packumentCache corgi:https://registry.npmjs.org/image-size set size:76086 disposed:false
+171 http cache https://registry.npmjs.org/metro 52ms (cache hit)
+172 silly packumentCache corgi:https://registry.npmjs.org/metro set size:542209 disposed:false
+173 http cache https://registry.npmjs.org/image-size/-/image-size-1.2.1.tgz 16ms (cache hit)
+174 http cache https://registry.npmjs.org/uuid/-/uuid-7.0.3.tgz 17ms (cache hit)
+175 http cache https://registry.npmjs.org/metro/-/metro-0.83.3.tgz 26ms (cache hit)
+176 http fetch GET 200 https://registry.npmjs.org/which 588ms (cache miss)
+177 silly packumentCache corgi:https://registry.npmjs.org/which set size:undefined disposed:false
+178 http cache https://registry.npmjs.org/which/-/which-2.0.2.tgz 2ms (cache hit)
+179 http fetch GET 200 https://registry.npmjs.org/@expo%2fxcpretty 722ms (cache miss)
+180 silly packumentCache corgi:https://registry.npmjs.org/@expo%2fxcpretty set size:undefined disposed:false
+181 http fetch GET 200 https://registry.npmjs.org/sucrase 787ms (cache miss)
+182 silly packumentCache corgi:https://registry.npmjs.org/sucrase set size:undefined disposed:false
+183 http cache https://registry.npmjs.org/sucrase/-/sucrase-3.35.1.tgz 7ms (cache hit)
+184 http fetch GET 200 https://registry.npmjs.org/mkdirp 802ms (cache miss)
+185 silly packumentCache corgi:https://registry.npmjs.org/mkdirp set size:undefined disposed:false
+186 http cache https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz 2ms (cache hit)
+187 http fetch GET 200 https://registry.npmjs.org/semver 841ms (cache miss)
+188 silly packumentCache corgi:https://registry.npmjs.org/semver set size:undefined disposed:false
+189 http cache https://registry.npmjs.org/semver/-/semver-7.8.5.tgz 2ms (cache hit)
+190 http fetch GET 200 https://registry.npmjs.org/loose-envify 938ms (cache miss)
+191 silly packumentCache corgi:https://registry.npmjs.org/loose-envify set size:undefined disposed:false
+192 http cache https://registry.npmjs.org/loose-envify/-/loose-envify-1.4.0.tgz 2ms (cache hit)
+193 http fetch GET 200 https://registry.npmjs.org/yaml 997ms (cache miss)
+194 silly packumentCache corgi:https://registry.npmjs.org/yaml set size:undefined disposed:false
+195 http fetch GET 200 https://registry.npmjs.org/regjsparser 1000ms (cache miss)
+196 silly packumentCache corgi:https://registry.npmjs.org/regjsparser set size:undefined disposed:false
+197 http cache https://registry.npmjs.org/yaml/-/yaml-2.9.0.tgz 7ms (cache hit)
+198 http cache https://registry.npmjs.org/regjsparser/-/regjsparser-0.13.2.tgz 7ms (cache hit)
+199 http fetch GET 200 https://registry.npmjs.org/qrcode-terminal 1027ms (cache miss)
+200 silly packumentCache corgi:https://registry.npmjs.org/qrcode-terminal set size:undefined disposed:false
+201 http cache https://registry.npmjs.org/qrcode-terminal/-/qrcode-terminal-0.11.0.tgz 3ms (cache hit)
+202 http fetch GET 200 https://registry.npmjs.org/lan-network 1053ms (cache miss)
+203 silly packumentCache corgi:https://registry.npmjs.org/lan-network set size:undefined disposed:false
+204 http cache https://registry.npmjs.org/lan-network/-/lan-network-0.2.1.tgz 3ms (cache hit)
+205 http fetch GET 200 https://registry.npmjs.org/terser 1058ms (cache miss)
+206 silly packumentCache corgi:https://registry.npmjs.org/terser set size:undefined disposed:false
+207 http cache https://registry.npmjs.org/terser/-/terser-5.49.2.tgz 7ms (cache hit)
+208 http fetch GET 200 https://registry.npmjs.org/metro-symbolicate 1111ms (cache miss)
+209 silly packumentCache corgi:https://registry.npmjs.org/metro-symbolicate set size:undefined disposed:false
+210 http cache https://registry.npmjs.org/metro-symbolicate/-/metro-symbolicate-0.83.3.tgz 2ms (cache hit)
+211 http fetch GET 200 https://registry.npmjs.org/js-yaml 1164ms (cache miss)
+212 silly packumentCache corgi:https://registry.npmjs.org/js-yaml set size:undefined disposed:false
+213 http cache https://registry.npmjs.org/js-yaml/-/js-yaml-3.15.1.tgz 3ms (cache hit)
+214 http fetch GET 200 https://registry.npmjs.org/json5 1170ms (cache miss)
+215 silly packumentCache corgi:https://registry.npmjs.org/json5 set size:undefined disposed:false
+216 http cache https://registry.npmjs.org/json5/-/json5-2.2.3.tgz 2ms (cache hit)
+217 http fetch GET 200 https://registry.npmjs.org/resolve 1310ms (cache miss)
+218 silly packumentCache corgi:https://registry.npmjs.org/resolve set size:undefined disposed:false
+219 http cache https://registry.npmjs.org/resolve/-/resolve-1.22.12.tgz 4ms (cache hit)
+220 http fetch GET 200 https://registry.npmjs.org/is-docker 1333ms (cache miss)
+221 silly packumentCache corgi:https://registry.npmjs.org/is-docker set size:undefined disposed:false
+222 http cache https://registry.npmjs.org/is-docker/-/is-docker-2.2.1.tgz 3ms (cache hit)
+223 http fetch GET 200 https://registry.npmjs.org/rimraf 1347ms (cache miss)
+224 silly packumentCache corgi:https://registry.npmjs.org/rimraf set size:undefined disposed:false
+225 http cache https://registry.npmjs.org/rimraf/-/rimraf-3.0.2.tgz 2ms (cache hit)
+226 http fetch GET 200 https://registry.npmjs.org/rc 1370ms (cache miss)
+227 silly packumentCache corgi:https://registry.npmjs.org/rc set size:undefined disposed:false
+228 http cache https://registry.npmjs.org/rc/-/rc-1.2.8.tgz 3ms (cache hit)
+229 http fetch GET 200 https://registry.npmjs.org/esprima 1401ms (cache miss)
+230 silly packumentCache corgi:https://registry.npmjs.org/esprima set size:undefined disposed:false
+231 http cache https://registry.npmjs.org/esprima/-/esprima-4.0.1.tgz 6ms (cache hit)
+232 http fetch GET 200 https://registry.npmjs.org/nanoid 1467ms (cache miss)
+233 silly packumentCache corgi:https://registry.npmjs.org/nanoid set size:undefined disposed:false
+234 http fetch GET 200 https://registry.npmjs.org/@expo%2ffingerprint 1471ms (cache miss)
+235 silly packumentCache corgi:https://registry.npmjs.org/@expo%2ffingerprint set size:undefined disposed:false
+236 http cache https://registry.npmjs.org/nanoid/-/nanoid-3.3.18.tgz 4ms (cache hit)
+237 http fetch GET 200 https://registry.npmjs.org/js-yaml 1558ms (cache miss)
+238 silly packumentCache corgi:https://registry.npmjs.org/js-yaml set size:undefined disposed:false
+239 http cache https://registry.npmjs.org/js-yaml/-/js-yaml-4.3.1.tgz 6ms (cache hit)
+240 http fetch GET 200 https://registry.npmjs.org/semver 1645ms (cache miss)
+241 silly packumentCache corgi:https://registry.npmjs.org/semver set size:undefined disposed:false
+242 http cache https://registry.npmjs.org/semver/-/semver-6.3.1.tgz 3ms (cache hit)
+243 http fetch GET 200 https://registry.npmjs.org/baseline-browser-mapping 1707ms (cache miss)
+244 silly packumentCache corgi:https://registry.npmjs.org/baseline-browser-mapping set size:undefined disposed:false
+245 http cache https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.11.13.tgz 2ms (cache hit)
+246 http fetch GET 200 https://registry.npmjs.org/semver 1787ms (cache miss)
+247 silly packumentCache corgi:https://registry.npmjs.org/semver set size:undefined disposed:false
+248 http cache https://registry.npmjs.org/semver/-/semver-6.3.1.tgz 2ms (cache hit)
+249 http fetch GET 200 https://registry.npmjs.org/expo-modules-autolinking 2009ms (cache miss)
+250 silly packumentCache corgi:https://registry.npmjs.org/expo-modules-autolinking set size:undefined disposed:false
+251 http cache https://registry.npmjs.org/expo-modules-autolinking/-/expo-modules-autolinking-3.0.26.tgz 14ms (cache hit)
+252 http fetch GET 200 https://registry.npmjs.org/semver 2028ms (cache miss)
+253 silly packumentCache corgi:https://registry.npmjs.org/semver set size:undefined disposed:false
+254 http cache https://registry.npmjs.org/semver/-/semver-6.3.1.tgz 2ms (cache hit)
+255 http fetch GET 200 https://registry.npmjs.org/semver 2087ms (cache miss)
+256 silly packumentCache corgi:https://registry.npmjs.org/semver set size:undefined disposed:false
+257 http cache https://registry.npmjs.org/semver/-/semver-6.3.1.tgz 1ms (cache hit)
+258 http fetch GET 200 https://registry.npmjs.org/semver 2279ms (cache miss)
+259 silly packumentCache corgi:https://registry.npmjs.org/semver set size:undefined disposed:false
+260 http cache https://registry.npmjs.org/semver/-/semver-6.3.1.tgz 2ms (cache hit)
+261 http fetch GET 200 https://registry.npmjs.org/semver 2293ms (cache miss)
+262 silly packumentCache corgi:https://registry.npmjs.org/semver set size:undefined disposed:false
+263 http cache https://registry.npmjs.org/semver/-/semver-6.3.1.tgz 1ms (cache hit)
+264 http fetch GET 200 https://registry.npmjs.org/mime 2305ms (cache miss)
+265 silly packumentCache corgi:https://registry.npmjs.org/mime set size:undefined disposed:false
+266 http cache https://registry.npmjs.org/mime/-/mime-1.6.0.tgz 7ms (cache hit)
+267 http fetch GET 200 https://registry.npmjs.org/@expo/xcpretty/-/xcpretty-4.4.4.tgz 1775ms (cache revalidated)
+268 http fetch GET 200 https://registry.npmjs.org/@expo/fingerprint/-/fingerprint-0.15.5.tgz 1188ms (cache revalidated)
+269 http fetch GET 200 https://registry.npmjs.org/semver 2659ms (cache miss)
+270 silly packumentCache corgi:https://registry.npmjs.org/semver set size:undefined disposed:false
+271 http cache https://registry.npmjs.org/semver/-/semver-6.3.1.tgz 2ms (cache hit)
+272 http fetch GET 200 https://registry.npmjs.org/update-browserslist-db 2680ms (cache miss)
+273 silly packumentCache corgi:https://registry.npmjs.org/update-browserslist-db set size:undefined disposed:false
+274 http cache https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.3.1.tgz 2ms (cache hit)
+275 http fetch GET 200 https://registry.npmjs.org/@babel%2fparser 2838ms (cache miss)
+276 silly packumentCache corgi:https://registry.npmjs.org/@babel%2fparser set size:undefined disposed:false
+277 http fetch GET 200 https://registry.npmjs.org/chrome-launcher 3132ms (cache miss)
+278 silly packumentCache corgi:https://registry.npmjs.org/chrome-launcher set size:undefined disposed:false
+279 http cache https://registry.npmjs.org/chrome-launcher/-/chrome-launcher-0.15.2.tgz 4ms (cache hit)
+280 http fetch GET 200 https://registry.npmjs.org/@babel/parser/-/parser-7.29.8.tgz 321ms (cache revalidated)
+281 http fetch GET 200 https://registry.npmjs.org/@expo%2fcli 3452ms (cache miss)
+282 silly packumentCache corgi:https://registry.npmjs.org/@expo%2fcli set size:undefined disposed:false
+283 http fetch GET 200 https://registry.npmjs.org/browserslist 3674ms (cache miss)
+284 silly packumentCache corgi:https://registry.npmjs.org/browserslist set size:undefined disposed:false
+285 http cache https://registry.npmjs.org/browserslist/-/browserslist-4.28.8.tgz 2ms (cache hit)
+286 http fetch GET 200 https://registry.npmjs.org/jsesc 4005ms (cache miss)
+287 silly packumentCache corgi:https://registry.npmjs.org/jsesc set size:undefined disposed:false
+288 http cache https://registry.npmjs.org/jsesc/-/jsesc-3.1.0.tgz 4ms (cache hit)
+289 http fetch GET 200 https://registry.npmjs.org/acorn 4030ms (cache miss)
+290 silly packumentCache corgi:https://registry.npmjs.org/acorn set size:undefined disposed:false
+291 http cache https://registry.npmjs.org/acorn/-/acorn-8.18.0.tgz 5ms (cache hit)
+292 http fetch GET 200 https://registry.npmjs.org/expo 4262ms (cache miss)
+293 silly packumentCache corgi:https://registry.npmjs.org/expo set size:undefined disposed:false
+294 http cache https://registry.npmjs.org/expo/-/expo-54.0.36.tgz 8ms (cache hit)
+295 http fetch GET 200 https://registry.npmjs.org/@expo/cli/-/cli-54.0.26.tgz 4434ms (cache miss)
+296 http fetch GET 200 https://registry.npmjs.org/typescript 9726ms (cache miss)
+297 silly packumentCache corgi:https://registry.npmjs.org/typescript set size:undefined disposed:false
+298 http cache https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz 49ms (cache hit)
+299 http fetch GET 200 https://registry.npmjs.org/react-native/-/react-native-0.81.5.tgz 41185ms (cache miss)
+300 silly CHANGE node_modules/@expo/xcpretty
+301 silly CHANGE node_modules/@expo/xcpretty/node_modules/js-yaml
+302 silly CHANGE node_modules/@expo/fingerprint
+303 silly CHANGE node_modules/@babel/plugin-transform-runtime/node_modules/semver
+304 silly CHANGE node_modules/@babel/parser
+305 silly CHANGE node_modules/@babel/helper-create-class-features-plugin/node_modules/semver
+306 silly CHANGE node_modules/@babel/core/node_modules/semver
+307 silly CHANGE node_modules/@babel/helper-create-regexp-features-plugin/node_modules/semver
+308 silly CHANGE node_modules/@babel/helper-compilation-targets/node_modules/semver
+309 silly CHANGE node_modules/yaml
+310 silly CHANGE node_modules/which
+311 silly CHANGE node_modules/uuid
+312 silly CHANGE node_modules/update-browserslist-db
+313 silly CHANGE node_modules/typescript
+314 silly CHANGE node_modules/terser
+315 silly CHANGE node_modules/sucrase
+316 silly CHANGE node_modules/semver
+317 silly CHANGE node_modules/rimraf
+318 silly CHANGE node_modules/resolve
+319 silly CHANGE node_modules/regjsparser
+320 silly CHANGE node_modules/rc
+321 silly CHANGE node_modules/qrcode-terminal
+322 silly CHANGE node_modules/nanoid
+323 silly CHANGE node_modules/mkdirp
+324 silly CHANGE node_modules/mime
+325 silly CHANGE node_modules/metro-symbolicate
+326 silly CHANGE node_modules/metro
+327 silly CHANGE node_modules/loose-envify
+328 silly CHANGE node_modules/lan-network
+329 silly CHANGE node_modules/json5
+330 silly CHANGE node_modules/jsesc
+331 silly CHANGE node_modules/js-yaml
+332 silly CHANGE node_modules/istanbul-lib-instrument/node_modules/semver
+333 silly CHANGE node_modules/is-docker
+334 silly CHANGE node_modules/image-size
+335 silly CHANGE node_modules/expo-modules-autolinking
+336 silly CHANGE node_modules/expo
+337 silly CHANGE node_modules/expo/node_modules/@expo/cli
+338 silly CHANGE node_modules/esprima
+339 silly CHANGE node_modules/chrome-launcher
+340 silly CHANGE node_modules/browserslist
+341 silly CHANGE node_modules/baseline-browser-mapping
+342 silly CHANGE node_modules/babel-plugin-polyfill-corejs2/node_modules/semver
+343 silly CHANGE node_modules/acorn
+344 silly CHANGE node_modules/react-native
+345 verbose cwd /Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo
+346 verbose os Darwin 25.5.0
+347 verbose node v26.5.0
+348 verbose npm  v11.17.0
+349 verbose exit 0
+350 info ok

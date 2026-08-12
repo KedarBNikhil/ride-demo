@@ -1,0 +1,98 @@
+0 verbose cli /opt/homebrew/Cellar/node/26.5.0_1/bin/node /opt/homebrew/bin/npm
+1 info using npm@11.17.0
+2 info using node@v26.5.0
+3 silly config load:file:/opt/homebrew/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/.npmrc
+5 silly config load:file:/Users/kedarbnikhil/.npmrc
+6 silly config load:file:/opt/homebrew/etc/npmrc
+7 verbose title npm install
+8 verbose argv "install" "--no-audit" "--no-fund" "--loglevel" "error"
+9 verbose logfile logs-max:10 dir:/Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/.npm-cache/_logs/2026-08-11T17_55_12_220Z-
+10 verbose logfile /Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo/.npm-cache/_logs/2026-08-11T17_55_12_220Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:2248146944 maxSize:562036736 maxEntrySize:281018368
+13 silly idealTree buildDeps
+14 silly fetch manifest expo-location@~19.0.7
+15 silly packumentCache full:https://registry.npmjs.org/expo-location cache-miss
+16 http fetch GET 200 https://registry.npmjs.org/expo-location 618ms (cache miss)
+17 silly packumentCache full:https://registry.npmjs.org/expo-location set size:undefined disposed:false
+18 silly fetch manifest expo@~54.0.0
+19 silly packumentCache full:https://registry.npmjs.org/expo cache-miss
+20 http fetch GET 200 https://registry.npmjs.org/expo 71ms (cache revalidated)
+21 silly packumentCache full:https://registry.npmjs.org/expo set size:4003257 disposed:false
+22 silly fetch manifest @expo/dom-webview@*
+23 silly packumentCache full:https://registry.npmjs.org/@expo%2fdom-webview cache-miss
+24 http fetch GET 200 https://registry.npmjs.org/@expo%2fdom-webview 244ms (cache revalidated)
+25 silly packumentCache full:https://registry.npmjs.org/@expo%2fdom-webview set size:448265 disposed:false
+26 silly fetch manifest react@19.1.0
+27 silly packumentCache full:https://registry.npmjs.org/react cache-miss
+28 http fetch GET 200 https://registry.npmjs.org/react 68ms (cache revalidated)
+29 silly packumentCache full:https://registry.npmjs.org/react set size:6883336 disposed:false
+30 silly fetch manifest react-native@0.81.5
+31 silly packumentCache full:https://registry.npmjs.org/react-native cache-miss
+32 http fetch GET 200 https://registry.npmjs.org/react-native 134ms (cache revalidated)
+33 silly packumentCache full:https://registry.npmjs.org/react-native set size:15651235 disposed:false
+34 silly fetch manifest @types/react@~19.1.0
+35 silly packumentCache full:https://registry.npmjs.org/@types%2freact cache-miss
+36 http fetch GET 200 https://registry.npmjs.org/@types%2freact 57ms (cache revalidated)
+37 silly packumentCache full:https://registry.npmjs.org/@types%2freact set size:2637439 disposed:false
+38 silly fetch manifest @expo/metro-runtime@*
+39 silly packumentCache full:https://registry.npmjs.org/@expo%2fmetro-runtime cache-miss
+40 http fetch GET 200 https://registry.npmjs.org/@expo%2fmetro-runtime 94ms (cache revalidated)
+41 silly packumentCache full:https://registry.npmjs.org/@expo%2fmetro-runtime set size:792769 disposed:false
+42 silly fetch manifest react-dom@*
+43 silly packumentCache full:https://registry.npmjs.org/react-dom cache-miss
+44 http fetch GET 200 https://registry.npmjs.org/react-dom 91ms (cache revalidated)
+45 silly packumentCache full:https://registry.npmjs.org/react-dom set size:9244743 disposed:false
+46 silly fetch manifest react@^19.2.8
+47 silly packumentCache full:https://registry.npmjs.org/react cache-miss
+48 http cache https://registry.npmjs.org/react 7ms (cache hit)
+49 silly packumentCache full:https://registry.npmjs.org/react set size:6883336 disposed:false
+50 silly fetch manifest react-native-webview@*
+51 silly packumentCache full:https://registry.npmjs.org/react-native-webview cache-miss
+52 http fetch GET 200 https://registry.npmjs.org/react-native-webview 114ms (cache revalidated)
+53 silly packumentCache full:https://registry.npmjs.org/react-native-webview set size:1379763 disposed:false
+54 silly fetch manifest react-native-maps@1.20.1
+55 silly packumentCache full:https://registry.npmjs.org/react-native-maps cache-miss
+56 http fetch GET 200 https://registry.npmjs.org/react-native-maps 648ms (cache miss)
+57 silly packumentCache full:https://registry.npmjs.org/react-native-maps set size:undefined disposed:false
+58 silly fetch manifest react-native-web@>= 0.11
+59 silly packumentCache full:https://registry.npmjs.org/react-native-web cache-miss
+60 http fetch GET 200 https://registry.npmjs.org/react-native-web 69ms (cache revalidated)
+61 silly packumentCache full:https://registry.npmjs.org/react-native-web set size:1090416 disposed:false
+62 silly fetch manifest react-dom@^18.0.0 || ^19.0.0
+63 silly packumentCache full:https://registry.npmjs.org/react-dom cache-miss
+64 http cache https://registry.npmjs.org/react-dom 57ms (cache hit)
+65 silly packumentCache full:https://registry.npmjs.org/react-dom set size:9244743 disposed:false
+66 silly placeDep ROOT expo-location@19.0.8 OK for: nandyal-ride-demo@1.0.0 want: ~19.0.7
+67 silly placeDep ROOT react-native-maps@1.20.1 OK for: nandyal-ride-demo@1.0.0 want: 1.20.1
+68 silly fetch manifest @types/geojson@^7946.0.13
+69 silly packumentCache full:https://registry.npmjs.org/@types%2fgeojson cache-miss
+70 http fetch GET 200 https://registry.npmjs.org/@types%2fgeojson 67ms (cache miss)
+71 silly packumentCache full:https://registry.npmjs.org/@types%2fgeojson set size:undefined disposed:false
+72 silly placeDep ROOT @types/geojson@7946.0.16 OK for: react-native-maps@1.20.1 want: ^7946.0.13
+73 silly reify moves {}
+74 http cache @types/geojson@https://registry.npmjs.org/@types/geojson/-/geojson-7946.0.16.tgz 0ms (cache hit)
+75 http cache react-native-maps@https://registry.npmjs.org/react-native-maps/-/react-native-maps-1.20.1.tgz 0ms (cache hit)
+76 http cache expo-location@https://registry.npmjs.org/expo-location/-/expo-location-19.0.8.tgz 0ms (cache hit)
+77 http cache fsevents@https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz 0ms (cache hit)
+78 silly tarball no local data for @types/geojson@https://registry.npmjs.org/@types/geojson/-/geojson-7946.0.16.tgz. Extracting by manifest.
+79 silly tarball no local data for react-native-maps@https://registry.npmjs.org/react-native-maps/-/react-native-maps-1.20.1.tgz. Extracting by manifest.
+80 silly tarball no local data for expo-location@https://registry.npmjs.org/expo-location/-/expo-location-19.0.8.tgz. Extracting by manifest.
+81 http fetch GET 200 https://registry.npmjs.org/@types/geojson/-/geojson-7946.0.16.tgz 68ms (cache miss)
+82 http fetch GET 200 https://registry.npmjs.org/react-native-maps/-/react-native-maps-1.20.1.tgz 404ms (cache miss)
+83 http fetch GET 200 https://registry.npmjs.org/expo-location/-/expo-location-19.0.8.tgz 456ms (cache miss)
+84 silly ADD node_modules/@types/geojson
+85 silly ADD node_modules/react-native-maps
+86 silly ADD node_modules/expo-location
+87 silly ADD node_modules/fsevents
+88 warn allow-scripts 1 package has install scripts not yet covered by allowScripts:
+88 warn allow-scripts   fsevents@2.3.3 (install: (install scripts present))
+88 warn allow-scripts
+88 warn allow-scripts Run `npm approve-scripts --allow-scripts-pending` to review, or `npm approve-scripts <pkg>` to allow.
+89 verbose cwd /Users/kedarbnikhil/Documents/Codex/2026-08-11/stage-1-of-4-foundation-i18n/outputs/ride-demo
+90 verbose os Darwin 25.5.0
+91 verbose node v26.5.0
+92 verbose npm  v11.17.0
+93 verbose exit 0
+94 info ok

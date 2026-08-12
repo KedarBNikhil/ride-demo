@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "Nandyal Ride Demo",
+    "slug": "nandyal-ride-demo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": { "resizeMode": "contain", "backgroundColor": "#FFFFFF" },
+    "assetBundlePatterns": ["**/*"]
+  }
+}
