@@ -3,18 +3,19 @@ import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { AppLanguage } from '../i18n/createI18n';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
+import { NandyalBackdrop } from '../components/NandyalBackdrop';
 
 type Props = { onChoose: (language: AppLanguage) => void };
 
 function LangTile({
-  flag,
+  symbol,
   name,
   sub,
   value,
   onChoose,
   primary,
 }: {
-  flag: string;
+  symbol: string;
   name: string;
   sub: string;
   value: AppLanguage;
@@ -40,7 +41,9 @@ function LangTile({
           { transform: [{ scale }] },
         ]}
       >
-        <Text style={styles.tileFlag}>{flag}</Text>
+        <View style={[styles.languageMark, primary && styles.languageMarkPrimary]}>
+          <Text style={[styles.languageMarkText, primary && styles.languageMarkTextPrimary]}>{symbol}</Text>
+        </View>
         <View style={styles.tileText}>
           <Text style={[styles.tileName, primary && styles.tileNamePrimary]}>{name}</Text>
           <Text style={[styles.tileSub, primary && styles.tileSubPrimary]}>{sub}</Text>
@@ -55,6 +58,7 @@ export function LanguageSelectScreen({ onChoose }: Props) {
   const { t } = useTranslation();
   return (
     <View style={styles.page}>
+      <NandyalBackdrop />
       {/* Top accent strip */}
       <View style={styles.strip}>
         <Text style={styles.stripEmoji}>🌐</Text>
@@ -66,7 +70,7 @@ export function LanguageSelectScreen({ onChoose }: Props) {
         <Text style={styles.helper}>{t('language.helper')}</Text>
         <View style={styles.tiles}>
           <LangTile
-            flag="🇮🇳"
+            symbol="త"
             name="తెలుగు"
             sub="Telugu"
             value="te"
@@ -74,7 +78,7 @@ export function LanguageSelectScreen({ onChoose }: Props) {
             primary
           />
           <LangTile
-            flag="🔤"
+            symbol="E"
             name="English"
             sub="ఇంగ్లీష్"
             value="en"
@@ -83,7 +87,7 @@ export function LanguageSelectScreen({ onChoose }: Props) {
         </View>
       </View>
 
-      <Text style={styles.footer}>నంద్యాల రైడ్ · Nandyal Ride</Text>
+      <Text style={styles.footer}>Nandyal Ride</Text>
     </View>
   );
 }
@@ -148,7 +152,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderColor: colors.border,
   },
-  tileFlag: { fontSize: 28 },
+  languageMark: {
+    alignItems: 'center',
+    backgroundColor: colors.bgAlt,
+    borderRadius: radii.pill,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+  },
+  languageMarkPrimary: { backgroundColor: 'rgba(255,255,255,0.20)' },
+  languageMarkText: { color: colors.accent, fontFamily, fontSize: 24, fontWeight: '900' },
+  languageMarkTextPrimary: { color: colors.textOnPrimary },
   tileText: { flex: 1, gap: 2 },
   tileName: {
     color: colors.textPrimary,

@@ -36,14 +36,6 @@ export function CaptainLoginScreen({
   const value = step === 'phone' ? phone : otp;
   const limit = step === 'phone' ? 10 : 6;
 
-  const append = (digit: string) => {
-    setError('');
-    if (value.length >= limit) return;
-    step === 'phone' ? setPhone(`${phone}${digit}`) : setOtp(`${otp}${digit}`);
-  };
-  const del = () =>
-    step === 'phone' ? setPhone(phone.slice(0, -1)) : setOtp(otp.slice(0, -1));
-
   const submit = () => {
     if (step === 'phone') {
       if (!/^\d{10}$/.test(phone)) return setError(t('login.invalidPhone'));
@@ -72,56 +64,27 @@ export function CaptainLoginScreen({
         </Text>
         <TextInput
           value={value}
-          editable={false}
+          onChangeText={(next) => {
+            const digits = next.replace(/\D/g, '').slice(0, limit);
+            step === 'phone' ? setPhone(digits) : setOtp(digits);
+            setError('');
+          }}
+          keyboardType={step === 'phone' ? 'phone-pad' : 'number-pad'}
           maxLength={limit}
           placeholder={step === 'phone' ? t('login.phonePlaceholder') : t('login.otpPlaceholder')}
           placeholderTextColor={colors.textMuted}
+          selectionColor={colors.primary}
+          showSoftInputOnFocus
           style={styles.input}
         />
       </View>
 
-      <NumberPad onDigit={append} onDelete={del} />
       {!!error && <Text style={styles.error}>{error}</Text>}
       <PrimaryButton
         label={step === 'phone' ? t('login.sendOtp') : t('login.verify')}
         onPress={submit}
       />
     </ScreenShell>
-  );
-}
-
-function NumberPad({ onDigit, onDelete }: { onDigit: (d: string) => void; onDelete: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <View style={styles.pad}>
-      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
-        <NumKey key={d} label={formatNumber(d)} onPress={() => onDigit(String(d))} />
-      ))}
-      <View style={styles.keyEmpty} />
-      <NumKey label={formatNumber(0)} onPress={() => onDigit('0')} />
-      <Pressable onPress={onDelete} style={styles.key} accessibilityRole="button">
-        <Text style={styles.deleteText}>{t('actions.delete')}</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function NumKey({ label, onPress }: { label: string; onPress: () => void }) {
-  const scale = useRef(new Animated.Value(1)).current;
-  return (
-    <Pressable
-      onPress={onPress}
-      onPressIn={() =>
-        Animated.spring(scale, { toValue: 0.9, useNativeDriver: true, speed: 50 }).start()
-      }
-      onPressOut={() =>
-        Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()
-      }
-    >
-      <Animated.View style={[styles.key, shadows.soft, { transform: [{ scale }] }]}>
-        <Text style={styles.keyText}>{label}</Text>
-      </Animated.View>
-    </Pressable>
   );
 }
 
@@ -171,7 +134,6 @@ export function CaptainHomeScreen({
   return (
     <ScreenShell title={t('screens.captainHome')}>
       <Pressable onPress={onSettings} style={styles.settingsBtn}>
-        <Text style={styles.settingsIcon}>⚙️</Text>
         <Text style={styles.settingsText}>{t('actions.settings')}</Text>
       </Pressable>
 
@@ -338,7 +300,7 @@ export function RideSummaryScreen({ onHome }: { onHome: () => void }) {
         <Text style={styles.earningsLabel}>{t('captain.earned')}</Text>
         <Text style={styles.earningsValue}>{formatFare(REQUEST_FARE)}</Text>
         <View style={styles.earningsPill}>
-          <Text style={styles.earningsPillText}>Ride completed ✓</Text>
+          <Text style={styles.earningsPillText}>{t('captain.completedPill')}</Text>
         </View>
       </Animated.View>
 
@@ -410,27 +372,19 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   input: {
-    color: colors.textPrimary,
-    fontFamily,
-    fontSize: fontSize.xl,
-    fontWeight: '800',
-    letterSpacing: 4,
-    minHeight: 48,
-  },
-  pad: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' },
-  key: {
-    alignItems: 'center',
-    backgroundColor: colors.keyBg,
-    borderColor: colors.keyBorder,
+    backgroundColor: '#F9FCFB',
+    borderColor: colors.primary,
     borderRadius: radii.md,
     borderWidth: 1.5,
-    height: 62,
-    justifyContent: 'center',
-    width: '31%',
+    minHeight: 60,
+    paddingHorizontal: 16,
+    color: colors.textPrimary,
+    fontFamily: 'System',
+    fontSize: 27,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textAlignVertical: 'center',
   },
-  keyEmpty: { width: '31%' },
-  keyText: { color: colors.textPrimary, fontFamily, fontSize: fontSize.xl, fontWeight: '800' },
-  deleteText: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   error: { color: colors.error, fontFamily, fontSize: fontSize.sm, textAlign: 'center' },
 
   // Captain Home
@@ -446,7 +400,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
-  settingsIcon: { fontSize: 16 },
   settingsText: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
 
   statusPanel: {

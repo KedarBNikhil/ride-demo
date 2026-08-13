@@ -3,7 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Platform, View } from 'react-native';
 import { createAppI18n, type AppLanguage } from '../i18n/createI18n';
 import { LanguageSelectScreen } from '../screens/LanguageSelectScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
@@ -39,16 +39,16 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
   if (hasLanguage === null) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
   return <I18nextProvider i18n={i18n}>
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false, animation: Platform.OS === 'ios' ? 'slide_from_right' : 'slide_from_right', animationDuration: 260 }}>
         {!hasLanguage && <Stack.Screen name="LanguageSelect">{() => <LanguageSelectScreen onChoose={chooseLanguage} />}</Stack.Screen>}
         {mode === 'customer' ? <>
           <Stack.Screen name="CustomerLogin">{({ navigation }) => <CustomerLoginScreen onComplete={() => navigation.navigate('CustomerHome')} onBack={onExit} />}</Stack.Screen>
-          <Stack.Screen name="CustomerHome">{({ navigation }) => <CustomerHomeScreen ride={customerRide} onBack={onExit} onSettings={() => navigation.navigate('Settings')} onPickLocation={(target) => { setLocationTarget(target); navigation.navigate('LocationPicker'); }} onChooseRide={() => navigation.navigate('RideType')} />}</Stack.Screen>
-          <Stack.Screen name="LocationPicker">{({ navigation }) => <LocationPickerScreen target={locationTarget} onBack={() => navigation.goBack()} onSelect={(place) => { setCustomerRide((ride) => ({ ...ride, [locationTarget]: place })); navigation.goBack(); }} />}</Stack.Screen>
-          <Stack.Screen name="RideType">{({ navigation }) => <RideTypeScreen selected={customerRide.kind} onBack={() => navigation.goBack()} onSelect={(kind) => setCustomerRide((ride) => ({ ...ride, kind }))} onNext={() => navigation.navigate('BookingConfirm')} />}</Stack.Screen>
+          <Stack.Screen name="CustomerHome">{({ navigation }) => <CustomerHomeScreen ride={customerRide} onBack={onExit} onSettings={() => navigation.navigate('Settings')} onPickLocation={(target) => { setLocationTarget(target); navigation.navigate('LocationPicker'); }} onStartBooking={(pickup, pickupCoordinate) => { setCustomerRide((ride) => ({ ...ride, pickup, pickupCoordinate })); setLocationTarget('drop'); navigation.navigate('LocationPicker'); }} />}</Stack.Screen>
+          <Stack.Screen name="LocationPicker">{({ navigation }) => <LocationPickerScreen ride={customerRide} initialTarget={locationTarget} onBack={() => navigation.goBack()} onChange={(target, place, coordinate) => setCustomerRide((ride) => ({ ...ride, [target]: place, ...(coordinate ? { [target === 'pickup' ? 'pickupCoordinate' : 'dropCoordinate']: coordinate } : {}) }))} onContinue={() => navigation.navigate('RideType')} />}</Stack.Screen>
+          <Stack.Screen name="RideType">{({ navigation }) => <RideTypeScreen ride={customerRide} selected={customerRide.kind} onBack={() => navigation.goBack()} onSelect={(kind) => setCustomerRide((ride) => ({ ...ride, kind }))} onNext={() => navigation.navigate('BookingConfirm')} />}</Stack.Screen>
           <Stack.Screen name="BookingConfirm">{({ navigation }) => <BookingConfirmScreen ride={customerRide} onBack={() => navigation.goBack()} onBook={() => navigation.navigate('Searching')} />}</Stack.Screen>
-          <Stack.Screen name="Searching">{({ navigation }) => <SearchingScreen onBack={() => navigation.goBack()} onFound={() => navigation.replace('RideConfirmed')} />}</Stack.Screen>
-          <Stack.Screen name="RideConfirmed">{({ navigation }) => <RideConfirmedScreen onHome={() => navigation.popToTop()} />}</Stack.Screen>
+          <Stack.Screen name="Searching" options={{ animation: 'fade' }}>{({ navigation }) => <SearchingScreen onBack={() => navigation.goBack()} onFound={() => navigation.replace('RideConfirmed')} />}</Stack.Screen>
+          <Stack.Screen name="RideConfirmed" options={{ animation: 'fade' }}>{({ navigation }) => <RideConfirmedScreen ride={customerRide} onHome={() => navigation.popToTop()} />}</Stack.Screen>
         </> : mode === 'captain' ? <>
           <Stack.Screen name="CaptainLogin">{({ navigation }) => <CaptainLoginScreen onComplete={() => navigation.navigate('CaptainHome')} onBack={onExit} />}</Stack.Screen>
           <Stack.Screen name="CaptainHome">{({ navigation }) => <CaptainHomeScreen online={captainOnline} onToggle={() => setCaptainOnline((online) => !online)} onSettings={() => navigation.navigate('Settings')} onRequest={() => navigation.navigate('IncomingRequest')} />}</Stack.Screen>

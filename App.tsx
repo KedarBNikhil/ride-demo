@@ -6,6 +6,7 @@ import { useRef } from 'react';
 import { useState } from 'react';
 import { AppNavigator, type AppMode } from './src/navigation/AppNavigator';
 import { colors, radii, shadows, fontFamily, fontSize } from './src/theme';
+import { NandyalBackdrop } from './src/components/NandyalBackdrop';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -73,13 +74,13 @@ function ModeLauncher({ onChoose }: { onChoose: (mode: AppMode) => void }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={styles.page}>
+      <NandyalBackdrop />
       {/* Hero gradient strip */}
       <View style={[styles.hero, { paddingTop: 56 + (insets?.top ?? 0) }]}>
         <View style={styles.heroBadge}>
           <Text style={styles.heroEmoji}>🛺</Text>
         </View>
         <Text style={styles.brand}>Nandyal Ride</Text>
-        <Text style={styles.brandTe}>నంద్యాల రైడ్</Text>
         <Text style={styles.tagline}>Your local ride, your community</Text>
       </View>
 
@@ -88,13 +89,13 @@ function ModeLauncher({ onChoose }: { onChoose: (mode: AppMode) => void }) {
         <Text style={styles.rolesLabel}>Choose your experience</Text>
         <RoleCard
           icon="🙋"
-          title="Customer / కస్టమర్"
+          title="Customer"
           subtitle="Book a ride in seconds"
           onPress={() => onChoose('customer')}
         />
         <RoleCard
           icon="🏍️"
-          title="Captain / కెప్టెన్"
+          title="Captain"
           subtitle="Accept rides & earn"
           onPress={() => onChoose('captain')}
           tinted
@@ -102,7 +103,7 @@ function ModeLauncher({ onChoose }: { onChoose: (mode: AppMode) => void }) {
       </View>
 
       {/* Footer */}
-      <Text style={styles.footer}>Serving Nandyal &amp; surrounding areas · నంద్యాల</Text>
+      <Text style={styles.footer}>Serving Nandyal &amp; surrounding areas</Text>
     </View>
   );
 }
@@ -141,13 +142,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize['3xl'],
     fontWeight: '900',
     letterSpacing: 0.5,
-    textAlign: 'center',
-  },
-  brandTe: {
-    color: 'rgba(255,255,255,0.80)',
-    fontFamily,
-    fontSize: fontSize.xl,
-    marginTop: 4,
     textAlign: 'center',
   },
   tagline: {

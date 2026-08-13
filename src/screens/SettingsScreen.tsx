@@ -6,14 +6,14 @@ import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 import { ScreenShell } from '../components/ScreenShell';
 
 function LangChip({
-  flag,
+  symbol,
   name,
   sub,
   value,
   onPress,
   active,
 }: {
-  flag: string;
+  symbol: string;
   name: string;
   sub: string;
   value: AppLanguage;
@@ -39,7 +39,9 @@ function LangChip({
           { transform: [{ scale }] },
         ]}
       >
-        <Text style={styles.chipFlag}>{flag}</Text>
+        <View style={[styles.languageMark, active && styles.languageMarkActive]}>
+          <Text style={[styles.languageMarkText, active && styles.languageMarkTextActive]}>{symbol}</Text>
+        </View>
         <View style={styles.chipText}>
           <Text style={[styles.chipName, active && styles.chipNameActive]}>{name}</Text>
           <Text style={[styles.chipSub, active && styles.chipSubActive]}>{sub}</Text>
@@ -57,7 +59,7 @@ export function SettingsScreen({
   onLanguageChange: (language: AppLanguage) => void;
   onBack: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   return (
     <ScreenShell back={onBack} title={t('screens.settings')}>
       {/* Section: Language */}
@@ -65,26 +67,28 @@ export function SettingsScreen({
         <Text style={styles.sectionLabel}>{t('language.change')}</Text>
         <View style={styles.chips}>
           <LangChip
-            flag="🇮🇳"
+            symbol="త"
             name="తెలుగు"
-            sub="Telugu"
+            sub=""
             value="te"
             onPress={onLanguageChange}
+            active={i18n.language === 'te'}
           />
           <LangChip
-            flag="🔤"
+            symbol="E"
             name="English"
-            sub="ఇంగ్లీష్"
+            sub=""
             value="en"
             onPress={onLanguageChange}
+            active={i18n.language === 'en'}
           />
         </View>
       </View>
 
       {/* App info */}
       <View style={styles.infoCard}>
-        <Text style={styles.infoTitle}>Nandyal Ride</Text>
-        <Text style={styles.infoSub}>Demo v1.0 · నంద్యాల రైడ్</Text>
+        <Text style={styles.infoTitle}>{t('app.name')}</Text>
+        <Text style={styles.infoSub}>{t('app.demoVersion')}</Text>
       </View>
     </ScreenShell>
   );
@@ -117,7 +121,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,
     borderColor: colors.primary,
   },
-  chipFlag: { fontSize: 26 },
+  languageMark: {
+    alignItems: 'center',
+    backgroundColor: colors.bgAlt,
+    borderRadius: radii.pill,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  languageMarkActive: { backgroundColor: colors.primary },
+  languageMarkText: { color: colors.accent, fontFamily, fontSize: 21, fontWeight: '900' },
+  languageMarkTextActive: { color: colors.textOnPrimary },
   chipText: { flex: 1, gap: 2 },
   chipName: {
     color: colors.textPrimary,

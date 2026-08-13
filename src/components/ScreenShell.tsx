@@ -9,6 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { colors, fontFamily, fontSize, radii, shadows } from '../theme';
+import { NandyalBackdrop } from './NandyalBackdrop';
 
 type Props = {
   children: React.ReactNode;
@@ -21,6 +22,7 @@ export function ScreenShell({ children, back, title, noHeader = false }: Props) 
   const { t } = useTranslation();
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <NandyalBackdrop />
       {!noHeader && (
         <View style={styles.header}>
           {back ? (
@@ -31,7 +33,7 @@ export function ScreenShell({ children, back, title, noHeader = false }: Props) 
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
               <Text style={styles.backChevron}>‹</Text>
-              <Text style={styles.backText}>Back</Text>
+              <Text style={styles.backText}>{t('actions.back')}</Text>
             </Pressable>
           ) : (
             <View style={styles.backPlaceholder} />
