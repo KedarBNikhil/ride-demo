@@ -620,6 +620,7 @@ function RideCard({
     Animated.timing(selectedValue, { toValue: selected ? 1 : 0, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
   }, [selected, selectedValue]);
   const selectedBorder = selectedValue.interpolate({ inputRange: [0, 1], outputRange: ['transparent', colors.primary] });
+  const selectedBackground = selectedValue.interpolate({ inputRange: [0, 1], outputRange: ['rgba(224,247,243,0)', colors.primaryLight] });
   return (
     <Pressable
       onPress={onSelect}
@@ -633,7 +634,7 @@ function RideCard({
       <Animated.View
         style={[
           styles.rideCard,
-          { backgroundColor: 'transparent', borderColor: selectedBorder },
+          { backgroundColor: selectedBackground, borderColor: selectedBorder },
           { transform: [{ scale }] },
         ]}
       >
@@ -1112,7 +1113,7 @@ const styles = StyleSheet.create({
   },
   rideCardSelected: {
     borderColor: colors.primary,
-    backgroundColor: 'transparent',
+    backgroundColor: colors.primaryLight,
   },
   rideIconBadge: {
     alignItems: 'center',
