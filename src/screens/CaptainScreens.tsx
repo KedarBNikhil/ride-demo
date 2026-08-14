@@ -6,12 +6,12 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenShell } from '../components/ScreenShell';
+import { PhoneOtpAuth } from '../components/PhoneOtpAuth';
 import { formatFare, formatNumber } from '../utils/format';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 
@@ -28,64 +28,7 @@ export function CaptainLoginScreen({
   onBack: () => void;
 }) {
   const { t } = useTranslation();
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [step, setStep] = useState<'phone' | 'otp'>('phone');
-  const [error, setError] = useState('');
-
-  const value = step === 'phone' ? phone : otp;
-  const limit = step === 'phone' ? 10 : 6;
-
-  const submit = () => {
-    if (step === 'phone') {
-      if (!/^\d{10}$/.test(phone)) return setError(t('login.invalidPhone'));
-      setError(''); setStep('otp');
-    } else {
-      if (!/^\d{4,6}$/.test(otp)) return setError(t('login.invalidOtp'));
-      onComplete();
-    }
-  };
-
-  return (
-    <ScreenShell
-      back={onBack}
-      title={step === 'phone' ? t('captain.loginTitle') : t('login.otpTitle')}
-    >
-      <View style={styles.loginHero}>
-        <Text style={styles.loginEmoji}>🏍️</Text>
-        <Text style={styles.loginTitle}>
-          {step === 'phone' ? t('captain.loginSubtitle') : t('login.otpSubtitle')}
-        </Text>
-      </View>
-
-      <View style={[styles.inputCard, shadows.soft]}>
-        <Text style={styles.inputLabel}>
-          {step === 'phone' ? t('login.phoneLabel') : t('login.otpLabel')}
-        </Text>
-        <TextInput
-          value={value}
-          onChangeText={(next) => {
-            const digits = next.replace(/\D/g, '').slice(0, limit);
-            step === 'phone' ? setPhone(digits) : setOtp(digits);
-            setError('');
-          }}
-          keyboardType={step === 'phone' ? 'phone-pad' : 'number-pad'}
-          maxLength={limit}
-          placeholder={step === 'phone' ? t('login.phonePlaceholder') : t('login.otpPlaceholder')}
-          placeholderTextColor={colors.textMuted}
-          selectionColor={colors.primary}
-          showSoftInputOnFocus
-          style={styles.input}
-        />
-      </View>
-
-      {!!error && <Text style={styles.error}>{error}</Text>}
-      <PrimaryButton
-        label={step === 'phone' ? t('login.sendOtp') : t('login.verify')}
-        onPress={submit}
-      />
-    </ScreenShell>
-  );
+  return <PhoneOtpAuth title={t('captain.loginTitle')} subtitle={t('captain.loginSubtitle')} emoji="🏍️" onBack={onBack} onSendOtp={async () => undefined} onVerifyOtp={async () => { onComplete(); }} />;
 }
 
 /* ─────────────────────────── HOME ─────────────────────────── */

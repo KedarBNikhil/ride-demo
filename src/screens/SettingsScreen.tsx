@@ -55,13 +55,15 @@ function LangChip({
 export function SettingsScreen({
   onLanguageChange,
   onBack,
+  profile = false,
 }: {
   onLanguageChange: (language: AppLanguage) => void;
   onBack: () => void;
+  profile?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   return (
-    <ScreenShell back={onBack} title={t('screens.settings')}>
+    <ScreenShell back={onBack} title={t(profile ? 'screens.profile' : 'screens.settings')}>
       {/* Section: Language */}
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>{t('language.change')}</Text>

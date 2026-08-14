@@ -1,0 +1,17 @@
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import type { AppLanguage } from '../../../i18n/createI18n';
+import { LanguageToggle } from '../../../components/LanguageToggle';
+import { PrimaryButton } from '../../../components/PrimaryButton';
+import { ScreenShell } from '../../../components/ScreenShell';
+import type { CaptainProfile } from '../../../services/captainOnboarding';
+import { colors, fontFamily, fontSize, radii, shadows } from '../../../theme';
+
+export function CaptainProfileSetupScreen({ profile, onChange, onContinue, onBack }: { profile: CaptainProfile; onChange: (profile: CaptainProfile) => void; onContinue: () => void; onBack: () => void }) {
+  const { t } = useTranslation(); const [error, setError] = useState('');
+  const update = (next: Partial<CaptainProfile>) => { onChange({ ...profile, ...next }); setError(''); };
+  const continueFlow = () => { if (!profile.name.trim() || !profile.vehicleType) return setError(t('captain.profileRequired')); onContinue(); };
+  return <ScreenShell back={onBack} title={t('captain.profileTitle')}><View style={styles.hero}><Text style={styles.emoji}>👋</Text><Text style={styles.help}>{t('captain.profileSubtitle')}</Text></View><View style={[styles.card, shadows.soft]}><Text style={styles.label}>{t('captain.fullName')}</Text><TextInput value={profile.name} onChangeText={(name) => update({ name })} placeholder={t('captain.fullNamePlaceholder')} placeholderTextColor={colors.textMuted} style={styles.input} autoCapitalize="words" /><Text style={styles.label}>{t('captain.preferredLanguage')}</Text><LanguageToggle value={profile.language} onChange={(language: AppLanguage) => update({ language })} /><Text style={styles.label}>{t('captain.vehicleType')}</Text><View style={styles.options}>{(['bike', 'auto'] as const).map((vehicleType) => <Pressable key={vehicleType} onPress={() => update({ vehicleType })} style={[styles.option, profile.vehicleType === vehicleType && styles.active]}><Text style={styles.optionIcon}>{vehicleType === 'bike' ? '🏍️' : '🛺'}</Text><Text style={[styles.optionText, profile.vehicleType === vehicleType && styles.activeText]}>{t(`rides.${vehicleType}`)}</Text></Pressable>)}</View></View>{!!error && <Text style={styles.error}>{error}</Text>}<PrimaryButton label={t('actions.continue')} onPress={continueFlow} /></ScreenShell>;
+}
+const styles = StyleSheet.create({ hero: { alignItems: 'center', gap: 7 }, emoji: { fontSize: 46 }, help: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, textAlign: 'center' }, card: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 12, padding: 18 }, label: { color: colors.textPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '800', marginTop: 3 }, input: { borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, color: colors.textPrimary, fontFamily, fontSize: fontSize.md, padding: 14 }, options: { flexDirection: 'row', gap: 10 }, option: { alignItems: 'center', borderColor: colors.border, borderRadius: radii.md, borderWidth: 1.5, flex: 1, gap: 6, padding: 14 }, active: { backgroundColor: colors.primaryLight, borderColor: colors.primary }, optionIcon: { fontSize: 28 }, optionText: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '800' }, activeText: { color: colors.primary }, error: { color: colors.error, fontFamily, fontSize: fontSize.sm, fontWeight: '700', textAlign: 'center' } });

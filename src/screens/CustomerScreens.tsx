@@ -6,7 +6,7 @@ import {
   Dimensions,
   Easing,
   LayoutAnimation,
-  PanResponder,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,11 +14,15 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Reanimated, { clamp, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenShell } from '../components/ScreenShell';
+import { PhoneOtpAuth } from '../components/PhoneOtpAuth';
+import { LiveLocationMap } from '../components/LiveLocationMap';
 import { formatFare, formatNumber, formatOtp } from '../utils/format';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 
@@ -38,61 +42,7 @@ export function CustomerLoginScreen({
   onBack: () => void;
 }) {
   const { t } = useTranslation();
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [step, setStep] = useState<'phone' | 'otp'>('phone');
-  const [error, setError] = useState('');
-
-  const value = step === 'phone' ? phone : otp;
-  const limit = step === 'phone' ? 10 : 6;
-
-  const submit = () => {
-    if (step === 'phone') {
-      if (!/^\d{10}$/.test(phone)) return setError(t('login.invalidPhone'));
-      setError(''); setStep('otp');
-    } else {
-      if (!/^\d{4,6}$/.test(otp)) return setError(t('login.invalidOtp'));
-      onComplete();
-    }
-  };
-
-  return (
-    <ScreenShell back={onBack} title={step === 'phone' ? t('screens.customerLogin') : t('login.otpTitle')}>
-      <View style={styles.loginHero}>
-        <Text style={styles.loginEmoji}>📱</Text>
-        <Text style={styles.loginTitle}>
-          {step === 'phone' ? t('login.subtitle') : t('login.otpSubtitle')}
-        </Text>
-      </View>
-
-      <View style={styles.inputCard}>
-        <Text style={styles.inputLabel}>
-          {step === 'phone' ? t('login.phoneLabel') : t('login.otpLabel')}
-        </Text>
-        <TextInput
-          value={value}
-          onChangeText={(next) => {
-            const digits = next.replace(/\D/g, '').slice(0, limit);
-            step === 'phone' ? setPhone(digits) : setOtp(digits);
-            setError('');
-          }}
-          keyboardType={step === 'phone' ? 'phone-pad' : 'number-pad'}
-          maxLength={limit}
-          placeholder={step === 'phone' ? t('login.phonePlaceholder') : t('login.otpPlaceholder')}
-          placeholderTextColor={colors.textMuted}
-          selectionColor={colors.primary}
-          showSoftInputOnFocus
-          style={styles.input}
-        />
-      </View>
-
-      {!!error && <Text style={styles.error}>{error}</Text>}
-      <PrimaryButton
-        label={step === 'phone' ? t('login.sendOtp') : t('login.verify')}
-        onPress={submit}
-      />
-    </ScreenShell>
-  );
+  return <PhoneOtpAuth title={t('screens.customerLogin')} subtitle={t('login.subtitle')} emoji="📱" onBack={onBack} onSendOtp={async () => undefined} onVerifyOtp={async () => { onComplete(); }} />;
 }
 
 /* ─────────────────────────── HOME ─────────────────────────── */
@@ -101,27 +51,42 @@ export function CustomerHomeScreen({
   ride,
   onPickLocation,
   onStartBooking,
-  onSettings,
+  onProfile,
   onBack,
 }: {
   ride: CustomerRide;
   onPickLocation: (target: LocationTarget) => void;
   onStartBooking: (pickup: string, coordinate: Coordinate) => void;
-  onSettings: () => void;
+  onProfile: () => void;
   onBack: () => void;
 }) {
   const { t } = useTranslation();
   const mapRef = useRef<MapView>(null);
-  const sheetOffset = useRef(new Animated.Value(0)).current;
-  const [sheetExpanded, setSheetExpanded] = useState(true);
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locationUnavailable, setLocationUnavailable] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
   const sheetHeight = Math.min(520, Dimensions.get('window').height * 0.62);
   const collapsedOffset = Math.max(142, sheetHeight - 278);
+  const sheetOffset = useSharedValue(collapsedOffset);
+  const sheetDragStart = useSharedValue(collapsedOffset);
+  const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [cachedAddress, setCachedAddress] = useState('');
+  const [locationUnavailable, setLocationUnavailable] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     let active = true;
+    let subscription: Location.LocationSubscription | undefined;
+    let firstFix = true;
+    const updateCachedLocation = async (location: Location.LocationObject) => {
+      const coordinate = { latitude: location.coords.latitude, longitude: location.coords.longitude };
+      setUserLocation(coordinate);
+      setLocationUnavailable(false);
+      const address = await reverseGeocodeAddress(coordinate, t('location.gpsDefault'));
+      if (active) setCachedAddress(address);
+      if (firstFix) {
+        firstFix = false;
+        mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.018, longitudeDelta: 0.018 }, 500);
+      }
+    };
     const loadLocation = async () => {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!active) return;
@@ -129,34 +94,47 @@ export function CustomerHomeScreen({
       try {
         const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         if (!active) return;
-        const coordinate = { latitude: current.coords.latitude, longitude: current.coords.longitude };
-        setUserLocation(coordinate);
-        mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.018, longitudeDelta: 0.018 }, 500);
+        await updateCachedLocation(current);
+        subscription = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, distanceInterval: 100, timeInterval: 30000 },
+          (next) => { void updateCachedLocation(next); },
+        );
       } catch { if (active) setLocationUnavailable(true); }
     };
     void loadLocation();
-    return () => { active = false; };
+    return () => { active = false; subscription?.remove(); };
   }, []);
 
   const setSheet = (expanded: boolean) => {
     setSheetExpanded(expanded);
-    Animated.spring(sheetOffset, {
-      toValue: expanded ? 0 : collapsedOffset,
-      useNativeDriver: true,
-      speed: 22,
-      bounciness: 0,
-    }).start();
+    sheetOffset.value = withSpring(expanded ? 0 : collapsedOffset, { damping: 24, stiffness: 260, mass: 0.7 });
   };
 
-  const panResponder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
-    onPanResponderRelease: (_, gesture) => setSheet(gesture.dy < -24 || (gesture.dy < 24 && !sheetExpanded)),
-  }), [collapsedOffset, sheetExpanded]);
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ translateY: sheetOffset.value }] }));
+  const sheetPanGesture = useMemo(() => Gesture.Pan()
+    .activeOffsetY([-8, 8])
+    .onBegin(() => { sheetDragStart.value = sheetOffset.value; })
+    .onUpdate((event) => { sheetOffset.value = clamp(sheetDragStart.value + event.translationY, 0, collapsedOffset); })
+    .onEnd((event) => {
+      const expand = event.velocityY < -350 || (event.velocityY <= 350 && sheetOffset.value < collapsedOffset / 2);
+      sheetOffset.value = withSpring(expand ? 0 : collapsedOffset, { damping: 24, stiffness: 260, mass: 0.7 });
+      runOnJS(setSheetExpanded)(expand);
+    }), [collapsedOffset, sheetDragStart, sheetOffset]);
 
   const centerOnLocation = async () => {
-    if (userLocation) {
-      mapRef.current?.animateToRegion({ ...userLocation, latitudeDelta: 0.018, longitudeDelta: 0.018 }, 500);
+    const servicesEnabled = await Location.hasServicesEnabledAsync();
+    if (!servicesEnabled) {
+      Alert.alert(t('home.locationServicesTitle'), t('home.locationServicesMessage'), [
+        { text: t('actions.cancel'), style: 'cancel' },
+        { text: t('home.openSettings'), onPress: () => { void Linking.openSettings(); } },
+      ]);
       return;
+    }
+    // Recenter immediately to the latest foreground location. A subsequent
+    // one-off reading quietly refines this point rather than making the tap
+    // appear unresponsive while GPS acquires a new fix.
+    if (userLocation) {
+      mapRef.current?.animateToRegion({ ...userLocation, latitudeDelta: 0.012, longitudeDelta: 0.012 }, 350);
     }
     const permission = await Location.requestForegroundPermissionsAsync();
     if (permission.status !== 'granted') { setLocationUnavailable(true); return; }
@@ -165,8 +143,13 @@ export function CustomerHomeScreen({
       const coordinate = { latitude: current.coords.latitude, longitude: current.coords.longitude };
       setUserLocation(coordinate);
       setLocationUnavailable(false);
-      mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.018, longitudeDelta: 0.018 }, 500);
-    } catch { setLocationUnavailable(true); }
+      mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.012, longitudeDelta: 0.012 }, userLocation ? 250 : 450);
+      void reverseGeocodeAddress(coordinate, t('location.gpsDefault')).then(setCachedAddress);
+    } catch {
+      // Keep a useful fallback if the one-off high-accuracy request times out.
+      if (userLocation) mapRef.current?.animateToRegion({ ...userLocation, latitudeDelta: 0.012, longitudeDelta: 0.012 }, 650);
+      else setLocationUnavailable(true);
+    }
   };
 
   const landmarks = [
@@ -177,40 +160,28 @@ export function CustomerHomeScreen({
   ];
 
   const startBooking = async () => {
-    try {
-      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
-      const coordinate = { latitude: location.coords.latitude, longitude: location.coords.longitude };
-      onStartBooking(await reverseGeocodeAddress(coordinate, t('location.gpsDefault')), coordinate);
-    } catch {
-      onPickLocation('pickup');
-    }
+    if (userLocation) { onStartBooking(cachedAddress || t('location.gpsDefault'), userLocation); return; }
+    onPickLocation('pickup');
   };
 
   return (
     <SafeAreaView style={styles.mapHomeSafe} edges={['top', 'left', 'right']}>
-      <MapView
-        ref={mapRef}
-        provider={PROVIDER_GOOGLE}
-        initialRegion={NANDYAL}
-        onMapReady={() => setMapReady(true)}
-        style={StyleSheet.absoluteFill}
-      >
-        {userLocation && <Marker coordinate={userLocation} anchor={{ x: 0.5, y: 0.5 }}><View style={styles.currentLocationDot} /></Marker>}
-      </MapView>
+      <LiveLocationMap mapRef={mapRef} location={userLocation} onMapReady={() => setMapReady(true)} />
 
       <View style={styles.mapHomeTopBar}>
         <View style={styles.mapHomeBrand}><Text style={styles.mapHomeBrandText}>{t('app.name')}</Text></View>
-        <Pressable onPress={onSettings} accessibilityRole="button" accessibilityLabel={t('actions.settings')} style={styles.mapHomeSettings}><Text style={styles.mapHomeSettingsIcon}>⚙</Text></Pressable>
       </View>
-      <Pressable onPress={centerOnLocation} accessibilityRole="button" accessibilityLabel={t('home.recenter')} style={[styles.recenterButton, shadows.card]}><Text style={styles.recenterIcon}>◎</Text></Pressable>
+      <Pressable onPress={centerOnLocation} accessibilityRole="button" accessibilityLabel={t('home.recenter')} style={[styles.recenterButton, shadows.card]}><Text style={styles.recenterIcon}>⌖</Text></Pressable>
       {!mapReady && <View style={styles.mapFallback}><Text style={styles.mapFallbackText}>{t('home.mapLoading')}</Text></View>}
       {locationUnavailable && <View style={styles.locationNotice}><Text style={styles.locationNoticeText}>{t('home.locationUnavailable')}</Text></View>}
 
-      <Animated.View style={[styles.homeSheet, { height: sheetHeight, transform: [{ translateY: sheetOffset }] }, shadows.card]}>
-        <Pressable {...panResponder.panHandlers} onPress={() => setSheet(!sheetExpanded)} style={styles.sheetHandleArea} accessibilityRole="button" accessibilityLabel={t('home.toggleSheet')}>
-          <View style={styles.sheetHandle} />
-        </Pressable>
-        <ScrollView bounces={false} contentContainerStyle={styles.homeSheetScroll} showsVerticalScrollIndicator={false}>
+      <Reanimated.View style={[styles.homeSheet, { height: sheetHeight }, sheetAnimatedStyle, shadows.card]}>
+        <GestureDetector gesture={sheetPanGesture}>
+          <Pressable onPress={() => setSheet(!sheetExpanded)} style={styles.sheetHandleArea} accessibilityRole="button" accessibilityLabel={t('home.toggleSheet')}>
+            <View style={styles.sheetHandle} />
+          </Pressable>
+        </GestureDetector>
+        <ScrollView bounces={false} contentContainerStyle={styles.homeSheetScroll} showsVerticalScrollIndicator={false} style={styles.homeSheetScrollView}>
           <Pressable onPress={startBooking} accessibilityRole="button" style={styles.destinationAction}>
             <Text style={styles.destinationPin}>⌖</Text><View style={styles.destinationTextWrap}><Text style={styles.destinationLabel}>{t('home.whereTo')}</Text><Text style={styles.destinationSub}>{t('home.whereToHint')}</Text></View><Text style={styles.destinationArrow}>→</Text>
           </Pressable>
@@ -221,16 +192,16 @@ export function CustomerHomeScreen({
           <View style={styles.homeExpandedOnly}>
             <View style={styles.sectionHeading}><Text style={styles.homeSectionTitle}>{t('home.nearby')}</Text><Text style={styles.homeSectionLink}>{t('home.seeAll')}</Text></View>
             <View style={styles.landmarkRow}>{landmarks.map((landmark) => <Pressable key={landmark.label} accessibilityRole="button" onPress={() => onPickLocation(landmark.target)} style={styles.landmarkCard}><Text style={styles.landmarkIcon}>{landmark.icon}</Text><Text style={styles.landmarkText} numberOfLines={2}>{landmark.label}</Text></Pressable>)}</View>
-            <Pressable onPress={onSettings} accessibilityRole="button" style={styles.safetyCard}><Text style={styles.safetyIcon}>✓</Text><View style={styles.safetyTextWrap}><Text style={styles.safetyTitle}>{t('home.safetyTitle')}</Text><Text style={styles.safetySubtitle}>{t('home.safetySubtitle')}</Text></View><Text style={styles.safetyArrow}>›</Text></Pressable>
+            <Pressable onPress={onProfile} accessibilityRole="button" style={styles.safetyCard}><Text style={styles.safetyIcon}>✓</Text><View style={styles.safetyTextWrap}><Text style={styles.safetyTitle}>{t('home.safetyTitle')}</Text><Text style={styles.safetySubtitle}>{t('home.safetySubtitle')}</Text></View><Text style={styles.safetyArrow}>›</Text></Pressable>
           </View>
         </ScrollView>
         <View style={styles.homeTabBar}>
           <HomeTab icon="⌂" label={t('home.tabHome')} active />
           <HomeTab icon="▤" label={t('home.tabBookings')} onPress={() => Alert.alert(t('home.bookingsTitle'), t('home.bookingsMessage'))} />
           <HomeTab icon="?" label={t('home.tabHelp')} onPress={() => Alert.alert(t('home.helpTitle'), t('home.helpMessage'))} />
-          <HomeTab icon="♙" label={t('home.tabProfile')} onPress={onSettings} />
+          <HomeTab icon="♙" label={t('home.tabProfile')} onPress={onProfile} />
         </View>
-      </Animated.View>
+      </Reanimated.View>
     </SafeAreaView>
   );
 }
@@ -466,7 +437,7 @@ export function LocationPickerScreen({
 function LocationField({ inputRef, active, icon, label, value, placeholder, onFocus, onBlur, onChangeText, drop }: {
   inputRef: React.RefObject<TextInput | null>; active: boolean; icon: string; label: string; value: string; placeholder: string; onFocus: () => void; onBlur: () => void; onChangeText: (value: string) => void; drop?: boolean;
 }) {
-  return <View style={[styles.locationField, active && styles.locationFieldActive]}><View style={[styles.locationFieldDot, drop && styles.locationFieldDotDrop]}><Text style={styles.locationFieldDotText}>{icon}</Text></View><View style={styles.locationFieldTextWrap}><Text style={styles.locationFieldLabel}>{label}</Text><TextInput ref={inputRef} value={value} onFocus={onFocus} onBlur={onBlur} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={colors.textMuted} style={styles.locationFieldInput} returnKeyType="next" /></View></View>;
+  return <View style={[styles.locationField, active && styles.locationFieldActive]}><View style={[styles.locationFieldDot, drop && styles.locationFieldDotDrop]}><Text style={[styles.locationFieldDotText, drop && styles.locationFieldDotTextDrop]}>{icon}</Text></View><View style={styles.locationFieldTextWrap}><Text style={styles.locationFieldLabel}>{label}</Text><TextInput ref={inputRef} value={value} onFocus={onFocus} onBlur={onBlur} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={colors.textMuted} style={styles.locationFieldInput} returnKeyType="next" /></View></View>;
 }
 
 function PinDropPicker({ target, initialCoordinate, onBack, onConfirm }: { target: LocationTarget; initialCoordinate?: Coordinate; onBack: () => void; onConfirm: (address: string, coordinate: Coordinate) => void }) {
@@ -761,6 +732,8 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
   };
   const approachRoute = [captainStart, { latitude: captainStart.latitude + 0.003, longitude: captainStart.longitude + 0.002 }, pickup];
   const etaMinutes = Math.max(1, 4 - Math.floor(step / 2));
+  const arrived = step >= 8;
+  const captainPhone = '+919876543210';
 
   useEffect(() => {
     mapRef.current?.fitToCoordinates([captainStart, pickup], { animated: true, edgePadding: { top: 120, right: 50, bottom: 300, left: 50 } });
@@ -777,6 +750,9 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
       ],
     );
 
+  const callCaptain = () => { void Linking.openURL(`tel:${captainPhone}`); };
+  const messageCaptain = () => { void Linking.openURL(`sms:${captainPhone}`); };
+
   return <SafeAreaView style={styles.assignedSafe} edges={['top', 'left', 'right']}>
     <MapView ref={mapRef} provider={PROVIDER_GOOGLE} initialRegion={NANDYAL} style={StyleSheet.absoluteFill}>
       <Marker coordinate={pickup} pinColor={colors.success} title={t('rides.pickup')} />
@@ -786,9 +762,10 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
     <Pressable onPress={onHome} accessibilityRole="button" style={[styles.assignedBack, shadows.soft]}><Text style={styles.rideOptionsBackText}>‹</Text></Pressable>
     <View style={[styles.assignedSheet, shadows.card]}>
       <View style={styles.sheetHandle} />
-      <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t('rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{t('rides.arriving')} · {t('rides.eta', { minutes: formatNumber(etaMinutes) })}</Text></View><View style={styles.etaBadge}><Text style={styles.etaBadgeText}>{formatNumber(etaMinutes)} min</Text></View></View>
-      <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{t('mock.captainName')}</Text><Text style={styles.assignedVehicle}>{t('mock.vehicle', { district: formatNumber(21), number: formatOtp(1234) })}</Text></View><View style={styles.assignedCall}><Text style={styles.assignedCallText}>☎</Text></View></View>
-      <Text style={styles.assignedPickupText} numberOfLines={1}>{t('rides.pickup')} · {ride.pickup}</Text>
+      {!arrived && <Text style={styles.bookingStatus}>{t('rides.bookedMessage')}</Text>}
+      <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(arrived ? 'rides.hereTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{arrived ? t('rides.hereSubtitle') : `${t('rides.arriving')} · ${t('rides.eta', { minutes: formatNumber(etaMinutes) })}`}</Text></View>{!arrived && <View style={styles.etaBadge}><Text style={styles.etaBadgeText}>{formatNumber(etaMinutes)} min</Text></View>}</View>
+      <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{t('mock.captainName')}</Text><Text style={styles.assignedVehicle}>{t('mock.vehicle', { district: formatNumber(21), number: formatOtp(1234) })}</Text></View><Pressable onPress={callCaptain} accessibilityRole="button" accessibilityLabel={t('rides.callCaptain')} style={styles.assignedCall}><Text style={styles.assignedCallText}>☎</Text></Pressable><Pressable onPress={messageCaptain} accessibilityRole="button" accessibilityLabel={t('rides.messageCaptain')} style={styles.assignedCall}><Text style={styles.assignedCallText}>✉</Text></Pressable></View>
+      <View style={styles.assignedPickupRow}><View style={styles.assignedPickupDot} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.pickup')} · {ride.pickup}</Text></View>
       <PrimaryButton label={t('rides.cancelRide')} onPress={cancel} danger />
     </View>
   </SafeAreaView>;
@@ -799,23 +776,22 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
 const styles = StyleSheet.create({
   // Map-led customer home
   mapHomeSafe: { flex: 1, backgroundColor: colors.primaryLight },
-  mapHomeTopBar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 18, paddingTop: 8 },
+  mapHomeTopBar: { alignItems: 'flex-start', paddingHorizontal: 18, paddingTop: 8 },
   mapHomeBrand: { backgroundColor: 'rgba(255,255,255,0.94)', borderColor: colors.border, borderRadius: radii.pill, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 8, ...shadows.soft },
   mapHomeBrandText: { color: colors.primaryDark, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   mapHomeBrandTe: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, marginTop: 1 },
-  mapHomeSettings: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 46, justifyContent: 'center', width: 46, ...shadows.soft },
-  mapHomeSettingsIcon: { color: colors.primaryDark, fontSize: 21 },
-  recenterButton: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, bottom: 325, height: 50, justifyContent: 'center', position: 'absolute', right: 18, width: 50 },
-  recenterIcon: { color: colors.primary, fontSize: 31, lineHeight: 34 },
+  recenterButton: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.pill, borderWidth: 1, height: 50, justifyContent: 'center', position: 'absolute', right: 18, top: 18, width: 50, zIndex: 2 },
+  recenterIcon: { color: colors.primary, fontSize: 29, fontWeight: '800', lineHeight: 32 },
   currentLocationDot: { backgroundColor: '#14B8A6', borderColor: '#FFFFFF', borderRadius: 13, borderWidth: 4, height: 26, width: 26, ...shadows.card },
   mapFallback: { backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: radii.pill, left: 20, paddingHorizontal: 14, paddingVertical: 8, position: 'absolute', right: 78, top: 90 },
   mapFallbackText: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, textAlign: 'center' },
   locationNotice: { backgroundColor: colors.accentLight, borderColor: '#F6C7B4', borderRadius: radii.md, borderWidth: 1, left: 20, paddingHorizontal: 12, paddingVertical: 9, position: 'absolute', right: 20, top: 92 },
   locationNoticeText: { color: colors.accent, fontFamily, fontSize: fontSize.xs, fontWeight: '700', textAlign: 'center' },
   homeSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 0, left: 0, overflow: 'hidden', position: 'absolute', right: 0 },
-  sheetHandleArea: { alignItems: 'center', paddingBottom: 8, paddingTop: 11 },
+  sheetHandleArea: { alignItems: 'center', minHeight: 52, paddingBottom: 14, paddingTop: 15 },
   sheetHandle: { backgroundColor: '#CBC5BB', borderRadius: radii.pill, height: 5, width: 46 },
-  homeSheetScroll: { gap: 14, paddingBottom: 12, paddingHorizontal: 16 },
+  homeSheetScrollView: { flex: 1 },
+  homeSheetScroll: { gap: 14, paddingBottom: 18, paddingHorizontal: 16 },
   destinationAction: { alignItems: 'center', backgroundColor: colors.primaryDark, borderRadius: radii.lg, flexDirection: 'row', minHeight: 74, paddingHorizontal: 16, ...shadows.button },
   destinationPin: { color: colors.bgAlt, fontSize: 28, marginRight: 12 },
   destinationTextWrap: { flex: 1 },
@@ -855,8 +831,9 @@ const styles = StyleSheet.create({
   locationField: { alignItems: 'center', flexDirection: 'row', minHeight: 76, paddingHorizontal: 15 },
   locationFieldActive: { backgroundColor: '#F9FCFB' },
   locationFieldDot: { alignItems: 'center', backgroundColor: colors.successLight, borderRadius: radii.pill, height: 26, justifyContent: 'center', marginRight: 12, width: 26 },
-  locationFieldDotDrop: { backgroundColor: colors.accentLight },
+  locationFieldDotDrop: { backgroundColor: '#F7E2DE' },
   locationFieldDotText: { color: colors.success, fontSize: 14, lineHeight: 18 },
+  locationFieldDotTextDrop: { color: '#B7655A' },
   locationFieldTextWrap: { flex: 1 },
   locationFieldLabel: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, fontWeight: '700' },
   locationFieldInput: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, minHeight: 34, padding: 0 },
@@ -1164,6 +1141,7 @@ const styles = StyleSheet.create({
   assignedSafe: { flex: 1, backgroundColor: colors.primaryLight },
   assignedBack: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 46, justifyContent: 'center', left: 16, position: 'absolute', top: 18, width: 46 },
   assignedSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 0, gap: 13, left: 0, padding: 16, paddingBottom: 22, position: 'absolute', right: 0 },
+  bookingStatus: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   assignedHeading: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   assignedTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '800' },
   assignedSubtitle: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, marginTop: 3 },
@@ -1174,7 +1152,9 @@ const styles = StyleSheet.create({
   assignedVehicle: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, marginTop: 2 },
   assignedCall: { alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: radii.pill, height: 38, justifyContent: 'center', width: 38 },
   assignedCallText: { color: colors.primary, fontSize: 20 },
-  assignedPickupText: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs },
+  assignedPickupRow: { alignItems: 'flex-start', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', gap: 9, paddingHorizontal: 12, paddingVertical: 11 },
+  assignedPickupDot: { backgroundColor: colors.success, borderRadius: radii.pill, height: 10, marginTop: 6, width: 10 },
+  assignedPickupText: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.md, fontWeight: '800', lineHeight: 23 },
   liveCaptainMarker: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.primary, borderRadius: radii.pill, borderWidth: 3, height: 42, justifyContent: 'center', width: 42, ...shadows.card },
   liveCaptainIcon: { fontSize: 22 },
 
