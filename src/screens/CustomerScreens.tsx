@@ -8,7 +8,6 @@ import {
   LayoutAnimation,
   Linking,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -22,6 +21,8 @@ import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenShell } from '../components/ScreenShell';
 import { PhoneOtpAuth } from '../components/PhoneOtpAuth';
+import { demoAuthService } from '../services/demoAuth';
+import { rideCreationService } from '../services/rideCreation';
 import { LiveLocationMap } from '../components/LiveLocationMap';
 import { formatFare, formatNumber, formatOtp } from '../utils/format';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
@@ -42,7 +43,7 @@ export function CustomerLoginScreen({
   onBack: () => void;
 }) {
   const { t } = useTranslation();
-  return <PhoneOtpAuth title={t('screens.customerLogin')} subtitle={t('login.subtitle')} emoji="📱" onBack={onBack} onSendOtp={async () => undefined} onVerifyOtp={async () => { onComplete(); }} />;
+  return <PhoneOtpAuth title={t('screens.customerLogin')} subtitle={t('login.subtitle')} emoji="📱" onBack={onBack} onSendOtp={demoAuthService.sendOtp} onVerifyOtp={async (phone, otp) => { await demoAuthService.verifyOtp(phone, otp); onComplete(); }} />;
 }
 
 /* ─────────────────────────── HOME ─────────────────────────── */
@@ -175,13 +176,12 @@ export function CustomerHomeScreen({
       {!mapReady && <View style={styles.mapFallback}><Text style={styles.mapFallbackText}>{t('home.mapLoading')}</Text></View>}
       {locationUnavailable && <View style={styles.locationNotice}><Text style={styles.locationNoticeText}>{t('home.locationUnavailable')}</Text></View>}
 
-      <Reanimated.View style={[styles.homeSheet, { height: sheetHeight }, sheetAnimatedStyle, shadows.card]}>
-        <GestureDetector gesture={sheetPanGesture}>
+      <GestureDetector gesture={sheetPanGesture}>
+        <Reanimated.View style={[styles.homeSheet, { height: sheetHeight }, sheetAnimatedStyle, shadows.card]}>
           <Pressable onPress={() => setSheet(!sheetExpanded)} style={styles.sheetHandleArea} accessibilityRole="button" accessibilityLabel={t('home.toggleSheet')}>
             <View style={styles.sheetHandle} />
           </Pressable>
-        </GestureDetector>
-        <ScrollView bounces={false} contentContainerStyle={styles.homeSheetScroll} showsVerticalScrollIndicator={false} style={styles.homeSheetScrollView}>
+        <View style={styles.homeSheetContent}>
           <Pressable onPress={startBooking} accessibilityRole="button" style={styles.destinationAction}>
             <Text style={styles.destinationPin}>⌖</Text><View style={styles.destinationTextWrap}><Text style={styles.destinationLabel}>{t('home.whereTo')}</Text><Text style={styles.destinationSub}>{t('home.whereToHint')}</Text></View><Text style={styles.destinationArrow}>→</Text>
           </Pressable>
@@ -194,14 +194,15 @@ export function CustomerHomeScreen({
             <View style={styles.landmarkRow}>{landmarks.map((landmark) => <Pressable key={landmark.label} accessibilityRole="button" onPress={() => onPickLocation(landmark.target)} style={styles.landmarkCard}><Text style={styles.landmarkIcon}>{landmark.icon}</Text><Text style={styles.landmarkText} numberOfLines={2}>{landmark.label}</Text></Pressable>)}</View>
             <Pressable onPress={onProfile} accessibilityRole="button" style={styles.safetyCard}><Text style={styles.safetyIcon}>✓</Text><View style={styles.safetyTextWrap}><Text style={styles.safetyTitle}>{t('home.safetyTitle')}</Text><Text style={styles.safetySubtitle}>{t('home.safetySubtitle')}</Text></View><Text style={styles.safetyArrow}>›</Text></Pressable>
           </View>
-        </ScrollView>
-        <View style={styles.homeTabBar}>
-          <HomeTab icon="⌂" label={t('home.tabHome')} active />
-          <HomeTab icon="▤" label={t('home.tabBookings')} onPress={() => Alert.alert(t('home.bookingsTitle'), t('home.bookingsMessage'))} />
-          <HomeTab icon="?" label={t('home.tabHelp')} onPress={() => Alert.alert(t('home.helpTitle'), t('home.helpMessage'))} />
-          <HomeTab icon="♙" label={t('home.tabProfile')} onPress={onProfile} />
         </View>
-      </Reanimated.View>
+        </Reanimated.View>
+      </GestureDetector>
+      <View style={styles.homeTabBar}>
+        <HomeTab icon="⌂" label={t('home.tabHome')} active />
+        <HomeTab icon="▤" label={t('home.tabBookings')} onPress={() => Alert.alert(t('home.bookingsTitle'), t('home.bookingsMessage'))} />
+        <HomeTab icon="?" label={t('home.tabHelp')} onPress={() => Alert.alert(t('home.helpTitle'), t('home.helpMessage'))} />
+        <HomeTab icon="♙" label={t('home.tabProfile')} onPress={onProfile} />
+      </View>
     </SafeAreaView>
   );
 }
@@ -643,11 +644,23 @@ export function BookingConfirmScreen({
   onBack,
 }: {
   ride: CustomerRide;
-  onBook: () => void;
+  onBook: () => Promise<void>;
   onBack: () => void;
 }) {
   const { t } = useTranslation();
   const fare = ride.kind === 'bike' ? 55 : 75;
+  const [booking, setBooking] = useState(false);
+  const book = async () => {
+    setBooking(true);
+    try {
+      await rideCreationService.create(ride);
+      await onBook();
+    } catch {
+      Alert.alert(t('login.tryAgain'));
+    } finally {
+      setBooking(false);
+    }
+  };
   return (
     <ScreenShell back={onBack} title={t('screens.bookingConfirm')}>
       <View style={[styles.summaryCard, shadows.card]}>
@@ -656,7 +669,7 @@ export function BookingConfirmScreen({
         <SummaryRow label={t('rides.ride')} value={t(`rides.${ride.kind}`)} icon={ride.kind === 'bike' ? '🏍️' : '🛺'} />
         <SummaryRow label={t('rides.estimate')} value={formatFare(fare)} icon="💰" last />
       </View>
-      <PrimaryButton label={t('rides.book')} onPress={onBook} />
+      <PrimaryButton label={booking ? t('login.pleaseWait') : t('rides.book')} onPress={() => { void book(); }} disabled={booking} />
     </ScreenShell>
   );
 }
@@ -780,18 +793,17 @@ const styles = StyleSheet.create({
   mapHomeBrand: { backgroundColor: 'rgba(255,255,255,0.94)', borderColor: colors.border, borderRadius: radii.pill, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 8, ...shadows.soft },
   mapHomeBrandText: { color: colors.primaryDark, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   mapHomeBrandTe: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, marginTop: 1 },
-  recenterButton: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.pill, borderWidth: 1, height: 50, justifyContent: 'center', position: 'absolute', right: 18, top: 18, width: 50, zIndex: 2 },
+  recenterButton: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.pill, borderWidth: 1, height: 50, justifyContent: 'center', position: 'absolute', right: 18, top: 76, width: 50, zIndex: 2 },
   recenterIcon: { color: colors.primary, fontSize: 29, fontWeight: '800', lineHeight: 32 },
   currentLocationDot: { backgroundColor: '#14B8A6', borderColor: '#FFFFFF', borderRadius: 13, borderWidth: 4, height: 26, width: 26, ...shadows.card },
   mapFallback: { backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: radii.pill, left: 20, paddingHorizontal: 14, paddingVertical: 8, position: 'absolute', right: 78, top: 90 },
   mapFallbackText: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, textAlign: 'center' },
   locationNotice: { backgroundColor: colors.accentLight, borderColor: '#F6C7B4', borderRadius: radii.md, borderWidth: 1, left: 20, paddingHorizontal: 12, paddingVertical: 9, position: 'absolute', right: 20, top: 92 },
   locationNoticeText: { color: colors.accent, fontFamily, fontSize: fontSize.xs, fontWeight: '700', textAlign: 'center' },
-  homeSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 0, left: 0, overflow: 'hidden', position: 'absolute', right: 0 },
+  homeSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 76, left: 0, overflow: 'hidden', position: 'absolute', right: 0 },
   sheetHandleArea: { alignItems: 'center', minHeight: 52, paddingBottom: 14, paddingTop: 15 },
   sheetHandle: { backgroundColor: '#CBC5BB', borderRadius: radii.pill, height: 5, width: 46 },
-  homeSheetScrollView: { flex: 1 },
-  homeSheetScroll: { gap: 14, paddingBottom: 18, paddingHorizontal: 16 },
+  homeSheetContent: { flex: 1, gap: 14, paddingBottom: 18, paddingHorizontal: 16 },
   destinationAction: { alignItems: 'center', backgroundColor: colors.primaryDark, borderRadius: radii.lg, flexDirection: 'row', minHeight: 74, paddingHorizontal: 16, ...shadows.button },
   destinationPin: { color: colors.bgAlt, fontSize: 28, marginRight: 12 },
   destinationTextWrap: { flex: 1 },
@@ -818,7 +830,7 @@ const styles = StyleSheet.create({
   safetyTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   safetySubtitle: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, marginTop: 2 },
   safetyArrow: { color: colors.accent, fontSize: 26 },
-  homeTabBar: { backgroundColor: colors.surface, borderColor: colors.border, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-around', paddingBottom: 11, paddingTop: 9 },
+  homeTabBar: { backgroundColor: colors.surface, borderColor: colors.border, borderTopWidth: 1, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', left: 0, minHeight: 76, paddingBottom: 11, paddingTop: 9, position: 'absolute', right: 0, zIndex: 3 },
   homeTab: { alignItems: 'center', flex: 1, gap: 2, minWidth: 0 },
   homeTabIcon: { color: colors.textMuted, fontSize: 23, lineHeight: 25 },
   homeTabIconActive: { color: colors.primary },

@@ -34,8 +34,8 @@ export function PhoneOtpAuth({ title, subtitle, emoji, onBack, onSendOtp, onVeri
     try {
       if (step === 'phone') { await onSendOtp(phone); setStep('otp'); }
       else await onVerifyOtp(phone, otp);
-    } catch {
-      setError(t('login.tryAgain'));
+    } catch (caught) {
+      setError(caught instanceof Error && caught.message === 'DEMO_ANONYMOUS_SIGN_IN_DISABLED' ? t('login.demoSessionSetupRequired') : t('login.tryAgain'));
     } finally { setLoading(false); }
   };
 

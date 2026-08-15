@@ -15,6 +15,10 @@ import type { CaptainProfile } from '../services/captainOnboarding';
 
 export type AppMode = 'customer' | 'captain';
 const Stack = createNativeStackNavigator();
+const CAPTAIN_ONBOARDING_FLOW_VERSION = '3';
+const captainOnboardingCompleteKey = 'nandyal-ride-demo.captain.onboardingComplete';
+const captainOnboardingSubmittedKey = 'nandyal-ride-demo.captain.onboardingSubmitted';
+const captainOnboardingVersionKey = 'nandyal-ride-demo.captain.onboardingFlowVersion';
 
 export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => void }) {
   const [language, setLanguage] = useState<AppLanguage>('en');
@@ -25,6 +29,7 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
   const [captainOnline, setCaptainOnline] = useState(false);
   const [captainProfile, setCaptainProfile] = useState<CaptainProfile>({ name: '', language: 'en', vehicleType: null });
   const [captainOnboardingComplete, setCaptainOnboardingComplete] = useState<boolean | null>(mode === 'captain' ? null : false);
+  const [captainOnboardingSubmitted, setCaptainOnboardingSubmitted] = useState<boolean | null>(mode === 'captain' ? null : false);
   const storageKey = `nandyal-ride-demo.${mode}.language`;
 
   useEffect(() => {
@@ -36,7 +41,19 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
 
   useEffect(() => {
     if (mode !== 'captain') return;
-    AsyncStorage.getItem('nandyal-ride-demo.captain.onboardingComplete').then((saved) => setCaptainOnboardingComplete(saved === 'true'));
+    void (async () => {
+      const version = await AsyncStorage.getItem(captainOnboardingVersionKey);
+      if (version !== CAPTAIN_ONBOARDING_FLOW_VERSION) {
+        await AsyncStorage.multiRemove([captainOnboardingCompleteKey, captainOnboardingSubmittedKey]);
+        await AsyncStorage.setItem(captainOnboardingVersionKey, CAPTAIN_ONBOARDING_FLOW_VERSION);
+        setCaptainOnboardingComplete(false);
+        setCaptainOnboardingSubmitted(false);
+        return;
+      }
+      const [[, complete], [, submitted]] = await AsyncStorage.multiGet([captainOnboardingCompleteKey, captainOnboardingSubmittedKey]);
+      setCaptainOnboardingComplete(complete === 'true');
+      setCaptainOnboardingSubmitted(submitted === 'true' && complete !== 'true');
+    })();
   }, [mode]);
 
   const chooseLanguage = async (next: AppLanguage) => {
@@ -46,8 +63,9 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
     setHasLanguage(true);
   };
 
-  const completeCaptainOnboarding = async () => { await AsyncStorage.setItem('nandyal-ride-demo.captain.onboardingComplete', 'true'); setCaptainOnboardingComplete(true); };
-  if (hasLanguage === null || (mode === 'captain' && captainOnboardingComplete === null)) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
+  const submitCaptainOnboarding = async () => { await AsyncStorage.setItem(captainOnboardingSubmittedKey, 'true'); setCaptainOnboardingSubmitted(true); };
+  const completeCaptainOnboarding = async () => { await AsyncStorage.multiRemove([captainOnboardingSubmittedKey]); await AsyncStorage.setItem(captainOnboardingCompleteKey, 'true'); setCaptainOnboardingSubmitted(false); setCaptainOnboardingComplete(true); };
+  if (hasLanguage === null || (mode === 'captain' && (captainOnboardingComplete === null || captainOnboardingSubmitted === null))) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
   return <I18nextProvider i18n={i18n}>
     <GestureHandlerRootView style={{ flex: 1 }}>
     <NavigationContainer>
@@ -58,11 +76,11 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
           <Stack.Screen name="CustomerHome">{({ navigation }) => <CustomerHomeScreen ride={customerRide} onBack={onExit} onProfile={() => navigation.navigate('Settings', { profile: true })} onPickLocation={(target) => { setLocationTarget(target); navigation.navigate('LocationPicker'); }} onStartBooking={(pickup, pickupCoordinate) => { setCustomerRide((ride) => ({ ...ride, pickup, pickupCoordinate })); setLocationTarget('drop'); navigation.navigate('LocationPicker'); }} />}</Stack.Screen>
           <Stack.Screen name="LocationPicker">{({ navigation }) => <LocationPickerScreen ride={customerRide} initialTarget={locationTarget} onBack={() => navigation.goBack()} onChange={(target, place, coordinate) => setCustomerRide((ride) => ({ ...ride, [target]: place, ...(coordinate ? { [target === 'pickup' ? 'pickupCoordinate' : 'dropCoordinate']: coordinate } : {}) }))} onContinue={() => navigation.navigate('RideType')} />}</Stack.Screen>
           <Stack.Screen name="RideType">{({ navigation }) => <RideTypeScreen ride={customerRide} selected={customerRide.kind} onBack={() => navigation.goBack()} onSelect={(kind) => setCustomerRide((ride) => ({ ...ride, kind }))} onNext={() => navigation.navigate('BookingConfirm')} />}</Stack.Screen>
-          <Stack.Screen name="BookingConfirm">{({ navigation }) => <BookingConfirmScreen ride={customerRide} onBack={() => navigation.goBack()} onBook={() => navigation.navigate('Searching')} />}</Stack.Screen>
+          <Stack.Screen name="BookingConfirm">{({ navigation }) => <BookingConfirmScreen ride={customerRide} onBack={() => navigation.goBack()} onBook={async () => { navigation.navigate('Searching'); }} />}</Stack.Screen>
           <Stack.Screen name="Searching" options={{ animation: 'fade' }}>{({ navigation }) => <SearchingScreen onBack={() => navigation.goBack()} onFound={() => navigation.replace('RideConfirmed')} />}</Stack.Screen>
           <Stack.Screen name="RideConfirmed" options={{ animation: 'fade' }}>{({ navigation }) => <RideConfirmedScreen ride={customerRide} onHome={() => navigation.popToTop()} />}</Stack.Screen>
         </> : mode === 'captain' ? <>
-          {captainOnboardingComplete ? <Stack.Screen name="CaptainMain">{() => <CaptainMainStack online={captainOnline} onToggle={() => setCaptainOnline((online) => !online)} onLanguageChange={chooseLanguage} onTripComplete={() => setCaptainOnline(true)} />}</Stack.Screen> : <Stack.Screen name="CaptainOnboarding">{() => <CaptainOnboardingStack language={language} onLanguageChange={chooseLanguage} profile={captainProfile} onProfileChange={setCaptainProfile} onExit={onExit} onComplete={completeCaptainOnboarding} />}</Stack.Screen>}
+          {captainOnboardingComplete ? <Stack.Screen name="CaptainMain">{() => <CaptainMainStack online={captainOnline} onToggle={() => setCaptainOnline((online) => !online)} onLanguageChange={chooseLanguage} onTripComplete={() => setCaptainOnline(true)} />}</Stack.Screen> : <Stack.Screen name="CaptainOnboarding">{() => <CaptainOnboardingStack language={language} onLanguageChange={chooseLanguage} profile={captainProfile} onProfileChange={setCaptainProfile} onExit={onExit} submitted={Boolean(captainOnboardingSubmitted)} onSubmitted={submitCaptainOnboarding} onApproved={completeCaptainOnboarding} />}</Stack.Screen>}
         </> : null}
         <Stack.Screen name="Settings">{({ navigation, route }) => <SettingsScreen profile={Boolean((route.params as { profile?: boolean } | undefined)?.profile)} onBack={() => navigation.goBack()} onLanguageChange={(next) => { chooseLanguage(next).then(() => navigation.goBack()); }} />}</Stack.Screen>
       </Stack.Navigator>
