@@ -9,6 +9,29 @@ npm install
 npm run start
 ```
 
+## Separate Customer and Captain apps
+
+The project has one shared source tree and three Expo build variants. Customer
+and Captain use distinct Android package names and iOS bundle identifiers, so
+they can be installed side by side and do not share device storage or a
+Supabase session.
+
+```bash
+# Customer app — com.nandyalride.customer
+npm run start:customer
+
+# Captain app — com.nandyalride.captain
+npm run start:captain
+
+# Optional local launcher that still lets you choose either flow
+npm run start:demo
+```
+
+Use matching `APP_VARIANT` and `EXPO_PUBLIC_APP_MODE` values when creating
+native builds (for example, both set to `customer`) so each build receives its
+own app identity and opens its matching flow. Both variants continue to share
+the same Supabase project and database.
+
 ## Supabase Phase 1: demo authentication
 
 Customer and captain sign-in is intentionally local-only for this demo: no SMS

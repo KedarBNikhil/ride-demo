@@ -9,6 +9,7 @@ export type RideDraft = {
 };
 
 export type CreatedRide = { id: string; persisted: boolean };
+export type CancellationReason = 'change_plans' | 'another_ride' | 'wait_time' | 'fare_concern' | 'captain_unreachable' | 'other';
 
 const fareFor = (kind: RideDraft['kind']) => kind === 'bike' ? 55 : 75;
 
@@ -53,5 +54,24 @@ export const rideCreationService = {
 
     if (error || !data) throw error ?? new Error('Ride creation did not return an id');
     return { id: data.id, persisted: true };
+  },
+  async cancel(rideId: string, reasonCode: CancellationReason, reasonDetail?: string) {
+    if (!isSupabaseConfigured || rideId.startsWith('local-')) return { persisted: false };
+
+    const { data, error } = await supabase!
+      .from('rides')
+      .update({
+        status: 'cancelled',
+        cancellation_reason_code: reasonCode,
+        cancellation_reason_detail: reasonCode === 'other' ? reasonDetail?.trim() : null,
+      })
+      .eq('id', rideId)
+      .select('id, status, cancelled_at')
+      .single();
+
+    if (error || !data || data.status !== 'cancelled' || !data.cancelled_at) {
+      throw error ?? new Error('Ride cancellation was not saved');
+    }
+    return { persisted: true };
   },
 };

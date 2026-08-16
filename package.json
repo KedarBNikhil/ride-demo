@@ -5,8 +5,15 @@
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
+    "start:customer": "APP_VARIANT=customer EXPO_PUBLIC_APP_MODE=customer expo start --clear",
+    "start:captain": "APP_VARIANT=captain EXPO_PUBLIC_APP_MODE=captain expo start --clear",
+    "start:demo": "APP_VARIANT=chooser EXPO_PUBLIC_APP_MODE=chooser expo start --clear",
     "android": "expo start --android",
+    "android:customer": "APP_VARIANT=customer EXPO_PUBLIC_APP_MODE=customer expo start --android --clear",
+    "android:captain": "APP_VARIANT=captain EXPO_PUBLIC_APP_MODE=captain expo start --android --clear",
     "ios": "expo start --ios",
+    "ios:customer": "APP_VARIANT=customer EXPO_PUBLIC_APP_MODE=customer expo start --ios --clear",
+    "ios:captain": "APP_VARIANT=captain EXPO_PUBLIC_APP_MODE=captain expo start --ios --clear",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit"
   },

@@ -8,6 +8,7 @@ import {
   LayoutAnimation,
   Linking,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -22,14 +23,14 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenShell } from '../components/ScreenShell';
 import { PhoneOtpAuth } from '../components/PhoneOtpAuth';
 import { demoAuthService } from '../services/demoAuth';
-import { rideCreationService } from '../services/rideCreation';
+import { rideCreationService, type CancellationReason } from '../services/rideCreation';
 import { LiveLocationMap } from '../components/LiveLocationMap';
 import { formatFare, formatNumber, formatOtp } from '../utils/format';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 
 export type RideKind = 'bike' | 'auto';
 export type Coordinate = { latitude: number; longitude: number };
-export type CustomerRide = { pickup: string; drop: string; kind: RideKind; pickupCoordinate?: Coordinate; dropCoordinate?: Coordinate };
+export type CustomerRide = { id?: string; pickup: string; drop: string; kind: RideKind; pickupCoordinate?: Coordinate; dropCoordinate?: Coordinate };
 type LocationTarget = 'pickup' | 'drop';
 const NANDYAL: Region = { latitude: 15.4889, longitude: 78.4836, latitudeDelta: 0.035, longitudeDelta: 0.035 };
 
@@ -644,7 +645,7 @@ export function BookingConfirmScreen({
   onBack,
 }: {
   ride: CustomerRide;
-  onBook: () => Promise<void>;
+  onBook: (rideId: string) => Promise<void>;
   onBack: () => void;
 }) {
   const { t } = useTranslation();
@@ -653,8 +654,8 @@ export function BookingConfirmScreen({
   const book = async () => {
     setBooking(true);
     try {
-      await rideCreationService.create(ride);
-      await onBook();
+      const createdRide = await rideCreationService.create(ride);
+      await onBook(createdRide.id);
     } catch {
       Alert.alert(t('login.tryAgain'));
     } finally {
@@ -733,10 +734,24 @@ export function SearchingScreen({ onFound, onBack }: { onFound: () => void; onBa
 
 /* ─────────────────────────── RIDE CONFIRMED ─────────────────────────── */
 
+const cancellationReasons: Array<{ code: CancellationReason; labelKey: string }> = [
+  { code: 'change_plans', labelKey: 'ChangePlans' },
+  { code: 'another_ride', labelKey: 'AnotherRide' },
+  { code: 'wait_time', labelKey: 'WaitTime' },
+  { code: 'fare_concern', labelKey: 'Fare' },
+  { code: 'captain_unreachable', labelKey: 'Captain' },
+  { code: 'other', labelKey: 'Other' },
+];
+
 export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHome: () => void }) {
   const { t } = useTranslation();
   const mapRef = useRef<MapView>(null);
   const [step, setStep] = useState(0);
+  const [cancelStep, setCancelStep] = useState<'none' | 'confirm' | 'reason'>('none');
+  const [cancellationReason, setCancellationReason] = useState<CancellationReason | null>(null);
+  const [otherReason, setOtherReason] = useState('');
+  const [cancellationError, setCancellationError] = useState('');
+  const [cancelling, setCancelling] = useState(false);
   const pickup = ride.pickupCoordinate ?? locationCoordinate(ride.pickup, 0);
   const captainStart = { latitude: pickup.latitude - 0.008, longitude: pickup.longitude - 0.006 };
   const captainCoordinate = {
@@ -745,6 +760,7 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
   };
   const approachRoute = [captainStart, { latitude: captainStart.latitude + 0.003, longitude: captainStart.longitude + 0.002 }, pickup];
   const etaMinutes = Math.max(1, 4 - Math.floor(step / 2));
+  const captainDistanceKm = Math.max(0.2, 1.8 - (step * 0.2));
   const arrived = step >= 8;
   const captainPhone = '+919876543210';
 
@@ -753,15 +769,26 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
     const id = setInterval(() => setStep((current) => Math.min(current + 1, 8)), 3000);
     return () => clearInterval(id);
   }, []);
-  const cancel = () =>
-    Alert.alert(
-      t('rides.cancelTitle'),
-      t('rides.cancelMessage'),
-      [
-        { text: t('rides.keepRide'), style: 'cancel' },
-        { text: t('rides.confirmCancel'), style: 'destructive', onPress: onHome },
-      ],
-    );
+  const startCancellation = () => {
+    setCancellationReason(null);
+    setOtherReason('');
+    setCancellationError('');
+    setCancelStep('confirm');
+  };
+  const submitCancellation = async () => {
+    if (!cancellationReason) return setCancellationError(t('rides.cancelReasonRequired'));
+    if (cancellationReason === 'other' && !otherReason.trim()) return setCancellationError(t('rides.cancelReasonOtherRequired'));
+    if (!ride.id) return setCancellationError(t('login.tryAgain'));
+    setCancelling(true);
+    try {
+      await rideCreationService.cancel(ride.id, cancellationReason, otherReason);
+      onHome();
+    } catch {
+      setCancellationError(t('login.tryAgain'));
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const callCaptain = () => { void Linking.openURL(`tel:${captainPhone}`); };
   const messageCaptain = () => { void Linking.openURL(`sms:${captainPhone}`); };
@@ -779,8 +806,37 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
       <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(arrived ? 'rides.hereTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{arrived ? t('rides.hereSubtitle') : `${t('rides.arriving')} · ${t('rides.eta', { minutes: formatNumber(etaMinutes) })}`}</Text></View>{!arrived && <View style={styles.etaBadge}><Text style={styles.etaBadgeText}>{formatNumber(etaMinutes)} min</Text></View>}</View>
       <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{t('mock.captainName')}</Text><Text style={styles.assignedVehicle}>{t('mock.vehicle', { district: formatNumber(21), number: formatOtp(1234) })}</Text></View><Pressable onPress={callCaptain} accessibilityRole="button" accessibilityLabel={t('rides.callCaptain')} style={styles.assignedCall}><Text style={styles.assignedCallText}>☎</Text></Pressable><Pressable onPress={messageCaptain} accessibilityRole="button" accessibilityLabel={t('rides.messageCaptain')} style={styles.assignedCall}><Text style={styles.assignedCallText}>✉</Text></Pressable></View>
       <View style={styles.assignedPickupRow}><View style={styles.assignedPickupDot} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.pickup')} · {ride.pickup}</Text></View>
-      <PrimaryButton label={t('rides.cancelRide')} onPress={cancel} danger />
+      <PrimaryButton label={t('rides.cancelRide')} onPress={startCancellation} danger />
     </View>
+    {cancelStep !== 'none' && <View style={styles.cancellationOverlay}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={() => setCancelStep('none')} />
+      <View style={[styles.cancellationSheet, shadows.card]}>
+        <View style={styles.sheetHandle} />
+        <ScrollView bounces={false} contentContainerStyle={styles.cancellationContent} showsVerticalScrollIndicator={false}>
+        {cancelStep === 'confirm' ? <>
+          <Text style={styles.cancellationTitle}>{t('rides.cancelTitle')}</Text>
+          <View style={styles.captainStatusCard}>
+            <Text style={styles.captainStatusIcon}>🛺</Text>
+            <View style={styles.captainStatusText}><Text style={styles.captainStatusTitle}>{t('mock.captainName')}</Text><Text style={styles.captainStatusMessage}>{t('rides.cancelCaptainStatus', { captain: t('mock.captainName'), distance: formatNumber(captainDistanceKm), minutes: formatNumber(etaMinutes) })}</Text></View>
+          </View>
+          <Text style={styles.cancellationMessage}>{t('rides.cancelConfirmMessage')}</Text>
+          <PrimaryButton label={t('rides.confirmCancel')} onPress={() => setCancelStep('reason')} danger />
+          <PrimaryButton label={t('rides.continueRide')} onPress={() => setCancelStep('none')} secondary />
+        </> : <>
+          <Text style={styles.cancellationTitle}>{t('rides.cancelReasonTitle')}</Text>
+          <Text style={styles.cancellationMessage}>{t('rides.cancelReasonSubtitle')}</Text>
+          <View style={styles.reasonList}>{cancellationReasons.map((reason) => {
+            const selected = cancellationReason === reason.code;
+            return <Pressable key={reason.code} accessibilityRole="radio" accessibilityState={{ selected }} onPress={() => { setCancellationReason(reason.code); setCancellationError(''); }} style={[styles.reasonOption, selected && styles.reasonOptionSelected]}><View style={[styles.radio, selected && styles.radioSelected]}>{selected && <View style={styles.radioDot} />}</View><Text style={[styles.reasonOptionText, selected && styles.reasonOptionTextSelected]}>{t(`rides.cancelReason${reason.labelKey}`)}</Text></Pressable>;
+          })}</View>
+          {cancellationReason === 'other' && <TextInput value={otherReason} onChangeText={(value) => { setOtherReason(value); setCancellationError(''); }} placeholder={t('rides.cancelReasonOtherPlaceholder')} placeholderTextColor={colors.textMuted} multiline maxLength={180} style={styles.otherReasonInput} />}
+          {!!cancellationError && <Text style={styles.cancellationError}>{cancellationError}</Text>}
+          <PrimaryButton label={cancelling ? t('login.pleaseWait') : t('rides.submitCancellation')} onPress={() => { void submitCancellation(); }} disabled={cancelling} danger />
+          <Pressable disabled={cancelling} onPress={() => setCancelStep('confirm')} style={styles.backToCancel}><Text style={styles.backToCancelText}>{t('actions.cancel')}</Text></Pressable>
+        </>}
+        </ScrollView>
+      </View>
+    </View>}
   </SafeAreaView>;
 }
 
@@ -1167,6 +1223,18 @@ const styles = StyleSheet.create({
   assignedPickupRow: { alignItems: 'flex-start', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', gap: 9, paddingHorizontal: 12, paddingVertical: 11 },
   assignedPickupDot: { backgroundColor: colors.success, borderRadius: radii.pill, height: 10, marginTop: 6, width: 10 },
   assignedPickupText: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.md, fontWeight: '800', lineHeight: 23 },
+  cancellationOverlay: { backgroundColor: 'rgba(35, 29, 24, 0.52)', bottom: 0, justifyContent: 'flex-end', left: 0, position: 'absolute', right: 0, top: 0, zIndex: 10 },
+  cancellationSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, maxHeight: '88%', paddingBottom: 28, paddingHorizontal: 20, paddingTop: 14 },
+  cancellationContent: { gap: 14 },
+  cancellationTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize['2xl'], fontWeight: '900', textAlign: 'center' },
+  cancellationMessage: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, lineHeight: 23, textAlign: 'center' },
+  captainStatusCard: { alignItems: 'center', backgroundColor: colors.primaryLight, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', gap: 12, padding: 14 },
+  captainStatusIcon: { fontSize: 30 }, captainStatusText: { flex: 1, gap: 3 }, captainStatusTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' }, captainStatusMessage: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 19 },
+  reasonList: { gap: 8 }, reasonOption: { alignItems: 'center', backgroundColor: colors.bg, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', gap: 12, minHeight: 50, paddingHorizontal: 14 }, reasonOptionSelected: { backgroundColor: colors.primaryLight, borderColor: colors.primary, borderWidth: 2 },
+  radio: { alignItems: 'center', borderColor: colors.textMuted, borderRadius: 10, borderWidth: 2, height: 20, justifyContent: 'center', width: 20 }, radioSelected: { borderColor: colors.primary }, radioDot: { backgroundColor: colors.primary, borderRadius: 5, height: 10, width: 10 },
+  reasonOptionText: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.sm, fontWeight: '700' }, reasonOptionTextSelected: { color: colors.primaryDark, fontWeight: '900' },
+  otherReasonInput: { backgroundColor: colors.bg, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, color: colors.textPrimary, fontFamily, fontSize: fontSize.md, minHeight: 82, padding: 12, textAlignVertical: 'top' },
+  cancellationError: { color: colors.error, fontFamily, fontSize: fontSize.sm, fontWeight: '800', textAlign: 'center' }, backToCancel: { alignItems: 'center', paddingVertical: 4 }, backToCancelText: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   liveCaptainMarker: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.primary, borderRadius: radii.pill, borderWidth: 3, height: 42, justifyContent: 'center', width: 42, ...shadows.card },
   liveCaptainIcon: { fontSize: 22 },
 

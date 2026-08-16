@@ -35,7 +35,14 @@ export function PhoneOtpAuth({ title, subtitle, emoji, onBack, onSendOtp, onVeri
       if (step === 'phone') { await onSendOtp(phone); setStep('otp'); }
       else await onVerifyOtp(phone, otp);
     } catch (caught) {
-      setError(caught instanceof Error && caught.message === 'DEMO_ANONYMOUS_SIGN_IN_DISABLED' ? t('login.demoSessionSetupRequired') : t('login.tryAgain'));
+      const message = caught instanceof Error ? caught.message : '';
+      setError(
+        message === 'DEMO_ANONYMOUS_SIGN_IN_DISABLED'
+          ? t('login.demoSessionSetupRequired')
+          : message === 'Invalid development OTP'
+            ? t('login.demoOtpInvalid')
+            : t('login.tryAgain'),
+      );
     } finally { setLoading(false); }
   };
 
