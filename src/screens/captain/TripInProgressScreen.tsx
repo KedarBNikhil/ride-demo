@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { LiveLocationMap, type LiveCoordinate } from '../../components/LiveLocationMap';
 import { PrimaryButton } from '../../components/PrimaryButton';
-import type { MockRideRequest } from '../../services/mockRideRequestService';
+import { rideDispatchService, type CaptainRideRequest } from '../../services/rideDispatch';
 import { formatNumber } from '../../utils/format';
 import { hasMovedSignificantly } from '../../utils/location';
 import { colors, fontFamily, fontSize, radii, shadows } from '../../theme';
@@ -14,7 +14,7 @@ import { colors, fontFamily, fontSize, radii, shadows } from '../../theme';
 export type TripSummary = { durationSeconds: number; distanceKm: number };
 const routeFallback: LiveCoordinate = { latitude: 15.4889, longitude: 78.4836 };
 
-export function TripInProgressScreen({ request, onBack, onEndRide }: { request: MockRideRequest; onBack: () => void; onEndRide: (summary: TripSummary) => void }) {
+export function TripInProgressScreen({ request, onBack, onEndRide }: { request: CaptainRideRequest; onBack: () => void; onEndRide: (summary: TripSummary) => void }) {
   const { t } = useTranslation();
   const mapRef = useRef<MapView>(null);
   const [location, setLocation] = useState<LiveCoordinate | null>(null);
@@ -33,10 +33,11 @@ export function TripInProgressScreen({ request, onBack, onEndRide }: { request: 
       try {
         const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         if (!active) return;
-        setLocation({ latitude: current.coords.latitude, longitude: current.coords.longitude });
+        const coordinate = { latitude: current.coords.latitude, longitude: current.coords.longitude };
+        setLocation(coordinate); void rideDispatchService.updateCaptainLocation(request.rideId, coordinate);
         subscription = await Location.watchPositionAsync({ accuracy: Location.Accuracy.Balanced, distanceInterval: 25 }, (next) => {
           const coordinate = { latitude: next.coords.latitude, longitude: next.coords.longitude };
-          setLocation((previous) => hasMovedSignificantly(previous, coordinate) ? coordinate : previous);
+          setLocation((previous) => { if (!hasMovedSignificantly(previous, coordinate)) return previous; void rideDispatchService.updateCaptainLocation(request.rideId, coordinate); return coordinate; });
         });
       } catch { /* keep the immediate fallback route visible */ }
     };

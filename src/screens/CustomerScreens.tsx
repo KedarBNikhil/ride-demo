@@ -22,9 +22,11 @@ import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenShell } from '../components/ScreenShell';
 import { PhoneOtpAuth } from '../components/PhoneOtpAuth';
-import { demoAuthService } from '../services/demoAuth';
+import { customerAuthService } from '../services/customerAuth';
 import { rideCreationService, type CancellationReason } from '../services/rideCreation';
+import { rideDispatchService, type DispatchRide, type RideStatus } from '../services/rideDispatch';
 import { LiveLocationMap } from '../components/LiveLocationMap';
+import { CustomerRideSettlement } from './CustomerRideSettlement';
 import { formatFare, formatNumber, formatOtp } from '../utils/format';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 
@@ -33,6 +35,7 @@ export type Coordinate = { latitude: number; longitude: number };
 export type CustomerRide = { id?: string; pickup: string; drop: string; kind: RideKind; pickupCoordinate?: Coordinate; dropCoordinate?: Coordinate };
 type LocationTarget = 'pickup' | 'drop';
 const NANDYAL: Region = { latitude: 15.4889, longitude: 78.4836, latitudeDelta: 0.035, longitudeDelta: 0.035 };
+const estimateCoordinateDistanceKm = (a: Coordinate, b: Coordinate) => Math.sqrt((a.latitude - b.latitude) ** 2 + (a.longitude - b.longitude) ** 2) * 111;
 
 /* ─────────────────────────── LOGIN ─────────────────────────── */
 
@@ -44,7 +47,7 @@ export function CustomerLoginScreen({
   onBack: () => void;
 }) {
   const { t } = useTranslation();
-  return <PhoneOtpAuth title={t('screens.customerLogin')} subtitle={t('login.subtitle')} emoji="📱" onBack={onBack} onSendOtp={demoAuthService.sendOtp} onVerifyOtp={async (phone, otp) => { await demoAuthService.verifyOtp(phone, otp); onComplete(); }} />;
+  return <PhoneOtpAuth title={t('screens.customerLogin')} subtitle={t('login.subtitle')} emoji="📱" onBack={onBack} onSendOtp={customerAuthService.sendOtp} onVerifyOtp={async (phone, otp) => { await customerAuthService.verifyOtp(phone, otp); onComplete(); }} />;
 }
 
 /* ─────────────────────────── HOME ─────────────────────────── */
@@ -699,7 +702,7 @@ function SummaryRow({
 
 /* ─────────────────────────── SEARCHING ─────────────────────────── */
 
-export function SearchingScreen({ onFound, onBack }: { onFound: () => void; onBack: () => void }) {
+export function SearchingScreen({ rideId, onFound, onBack, onUnavailable }: { rideId?: string; onFound: () => void; onBack: () => void; onUnavailable?: () => void }) {
   const { t } = useTranslation();
   const spin = useRef(new Animated.Value(0)).current;
 
@@ -712,9 +715,15 @@ export function SearchingScreen({ onFound, onBack }: { onFound: () => void; onBa
         useNativeDriver: true,
       }),
     ).start();
-    const id = setTimeout(onFound, 3500);
-    return () => clearTimeout(id);
-  }, [onFound, spin]);
+    if (!rideId || rideId.startsWith('local-')) {
+      const id = setTimeout(onFound, 3500);
+      return () => clearTimeout(id);
+    }
+    return rideDispatchService.subscribeToRide(rideId, (ride) => {
+      if (ride.status === 'accepted' || ride.status === 'arrived' || ride.status === 'in_progress' || ride.status === 'completed') onFound();
+      if (ride.status === 'cancelled') onUnavailable?.();
+    });
+  }, [onFound, rideId, spin]);
 
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
@@ -752,6 +761,10 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
   const [otherReason, setOtherReason] = useState('');
   const [cancellationError, setCancellationError] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [liveStatus, setLiveStatus] = useState<RideStatus>('accepted');
+  const [liveRide, setLiveRide] = useState<DispatchRide | null>(null);
+  const [captainDetails, setCaptainDetails] = useState<{ fullName: string; vehicleType: RideKind | null } | null>(null);
+  const [pickupPin, setPickupPin] = useState<string | null>(null);
   const pickup = ride.pickupCoordinate ?? locationCoordinate(ride.pickup, 0);
   const captainStart = { latitude: pickup.latitude - 0.008, longitude: pickup.longitude - 0.006 };
   const captainCoordinate = {
@@ -761,14 +774,29 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
   const approachRoute = [captainStart, { latitude: captainStart.latitude + 0.003, longitude: captainStart.longitude + 0.002 }, pickup];
   const etaMinutes = Math.max(1, 4 - Math.floor(step / 2));
   const captainDistanceKm = Math.max(0.2, 1.8 - (step * 0.2));
-  const arrived = step >= 8;
-  const captainPhone = '+919876543210';
+  const arrived = liveStatus === 'arrived' || liveStatus === 'in_progress' || liveStatus === 'completed';
+  const canCancel = liveStatus === 'requested' || liveStatus === 'searching' || liveStatus === 'accepted' || liveStatus === 'in_progress';
+  const captainName = captainDetails?.fullName || t('rides.captain');
+  const vehicleType = captainDetails?.vehicleType;
 
   useEffect(() => {
     mapRef.current?.fitToCoordinates([captainStart, pickup], { animated: true, edgePadding: { top: 120, right: 50, bottom: 300, left: 50 } });
     const id = setInterval(() => setStep((current) => Math.min(current + 1, 8)), 3000);
     return () => clearInterval(id);
   }, []);
+  useEffect(() => {
+    if (!ride.id || ride.id.startsWith('local-')) return;
+    return rideDispatchService.subscribeToRide(ride.id, (updatedRide) => {
+      setLiveStatus(updatedRide.status);
+      setLiveRide(updatedRide);
+      if (updatedRide.captain_id) {
+        void rideDispatchService.getAssignedCaptain(updatedRide.id).then(setCaptainDetails).catch(() => setCaptainDetails(null));
+      }
+      if (updatedRide.status === 'accepted' || updatedRide.status === 'arrived') {
+        void rideDispatchService.getCustomerPickupPin(updatedRide.id).then(setPickupPin).catch(() => setPickupPin(null));
+      }
+    });
+  }, [onHome, ride.id]);
   const startCancellation = () => {
     setCancellationReason(null);
     setOtherReason('');
@@ -781,8 +809,8 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
     if (!ride.id) return setCancellationError(t('login.tryAgain'));
     setCancelling(true);
     try {
-      await rideCreationService.cancel(ride.id, cancellationReason, otherReason);
-      onHome();
+      const result = await rideCreationService.cancel(ride.id, cancellationReason, otherReason);
+      Alert.alert(t('rides.rideCancelled'), t('rides.cancellationCharge', { charge: formatFare(result.cancellationCharge ?? 0) }), [{ text: t('actions.done'), onPress: onHome }]);
     } catch {
       setCancellationError(t('login.tryAgain'));
     } finally {
@@ -790,24 +818,33 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
     }
   };
 
-  const callCaptain = () => { void Linking.openURL(`tel:${captainPhone}`); };
-  const messageCaptain = () => { void Linking.openURL(`sms:${captainPhone}`); };
+  if (liveStatus === 'completed' && ride.id) {
+    return <CustomerRideSettlement rideId={ride.id} fare={Number(liveRide?.final_fare ?? liveRide?.estimated_fare ?? 0)} captainName={captainName} paymentStatus={liveRide?.payment_status ?? 'pending'} onHome={onHome} />;
+  }
+  const displayedCaptainCoordinate = liveRide?.captain_latitude != null && liveRide?.captain_longitude != null
+    ? { latitude: Number(liveRide.captain_latitude), longitude: Number(liveRide.captain_longitude) }
+    : captainCoordinate;
+  const inProgress = liveStatus === 'in_progress';
+  const destinationDistanceKm = estimateCoordinateDistanceKm(displayedCaptainCoordinate, ride.dropCoordinate ?? locationCoordinate(ride.drop, 1));
+  const destinationMinutes = Math.max(1, Math.ceil(destinationDistanceKm / 0.42));
 
   return <SafeAreaView style={styles.assignedSafe} edges={['top', 'left', 'right']}>
     <MapView ref={mapRef} provider={PROVIDER_GOOGLE} initialRegion={NANDYAL} style={StyleSheet.absoluteFill}>
       <Marker coordinate={pickup} pinColor={colors.success} title={t('rides.pickup')} />
       <Polyline coordinates={approachRoute} strokeColor={colors.primaryDark} strokeWidth={5} />
-      <Marker.Animated coordinate={captainCoordinate}><View style={styles.liveCaptainMarker}><Text style={styles.liveCaptainIcon}>🛺</Text></View></Marker.Animated>
+      <Marker.Animated coordinate={displayedCaptainCoordinate}><View style={styles.liveCaptainMarker}><Text style={styles.liveCaptainIcon}>🛺</Text></View></Marker.Animated>
     </MapView>
     <Pressable onPress={onHome} accessibilityRole="button" style={[styles.assignedBack, shadows.soft]}><Text style={styles.rideOptionsBackText}>‹</Text></Pressable>
-    <View style={[styles.assignedSheet, shadows.card]}>
+    <ScrollView style={[styles.assignedSheet, shadows.card]} contentContainerStyle={styles.assignedSheetContent} showsVerticalScrollIndicator={false} bounces={false}>
       <View style={styles.sheetHandle} />
-      {!arrived && <Text style={styles.bookingStatus}>{t('rides.bookedMessage')}</Text>}
-      <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(arrived ? 'rides.hereTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{arrived ? t('rides.hereSubtitle') : `${t('rides.arriving')} · ${t('rides.eta', { minutes: formatNumber(etaMinutes) })}`}</Text></View>{!arrived && <View style={styles.etaBadge}><Text style={styles.etaBadgeText}>{formatNumber(etaMinutes)} min</Text></View>}</View>
-      <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{t('mock.captainName')}</Text><Text style={styles.assignedVehicle}>{t('mock.vehicle', { district: formatNumber(21), number: formatOtp(1234) })}</Text></View><Pressable onPress={callCaptain} accessibilityRole="button" accessibilityLabel={t('rides.callCaptain')} style={styles.assignedCall}><Text style={styles.assignedCallText}>☎</Text></Pressable><Pressable onPress={messageCaptain} accessibilityRole="button" accessibilityLabel={t('rides.messageCaptain')} style={styles.assignedCall}><Text style={styles.assignedCallText}>✉</Text></Pressable></View>
+      {!arrived && <Text style={styles.bookingStatus}>{liveStatus === 'accepted' ? t('rides.bookedMessage') : t('rides.searchingSubtitle')}</Text>}
+      <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(inProgress ? 'rides.startedTitle' : arrived ? 'rides.hereTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{inProgress ? t('rides.startedSubtitle') : arrived ? t('rides.hereSubtitle') : `${t('rides.arriving')} · ${t('rides.eta', { minutes: formatNumber(etaMinutes) })}`}</Text></View>{!arrived && <View style={styles.etaBadge}><Text style={styles.etaBadgeText}>{formatNumber(etaMinutes)} min</Text></View>}</View>
+      <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{captainName}</Text><Text style={styles.assignedVehicle}>{vehicleType ? t(`rides.${vehicleType}`) : t('rides.captain')}</Text></View></View>
       <View style={styles.assignedPickupRow}><View style={styles.assignedPickupDot} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.pickup')} · {ride.pickup}</Text></View>
-      <PrimaryButton label={t('rides.cancelRide')} onPress={startCancellation} danger />
-    </View>
+      {!!pickupPin && !inProgress && <View style={styles.pickupPinCard}><Text style={styles.pickupPinLabel}>{t('rides.pickupPinLabel')}</Text><Text style={styles.pickupPin}>{pickupPin}</Text><Text style={styles.pickupPinHint}>{t('rides.pickupPinHint')}</Text></View>}
+      {inProgress && <><View style={styles.tripStatRow}><Text style={styles.tripStatLabel}>{t('rides.destinationDistance')}</Text><Text style={styles.tripStatValue}>{formatNumber(destinationDistanceKm, { maximumFractionDigits: 1 })} km · {formatNumber(destinationMinutes)} min</Text></View><Pressable onPress={() => { void Linking.openURL('tel:112'); }} accessibilityRole="button" style={styles.sosButton}><Text style={styles.sosText}>{t('rides.sos')}</Text></Pressable></>}
+      {canCancel && <PrimaryButton label={t('rides.cancelRide')} onPress={startCancellation} danger />}
+    </ScrollView>
     {cancelStep !== 'none' && <View style={styles.cancellationOverlay}>
       <Pressable style={StyleSheet.absoluteFill} onPress={() => setCancelStep('none')} />
       <View style={[styles.cancellationSheet, shadows.card]}>
@@ -817,7 +854,7 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
           <Text style={styles.cancellationTitle}>{t('rides.cancelTitle')}</Text>
           <View style={styles.captainStatusCard}>
             <Text style={styles.captainStatusIcon}>🛺</Text>
-            <View style={styles.captainStatusText}><Text style={styles.captainStatusTitle}>{t('mock.captainName')}</Text><Text style={styles.captainStatusMessage}>{t('rides.cancelCaptainStatus', { captain: t('mock.captainName'), distance: formatNumber(captainDistanceKm), minutes: formatNumber(etaMinutes) })}</Text></View>
+            <View style={styles.captainStatusText}><Text style={styles.captainStatusTitle}>{captainName}</Text><Text style={styles.captainStatusMessage}>{inProgress ? t('rides.cancelTripStatus', { distance: formatNumber(destinationDistanceKm, { maximumFractionDigits: 1 }), minutes: formatNumber(destinationMinutes) }) : t('rides.cancelCaptainStatus', { captain: captainName, distance: formatNumber(captainDistanceKm), minutes: formatNumber(etaMinutes) })}</Text></View>
           </View>
           <Text style={styles.cancellationMessage}>{t('rides.cancelConfirmMessage')}</Text>
           <PrimaryButton label={t('rides.confirmCancel')} onPress={() => setCancelStep('reason')} danger />
@@ -1208,7 +1245,8 @@ const styles = StyleSheet.create({
   // Captain assigned: same seamless map + sheet composition as ride selection.
   assignedSafe: { flex: 1, backgroundColor: colors.primaryLight },
   assignedBack: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 46, justifyContent: 'center', left: 16, position: 'absolute', top: 18, width: 46 },
-  assignedSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 0, gap: 13, left: 0, padding: 16, paddingBottom: 22, position: 'absolute', right: 0 },
+  assignedSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 0, left: 0, maxHeight: '68%', position: 'absolute', right: 0 },
+  assignedSheetContent: { gap: 13, padding: 16, paddingBottom: 22 },
   bookingStatus: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   assignedHeading: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   assignedTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '800' },
@@ -1221,6 +1259,15 @@ const styles = StyleSheet.create({
   assignedCall: { alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: radii.pill, height: 38, justifyContent: 'center', width: 38 },
   assignedCallText: { color: colors.primary, fontSize: 20 },
   assignedPickupRow: { alignItems: 'flex-start', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', gap: 9, paddingHorizontal: 12, paddingVertical: 11 },
+  pickupPinCard: { alignItems: 'center', backgroundColor: colors.primaryLight, borderColor: colors.primary, borderRadius: radii.lg, borderWidth: 1, gap: 5, padding: 14 },
+  pickupPinLabel: { color: colors.primaryDark, fontFamily, fontSize: fontSize.sm, fontWeight: '900' },
+  pickupPin: { color: colors.primary, fontFamily, fontSize: 34, fontWeight: '900', letterSpacing: 8 },
+  pickupPinHint: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, textAlign: 'center' },
+  tripStatRow: { alignItems: 'center', backgroundColor: colors.surfaceMint, borderRadius: radii.md, flexDirection: 'row', justifyContent: 'space-between', padding: 13 },
+  tripStatLabel: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm },
+  tripStatValue: { color: colors.primaryDark, fontFamily, fontSize: fontSize.lg, fontWeight: '900' },
+  sosButton: { alignItems: 'center', backgroundColor: colors.error, borderRadius: radii.pill, minHeight: 52, justifyContent: 'center' },
+  sosText: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
   assignedPickupDot: { backgroundColor: colors.success, borderRadius: radii.pill, height: 10, marginTop: 6, width: 10 },
   assignedPickupText: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.md, fontWeight: '800', lineHeight: 23 },
   cancellationOverlay: { backgroundColor: 'rgba(35, 29, 24, 0.52)', bottom: 0, justifyContent: 'flex-end', left: 0, position: 'absolute', right: 0, top: 0, zIndex: 10 },

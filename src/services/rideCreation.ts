@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { rideDispatchService } from './rideDispatch';
 
 export type RideDraft = {
   pickup: string;
@@ -35,43 +36,23 @@ export const rideCreationService = {
     // The visual demo still works before the Supabase environment is supplied.
     if (!isSupabaseConfigured) return { id: `local-${Date.now()}`, persisted: false };
 
-    const customerId = await currentCustomerId();
-    const { data, error } = await supabase!
-      .from('rides')
-      .insert({
-        customer_id: customerId,
-        ride_type: draft.kind,
-        pickup_address: draft.pickup.trim(),
-        drop_address: draft.drop.trim(),
-        pickup_latitude: draft.pickupCoordinate?.latitude ?? null,
-        pickup_longitude: draft.pickupCoordinate?.longitude ?? null,
-        drop_latitude: draft.dropCoordinate?.latitude ?? null,
-        drop_longitude: draft.dropCoordinate?.longitude ?? null,
-        estimated_fare: fareFor(draft.kind),
-      })
-      .select('id')
-      .single();
-
-    if (error || !data) throw error ?? new Error('Ride creation did not return an id');
-    return { id: data.id, persisted: true };
+    await currentCustomerId();
+    const id = await rideDispatchService.requestRide(draft);
+    return { id, persisted: true };
   },
   async cancel(rideId: string, reasonCode: CancellationReason, reasonDetail?: string) {
     if (!isSupabaseConfigured || rideId.startsWith('local-')) return { persisted: false };
 
     const { data, error } = await supabase!
-      .from('rides')
-      .update({
-        status: 'cancelled',
-        cancellation_reason_code: reasonCode,
-        cancellation_reason_detail: reasonCode === 'other' ? reasonDetail?.trim() : null,
-      })
-      .eq('id', rideId)
-      .select('id, status, cancelled_at')
-      .single();
+      .rpc('customer_cancel_ride', {
+        p_ride_id: rideId,
+        p_reason_code: reasonCode,
+        p_reason_detail: reasonCode === 'other' ? reasonDetail?.trim() : null,
+      });
 
     if (error || !data || data.status !== 'cancelled' || !data.cancelled_at) {
       throw error ?? new Error('Ride cancellation was not saved');
     }
-    return { persisted: true };
+    return { persisted: true, cancellationCharge: Number(data.cancellation_charge ?? 0) };
   },
 };

@@ -6,13 +6,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { LiveLocationMap, type LiveCoordinate } from '../../components/LiveLocationMap';
 import { PrimaryButton } from '../../components/PrimaryButton';
-import type { MockRideRequest } from '../../services/mockRideRequestService';
+import type { CaptainRideRequest } from '../../services/rideDispatch';
 import { colors, fontFamily, fontSize, radii, shadows } from '../../theme';
 import { hasMovedSignificantly } from '../../utils/location';
 
 const routeFallback: LiveCoordinate = { latitude: 15.4889, longitude: 78.4836 };
 
-export function ToPickupScreen({ request, onArrived, onBack }: { request: MockRideRequest; onArrived: () => void; onBack: () => void }) {
+export function ToPickupScreen({ request, arrived, onPrimaryAction, onBack }: { request: CaptainRideRequest; arrived?: boolean; onPrimaryAction: () => void; onBack: () => void }) {
   const { t } = useTranslation();
   const mapRef = useRef<MapView>(null);
   const [location, setLocation] = useState<LiveCoordinate | null>(null);
@@ -54,12 +54,12 @@ export function ToPickupScreen({ request, onArrived, onBack }: { request: MockRi
     </LiveLocationMap>
     <Pressable onPress={onBack} style={[styles.back, shadows.card]}><Text style={styles.backText}>‹</Text></Pressable>
     <View style={[styles.sheet, shadows.card]}>
-      <Text style={styles.eyebrow}>{t('captain.toPickup')}</Text><Text style={styles.name}>{request.customerName}</Text><Text style={styles.area}>{request.pickupArea}</Text>
+      <Text style={styles.eyebrow}>{t(arrived ? 'captain.startRideTitle' : 'captain.toPickup')}</Text><Text style={styles.name}>{request.customerName}</Text><Text style={styles.area}>{request.pickupArea}</Text>
       <View style={styles.contact}>
         <Pressable onPress={callCustomer} style={styles.contactButton}><Text style={styles.contactText}>☎ {t('captain.call')}</Text></Pressable>
         <Pressable onPress={messageCustomer} style={styles.contactButton}><Text style={styles.contactText}>✉ {t('captain.message')}</Text></Pressable>
       </View>
-      <PrimaryButton label={t('captain.arrivedAtPickup')} onPress={onArrived} />
+      <PrimaryButton label={t(arrived ? 'captain.startRideTitle' : 'captain.arrivedAtPickup')} onPress={onPrimaryAction} />
     </View>
   </SafeAreaView>;
 }
