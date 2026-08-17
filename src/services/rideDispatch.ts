@@ -42,6 +42,7 @@ export type CaptainRideRequest = {
   destinationArea: string;
   distanceKm: number;
   etaMinutes: number;
+  expiresAt: string;
   fare: number;
   pickup: Coordinate;
   drop: Coordinate;
@@ -62,35 +63,21 @@ async function currentUserId() {
 const asNumber = (value: unknown) => typeof value === 'number' ? value : Number(value ?? 0);
 
 function toCaptainRequest(offer: any): CaptainRideRequest | null {
-  const ride = Array.isArray(offer.rides) ? offer.rides[0] : offer.rides;
-  if (!ride || ride.status !== 'searching') return null;
+  if (!offer) return null;
   return {
-    offerId: offer.id,
-    rideId: ride.id,
-    customerName: 'Customer',
-    maskedCustomerNumber: '+919876543210',
-    pickupArea: ride.pickup_address,
-    destinationArea: ride.drop_address,
-    distanceKm: 1.2,
-    etaMinutes: 4,
-    fare: asNumber(ride.estimated_fare),
-    pickup: { latitude: asNumber(ride.pickup_latitude), longitude: asNumber(ride.pickup_longitude) },
-    drop: { latitude: asNumber(ride.drop_latitude), longitude: asNumber(ride.drop_longitude) },
+    offerId: offer.offer_id, rideId: offer.ride_id, customerName: 'Customer', maskedCustomerNumber: '+919876543210',
+    pickupArea: offer.pickup_address, destinationArea: offer.drop_address,
+    distanceKm: asNumber(offer.pickup_distance_meters) / 1000,
+    etaMinutes: Math.max(1, Math.ceil(asNumber(offer.pickup_eta_seconds) / 60)), expiresAt: offer.expires_at,
+    fare: asNumber(offer.estimated_fare),
+    pickup: { latitude: asNumber(offer.pickup_latitude), longitude: asNumber(offer.pickup_longitude) },
+    drop: { latitude: asNumber(offer.drop_latitude), longitude: asNumber(offer.drop_longitude) },
   };
 }
 
 async function getCaptainOpenOffer() {
   const client = requireClient();
-  const captainId = await currentUserId();
-  const { data, error } = await client
-    .from('ride_offers')
-    .select('id, rides!ride_offers_ride_id_fkey(*)')
-    .eq('captain_id', captainId)
-    .eq('status', 'offered')
-    .gt('expires_at', new Date().toISOString())
-    .order('offered_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const { data, error } = await client.rpc('captain_open_offer').maybeSingle();
   if (error) throw error;
   return data ? toCaptainRequest(data) : null;
 }

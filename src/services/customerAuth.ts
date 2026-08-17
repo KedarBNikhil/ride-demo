@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { demoAuthService } from './demoAuth';
+import { registerPushNotifications } from './pushNotifications';
 
 async function ensureCustomerSession() {
   if (!supabase) return null;
@@ -16,6 +17,7 @@ export const customerAuthService = {
   async verifyOtp(phone: string, otp: string) {
     await demoAuthService.verifyOtp(phone, otp);
     await ensureCustomerSession();
+    void registerPushNotifications('customer').catch(() => undefined);
     return { verified: true };
   },
 };

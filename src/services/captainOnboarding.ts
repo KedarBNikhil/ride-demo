@@ -1,6 +1,7 @@
 import type { AppLanguage } from '../i18n/createI18n';
 import { demoAuthService } from './demoAuth';
 import { supabase } from '../lib/supabase';
+import { registerPushNotifications } from './pushNotifications';
 
 export type CaptainProfile = { name: string; language: AppLanguage; vehicleType: 'bike' | 'auto' | null };
 export type CaptainDocumentType = 'license' | 'rc' | 'insurance';
@@ -44,6 +45,7 @@ export const captainOnboardingService = {
   async verifyOtp(phone: string, otp: string) {
     await demoAuthService.verifyOtp(phone, otp);
     await currentCaptainUser();
+    void registerPushNotifications('captain').catch(() => undefined);
     return { verified: true };
   },
   async saveProfile(profile: CaptainProfile) {

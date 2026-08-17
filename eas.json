@@ -1,0 +1,29 @@
+{
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "development-customer": {
+      "extends": "development",
+      "env": {
+        "APP_VARIANT": "customer",
+        "EXPO_PUBLIC_APP_MODE": "customer"
+      }
+    },
+    "development-captain": {
+      "extends": "development",
+      "env": {
+        "APP_VARIANT": "captain",
+        "EXPO_PUBLIC_APP_MODE": "captain"
+      }
+    },
+    "preview": {
+      "distribution": "internal"
+    },
+    "production": {}
+  },
+  "submit": {
+    "production": {}
+  }
+}
