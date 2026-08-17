@@ -2,6 +2,8 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import type { Coordinate, RideKind } from '../screens/CustomerScreens';
 
+let rideSubscriptionSequence = 0;
+
 export type RideStatus = 'requested' | 'searching' | 'accepted' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
 export type DispatchRide = {
   id: string;
@@ -46,6 +48,10 @@ export type CaptainRideRequest = {
   fare: number;
   pickup: Coordinate;
   drop: Coordinate;
+};
+
+export type CaptainActiveRide = CaptainRideRequest & {
+  status: Extract<RideStatus, 'accepted' | 'arrived' | 'in_progress'>;
 };
 
 const requireClient = () => {
@@ -128,13 +134,46 @@ export const rideDispatchService = {
     return data as string | null;
   },
 
+  async getCaptainActiveRide(): Promise<CaptainActiveRide | null> {
+    const captainId = await currentUserId();
+    const { data, error } = await requireClient()
+      .from('rides')
+      .select('*')
+      .eq('captain_id', captainId)
+      .in('status', ['accepted', 'arrived', 'in_progress'])
+      .order('requested_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const ride = data as DispatchRide;
+    return {
+      offerId: '',
+      rideId: ride.id,
+      customerName: 'Customer',
+      maskedCustomerNumber: '+919876543210',
+      pickupArea: ride.pickup_address,
+      destinationArea: ride.drop_address,
+      distanceKm: 0,
+      etaMinutes: 1,
+      expiresAt: '',
+      fare: asNumber(ride.estimated_fare),
+      pickup: { latitude: asNumber(ride.pickup_latitude), longitude: asNumber(ride.pickup_longitude) },
+      drop: { latitude: asNumber(ride.drop_latitude), longitude: asNumber(ride.drop_longitude) },
+      status: ride.status as CaptainActiveRide['status'],
+    };
+  },
+
   subscribeToRide(rideId: string, onRide: (ride: DispatchRide) => void, onError?: (error: Error) => void) {
     if (!supabase) return () => {};
     const client = supabase;
     let channel: RealtimeChannel | null = null;
     const refresh = () => { void this.getRide(rideId).then(onRide).catch((error) => onError?.(error)); };
     refresh();
-    channel = client.channel(`ride:${rideId}`)
+    // Navigation can briefly mount the next ride screen before React has
+    // finished removing the previous one. A distinct local channel topic
+    // prevents Supabase from attempting to add callbacks after subscribe().
+    channel = client.channel(`ride:${rideId}:${++rideSubscriptionSequence}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rides', filter: `id=eq.${rideId}` }, refresh)
       .subscribe();
     return () => { if (channel) void client.removeChannel(channel); };

@@ -322,6 +322,17 @@
     "returnHome": "⌂ Return to availability",
     "requestPickup": "Nandyal Bus Stand",
     "requestDrop": "Government General Hospital, Nandyal",
-    "requestRide": "Auto"
+    "requestRide": "Auto",
+    "tabHome": "Home",
+    "tabActivity": "Activity",
+    "tabEarnings": "Earnings",
+    "tabProfile": "Profile",
+    "todayEarnings": "Today's earnings",
+    "todayTrips": "Today's trips",
+    "homeSheetHint": "Scroll for your daily summary. Your tabs stay available below.",
+    "activityTitle": "Your activity",
+    "activityMessage": "Completed and cancelled rides will appear here.",
+    "earningsTitle": "Your earnings",
+    "earningsMessage": "Your daily earnings and payout details will appear here."
   }
 }

@@ -1,19 +1,16 @@
 import Constants from 'expo-constants';
-import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { supabase } from '../lib/supabase';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Expo Go does not provide this project's native push configuration. Avoid
+// importing the native notifications module there so realtime testing works.
+const isExpoGo = Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
 
 export async function registerPushNotifications(appVariant: 'customer' | 'captain') {
-  if (!supabase || !Device.isDevice) return null;
+  if (!supabase || isExpoGo) return null;
+  const Device = require('expo-device') as typeof import('expo-device');
+  const Notifications = require('expo-notifications') as typeof import('expo-notifications');
+  if (!Device.isDevice) return null;
+  Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldPlaySound: true, shouldSetBadge: false, shouldShowBanner: true, shouldShowList: true }) });
   const existing = await Notifications.getPermissionsAsync();
   const permission = existing.status === 'granted'
     ? existing
