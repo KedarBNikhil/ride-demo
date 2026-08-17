@@ -5,14 +5,13 @@ export type RideDraft = {
   pickup: string;
   drop: string;
   kind: 'bike' | 'auto';
+  passengerCount: number;
   pickupCoordinate?: { latitude: number; longitude: number };
   dropCoordinate?: { latitude: number; longitude: number };
 };
 
 export type CreatedRide = { id: string; persisted: boolean };
 export type CancellationReason = 'change_plans' | 'another_ride' | 'wait_time' | 'fare_concern' | 'captain_unreachable' | 'other';
-
-const fareFor = (kind: RideDraft['kind']) => kind === 'bike' ? 55 : 75;
 
 async function currentCustomerId() {
   if (!supabase) throw new Error('SUPABASE_NOT_CONFIGURED');
@@ -32,6 +31,8 @@ async function currentCustomerId() {
 export const rideCreationService = {
   async create(draft: RideDraft): Promise<CreatedRide> {
     if (!draft.pickup.trim() || !draft.drop.trim()) throw new Error('Pickup and destination are required');
+    if (draft.kind === 'auto' && (!Number.isInteger(draft.passengerCount) || draft.passengerCount < 1 || draft.passengerCount > 3)) throw new Error('Auto passenger count must be between 1 and 3');
+    if (draft.kind === 'bike' && draft.passengerCount !== 1) throw new Error('Bike rides support one passenger');
 
     // The visual demo still works before the Supabase environment is supplied.
     if (!isSupabaseConfigured) return { id: `local-${Date.now()}`, persisted: false };

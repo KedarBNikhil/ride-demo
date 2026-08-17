@@ -19,6 +19,14 @@ export type DispatchRide = {
   drop_longitude: number | null;
   estimated_fare: number;
   final_fare?: number | null;
+  passenger_count?: number;
+  pricing_rule_version?: string;
+  trip_distance_meters?: number | null;
+  pickup_distance_meters?: number | null;
+  base_fare?: number | null;
+  distance_surcharge?: number | null;
+  pickup_surcharge?: number | null;
+  fare_approval_status?: 'estimated' | 'pending' | 'approved' | 'declined';
   captain_latitude?: number | null;
   captain_longitude?: number | null;
   payment_status?: 'pending' | 'paid';
@@ -112,6 +120,7 @@ export const rideDispatchService = {
     kind: RideKind;
     pickup: string;
     drop: string;
+    passengerCount: number;
     pickupCoordinate?: Coordinate;
     dropCoordinate?: Coordinate;
   }) {
@@ -124,6 +133,7 @@ export const rideDispatchService = {
       p_pickup_longitude: draft.pickupCoordinate?.longitude ?? null,
       p_drop_latitude: draft.dropCoordinate?.latitude ?? null,
       p_drop_longitude: draft.dropCoordinate?.longitude ?? null,
+      p_passenger_count: draft.passengerCount,
     });
     if (error || !data) throw error ?? new Error('Ride request was not created');
     return data as string;
@@ -292,6 +302,12 @@ export const rideDispatchService = {
   async respondToOffer(offerId: string, accept: boolean) {
     const { data, error } = await requireClient().rpc('respond_to_ride_offer', { p_offer_id: offerId, p_accept: accept });
     if (error || !data) throw error ?? new Error('Ride offer could not be updated');
+    return data as DispatchRide;
+  },
+
+  async approveFareQuote(rideId: string, accept: boolean) {
+    const { data, error } = await requireClient().rpc('customer_approve_fare_quote', { p_ride_id: rideId, p_accept: accept });
+    if (error || !data) throw error ?? new Error('Fare quote could not be updated');
     return data as DispatchRide;
   },
 
