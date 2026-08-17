@@ -135,6 +135,35 @@ export const rideDispatchService = {
     return data as DispatchRide;
   },
 
+  async getCustomerRideHistory(): Promise<DispatchRide[]> {
+    const customerId = await currentUserId();
+    const { data, error } = await requireClient()
+      .from('rides')
+      .select('*')
+      .eq('customer_id', customerId)
+      .order('requested_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as DispatchRide[];
+  },
+
+  subscribeToCustomerRideHistory(onRides: (rides: DispatchRide[]) => void, onError?: (error: Error) => void) {
+    if (!supabase) return () => {};
+    const client = supabase;
+    let channel: RealtimeChannel | null = null;
+    const start = async () => {
+      try {
+        const customerId = await currentUserId();
+        const refresh = () => { void this.getCustomerRideHistory().then(onRides).catch((error) => onError?.(error)); };
+        refresh();
+        channel = client.channel(`customer-rides:${customerId}:${++rideSubscriptionSequence}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'rides', filter: `customer_id=eq.${customerId}` }, refresh)
+          .subscribe();
+      } catch (error) { onError?.(error as Error); }
+    };
+    void start();
+    return () => { if (channel) void client.removeChannel(channel); };
+  },
+
   async getAssignedCaptain(rideId: string): Promise<AssignedCaptainDetails | null> {
     const { data, error } = await requireClient()
       .rpc('customer_assigned_captain', { p_ride_id: rideId })
@@ -179,6 +208,13 @@ export const rideDispatchService = {
       drop: { latitude: asNumber(ride.drop_latitude), longitude: asNumber(ride.drop_longitude) },
       status: ride.status as CaptainActiveRide['status'],
     };
+  },
+
+  async getCaptainLatestRide(): Promise<DispatchRide | null> {
+    const captainId = await currentUserId();
+    const { data, error } = await requireClient().from('rides').select('*').eq('captain_id', captainId).order('requested_at', { ascending: false }).limit(1).maybeSingle();
+    if (error) throw error;
+    return data as DispatchRide | null;
   },
 
   async getCaptainPendingOffer(rideId: string, offerId: string): Promise<CaptainRideRequest | null> {

@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 const isExpoGo = Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
 
 export type CaptainOfferNotification = { rideId: string; offerId: string };
+export type CustomerRideNotification = { rideId: string };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -15,6 +16,14 @@ export function captainOfferNotificationFromData(data: unknown): CaptainOfferNot
   if (type !== 'ride_offer' || typeof rideId !== 'string' || typeof offerId !== 'string') return null;
   if (!uuidPattern.test(rideId) || !uuidPattern.test(offerId)) return null;
   return { rideId, offerId };
+}
+
+export function customerRideNotificationFromData(data: unknown): CustomerRideNotification | null {
+  if (!data || typeof data !== 'object') return null;
+  const { type, rideId } = data as Record<string, unknown>;
+  if (typeof type !== 'string' || !['ride_accepted', 'ride_arrived', 'ride_in_progress', 'ride_completed', 'ride_cancelled'].includes(type)) return null;
+  if (typeof rideId !== 'string' || !uuidPattern.test(rideId)) return null;
+  return { rideId };
 }
 
 /**
@@ -41,6 +50,24 @@ export function subscribeToCaptainOfferNotificationResponses(onOffer: (offer: Ca
   if (lastResponse && captainOfferNotificationFromData(lastResponse.notification.request.content.data)) {
     Notifications.clearLastNotificationResponse();
   }
+  return () => subscription.remove();
+}
+
+/** The payload is only a route hint; the ride is reloaded under customer RLS. */
+export function subscribeToCustomerRideNotificationResponses(onRide: (ride: CustomerRideNotification) => void) {
+  if (isExpoGo) return () => {};
+  const Notifications = require('expo-notifications') as typeof import('expo-notifications');
+  const handled = new Set<string>();
+  const handleResponse = (response: import('expo-notifications').NotificationResponse | null) => {
+    const ride = customerRideNotificationFromData(response?.notification.request.content.data);
+    if (!ride || handled.has(ride.rideId)) return;
+    handled.add(ride.rideId);
+    onRide(ride);
+  };
+  const subscription = Notifications.addNotificationResponseReceivedListener(handleResponse);
+  const lastResponse = Notifications.getLastNotificationResponse();
+  handleResponse(lastResponse);
+  if (lastResponse && customerRideNotificationFromData(lastResponse.notification.request.content.data)) Notifications.clearLastNotificationResponse();
   return () => subscription.remove();
 }
 

@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  BackHandler,
   Dimensions,
   Easing,
   LayoutAnimation,
@@ -56,12 +57,16 @@ export function CustomerHomeScreen({
   ride,
   onPickLocation,
   onStartBooking,
+  onBookings,
+  hasActiveRide,
   onProfile,
   onBack,
 }: {
   ride: CustomerRide;
   onPickLocation: (target: LocationTarget) => void;
   onStartBooking: (pickup: string, coordinate: Coordinate) => void;
+  onBookings: () => void;
+  hasActiveRide: boolean;
   onProfile: () => void;
   onBack: () => void;
 }) {
@@ -165,6 +170,9 @@ export function CustomerHomeScreen({
   ];
 
   const startBooking = async () => {
+    // An active ride remains available through Bookings; never start a second
+    // selection flow while its cancellation/dispatch state is still open.
+    if (hasActiveRide) { onBookings(); return; }
     if (userLocation) { onStartBooking(cachedAddress || t('location.gpsDefault'), userLocation); return; }
     onPickLocation('pickup');
   };
@@ -203,7 +211,7 @@ export function CustomerHomeScreen({
       </GestureDetector>
       <View style={styles.homeTabBar}>
         <HomeTab icon="⌂" label={t('home.tabHome')} active />
-        <HomeTab icon="▤" label={t('home.tabBookings')} onPress={() => Alert.alert(t('home.bookingsTitle'), t('home.bookingsMessage'))} />
+        <HomeTab icon="▤" label={t('home.tabBookings')} onPress={onBookings} />
         <HomeTab icon="?" label={t('home.tabHelp')} onPress={() => Alert.alert(t('home.helpTitle'), t('home.helpMessage'))} />
         <HomeTab icon="♙" label={t('home.tabProfile')} onPress={onProfile} />
       </View>
@@ -272,6 +280,10 @@ export function LocationPickerScreen({
   const dropInput = useRef<TextInput>(null);
   const query = drafts[target];
   const ready = Boolean(ride.pickup && ride.drop);
+
+  useEffect(() => {
+    requestAnimationFrame(() => (initialTarget === 'pickup' ? pickupInput : dropInput).current?.focus());
+  }, [initialTarget]);
 
   const localResults = useMemo(
     () => [t('location.busStand'), t('location.railway'), t('location.medical')],
@@ -514,12 +526,14 @@ export function RideTypeScreen({
   onSelect,
   onNext,
   onBack,
+  onEditLocation,
 }: {
   ride: CustomerRide;
   selected: RideKind;
   onSelect: (kind: RideKind) => void;
   onNext: () => void;
   onBack: () => void;
+  onEditLocation: (target: LocationTarget) => void;
 }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -551,7 +565,7 @@ export function RideTypeScreen({
     </MapView>
     <View style={[styles.rideOptionsTop, { paddingTop: Math.max(insets.top + 8, 20) }]}>
       <Pressable onPress={onBack} accessibilityRole="button" style={[styles.rideOptionsBack, shadows.soft]}><Text style={styles.rideOptionsBackText}>‹</Text></Pressable>
-      <View style={[styles.routeSummary, shadows.soft]}><Text style={styles.routeSummaryDot}>●</Text><Text style={styles.routeSummaryText} numberOfLines={1}>{ride.pickup}</Text><Text style={styles.routeSummaryArrow}>→</Text><Text style={styles.routeSummaryText} numberOfLines={1}>{ride.drop}</Text></View>
+      <View style={[styles.routeSummary, shadows.soft]}><Pressable onPress={() => onEditLocation('pickup')} accessibilityRole="button" style={styles.routeSummaryPlace}><Text style={styles.routeSummaryDot}>●</Text><Text style={styles.routeSummaryText} numberOfLines={1}>{ride.pickup}</Text></Pressable><Text style={styles.routeSummaryArrow}>→</Text><Pressable onPress={() => onEditLocation('drop')} accessibilityRole="button" style={styles.routeSummaryPlace}><Text style={[styles.routeSummaryDot, styles.routeSummaryDropDot]}>●</Text><Text style={styles.routeSummaryText} numberOfLines={1}>{ride.drop}</Text></Pressable></View>
     </View>
     <View style={[styles.rideOptionsSheet, shadows.card]}>
       <View style={styles.sheetHandle} />
@@ -702,7 +716,7 @@ function SummaryRow({
 
 /* ─────────────────────────── SEARCHING ─────────────────────────── */
 
-export function SearchingScreen({ rideId, onFound, onBack, onUnavailable }: { rideId?: string; onFound: () => void; onBack: () => void; onUnavailable?: () => void }) {
+export function SearchingScreen({ rideId, onFound, onBack, onUnavailable, onCancel, onHome, onBookings, onProfile }: { rideId?: string; onFound: () => void; onBack: () => void; onUnavailable?: () => void; onCancel: () => void; onHome: () => void; onBookings: () => void; onProfile: () => void }) {
   const { t } = useTranslation();
   const spin = useRef(new Animated.Value(0)).current;
 
@@ -726,9 +740,26 @@ export function SearchingScreen({ rideId, onFound, onBack, onUnavailable }: { ri
   }, [onFound, rideId, spin]);
 
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const confirmCancel = () => Alert.alert(t('rides.searchingCancelTitle'), t('rides.searchingCancelMessage'), [
+    { text: t('rides.stay'), style: 'cancel' },
+    { text: t('rides.confirmCancel'), style: 'destructive', onPress: () => {
+      if (!rideId || rideId.startsWith('local-')) return onCancel();
+      void rideCreationService.cancel(rideId, 'change_plans').then(onCancel).catch(() => Alert.alert(t('login.tryAgain')));
+    } },
+  ]);
 
-  return (
-    <ScreenShell back={onBack} title={t('rides.searchingTitle')}>
+  // The stack's hardware/system back action bypasses ScreenShell's visible
+  // back button, so intercept it here and use the same cancellation choice.
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      confirmCancel();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [rideId, t]);
+
+  return <View style={{ flex: 1 }}>
+    <ScreenShell back={confirmCancel} title={t('rides.searchingTitle')}>
       <View style={styles.searchingCenter}>
         <View style={styles.searchingRingWrap}>
           <Animated.View style={[styles.searchingRing, { transform: [{ rotate }] }]} />
@@ -738,7 +769,8 @@ export function SearchingScreen({ rideId, onFound, onBack, onUnavailable }: { ri
         <Text style={styles.searchingSubtitle}>{t('rides.searchingSubtitle')}</Text>
       </View>
     </ScreenShell>
-  );
+    <CustomerTabBar active="bookings" onHome={onHome} onBookings={onBookings} onProfile={onProfile} />
+  </View>;
 }
 
 /* ─────────────────────────── RIDE CONFIRMED ─────────────────────────── */
@@ -752,7 +784,7 @@ const cancellationReasons: Array<{ code: CancellationReason; labelKey: string }>
   { code: 'other', labelKey: 'Other' },
 ];
 
-export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHome: () => void }) {
+export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onProfile, onEditLocations }: { ride: CustomerRide; onHome: () => void; onCancelled: () => void; onBookings: () => void; onProfile: () => void; onEditLocations: (target: LocationTarget) => void }) {
   const { t } = useTranslation();
   const mapRef = useRef<MapView>(null);
   const [step, setStep] = useState(0);
@@ -775,7 +807,7 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
   const etaMinutes = Math.max(1, 4 - Math.floor(step / 2));
   const captainDistanceKm = Math.max(0.2, 1.8 - (step * 0.2));
   const arrived = liveStatus === 'arrived' || liveStatus === 'in_progress' || liveStatus === 'completed';
-  const canCancel = liveStatus === 'requested' || liveStatus === 'searching' || liveStatus === 'accepted' || liveStatus === 'in_progress';
+  const canCancel = liveStatus === 'searching' || liveStatus === 'accepted';
   const captainName = captainDetails?.fullName || t('rides.captain');
   const vehicleType = captainDetails?.vehicleType;
 
@@ -810,7 +842,7 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
     setCancelling(true);
     try {
       const result = await rideCreationService.cancel(ride.id, cancellationReason, otherReason);
-      Alert.alert(t('rides.rideCancelled'), t('rides.cancellationCharge', { charge: formatFare(result.cancellationCharge ?? 0) }), [{ text: t('actions.done'), onPress: onHome }]);
+      Alert.alert(t('rides.rideCancelled'), t('rides.cancellationCharge', { charge: formatFare(result.cancellationCharge ?? 0) }), [{ text: t('actions.done'), onPress: onCancelled }]);
     } catch {
       setCancellationError(t('login.tryAgain'));
     } finally {
@@ -840,11 +872,13 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
       {!arrived && <Text style={styles.bookingStatus}>{liveStatus === 'accepted' ? t('rides.bookedMessage') : t('rides.searchingSubtitle')}</Text>}
       <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(inProgress ? 'rides.startedTitle' : arrived ? 'rides.hereTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{inProgress ? t('rides.startedSubtitle') : arrived ? t('rides.hereSubtitle') : `${t('rides.arriving')} · ${t('rides.eta', { minutes: formatNumber(etaMinutes) })}`}</Text></View>{!arrived && <View style={styles.etaBadge}><Text style={styles.etaBadgeText}>{formatNumber(etaMinutes)} min</Text></View>}</View>
       <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{captainName}</Text><Text style={styles.assignedVehicle}>{vehicleType ? t(`rides.${vehicleType}`) : t('rides.captain')}</Text></View></View>
-      <View style={styles.assignedPickupRow}><View style={styles.assignedPickupDot} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.pickup')} · {ride.pickup}</Text></View>
+      <Pressable onPress={() => onEditLocations('pickup')} accessibilityRole="button" style={styles.assignedPickupRow}><View style={styles.assignedPickupDot} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.pickup')} · {ride.pickup}</Text><Text style={styles.editLocation}>›</Text></Pressable>
+      <Pressable onPress={() => onEditLocations('drop')} accessibilityRole="button" style={styles.assignedPickupRow}><View style={[styles.assignedPickupDot, styles.assignedDropDot]} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.drop')} · {ride.drop}</Text><Text style={styles.editLocation}>›</Text></Pressable>
       {!!pickupPin && !inProgress && <View style={styles.pickupPinCard}><Text style={styles.pickupPinLabel}>{t('rides.pickupPinLabel')}</Text><Text style={styles.pickupPin}>{pickupPin}</Text><Text style={styles.pickupPinHint}>{t('rides.pickupPinHint')}</Text></View>}
       {inProgress && <><View style={styles.tripStatRow}><Text style={styles.tripStatLabel}>{t('rides.destinationDistance')}</Text><Text style={styles.tripStatValue}>{formatNumber(destinationDistanceKm, { maximumFractionDigits: 1 })} km · {formatNumber(destinationMinutes)} min</Text></View><Pressable onPress={() => { void Linking.openURL('tel:112'); }} accessibilityRole="button" style={styles.sosButton}><Text style={styles.sosText}>{t('rides.sos')}</Text></Pressable></>}
       {canCancel && <PrimaryButton label={t('rides.cancelRide')} onPress={startCancellation} danger />}
     </ScrollView>
+    <CustomerTabBar active="bookings" onHome={onHome} onBookings={onBookings} onProfile={onProfile} />
     {cancelStep !== 'none' && <View style={styles.cancellationOverlay}>
       <Pressable style={StyleSheet.absoluteFill} onPress={() => setCancelStep('none')} />
       <View style={[styles.cancellationSheet, shadows.card]}>
@@ -875,6 +909,28 @@ export function RideConfirmedScreen({ ride, onHome }: { ride: CustomerRide; onHo
       </View>
     </View>}
   </SafeAreaView>;
+}
+
+export function CustomerBookingsScreen({ ride, onHome, onProfile, onCancelled, onOpenRide }: { ride: CustomerRide; onHome: () => void; onProfile: () => void; onCancelled: () => void; onOpenRide: (ride: CustomerRide, status: RideStatus) => void }) {
+  const { t } = useTranslation();
+  const [history, setHistory] = useState<DispatchRide[]>([]); const [loaded, setLoaded] = useState(!rideDispatchService.isEnabled); const [cancellingRideId, setCancellingRideId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!rideDispatchService.isEnabled) return;
+    return rideDispatchService.subscribeToCustomerRideHistory((rides) => { setHistory(rides); setLoaded(true); }, () => setLoaded(true));
+  }, []);
+  const localHistory = ride.id ? [{ id: ride.id, status: 'searching' as RideStatus, ride_type: ride.kind, pickup_address: ride.pickup, drop_address: ride.drop, pickup_latitude: ride.pickupCoordinate?.latitude ?? null, pickup_longitude: ride.pickupCoordinate?.longitude ?? null, drop_latitude: ride.dropCoordinate?.latitude ?? null, drop_longitude: ride.dropCoordinate?.longitude ?? null }] as DispatchRide[] : [];
+  const rides = rideDispatchService.isEnabled ? history : localHistory;
+  const cancel = (rideId: string) => Alert.alert(t('rides.cancelTitle'), t('rides.searchingCancelMessage'), [
+    { text: t('rides.stay'), style: 'cancel' },
+    { text: t('rides.confirmCancel'), style: 'destructive', onPress: () => { setCancellingRideId(rideId); void rideCreationService.cancel(rideId, 'change_plans').then(onCancelled).catch(() => Alert.alert(t('login.tryAgain'))).finally(() => setCancellingRideId(null)); } },
+  ]);
+  const customerRide = (record: DispatchRide): CustomerRide => ({ id: record.id, kind: record.ride_type, pickup: record.pickup_address, drop: record.drop_address, ...(record.pickup_latitude != null && record.pickup_longitude != null ? { pickupCoordinate: { latitude: Number(record.pickup_latitude), longitude: Number(record.pickup_longitude) } } : {}), ...(record.drop_latitude != null && record.drop_longitude != null ? { dropCoordinate: { latitude: Number(record.drop_latitude), longitude: Number(record.drop_longitude) } } : {}) });
+  return <SafeAreaView style={styles.bookingsSafe} edges={['top', 'left', 'right']}><ScrollView contentContainerStyle={styles.bookingsContent} showsVerticalScrollIndicator={false}><Text style={styles.bookingsTitle}>{t('home.bookingsTitle')}</Text>{!loaded && <Text style={styles.bookingsEmpty}>{t('login.pleaseWait')}</Text>}{loaded && !rides.length && <Text style={styles.bookingsEmpty}>{t('home.bookingsMessage')}</Text>}{rides.map((record) => { const canCancel = record.status === 'searching' || record.status === 'accepted'; const actionLabel = record.status === 'cancelled' || record.status === 'completed' ? t('rides.bookThisRoute') : t('rides.viewRideStatus'); const isCancelling = cancellingRideId === record.id; return <View key={record.id} style={[styles.bookingCard, shadows.card]}><Pressable onPress={() => onOpenRide(customerRide(record), record.status)} accessibilityRole="button"><Text style={styles.bookingCardStatus}>{t(`rides.status${record.status}`)}</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.pickup_address}</Text><Text style={styles.bookingCardArrow}>→</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.drop_address}</Text><Text style={styles.bookingCardAction}>{actionLabel} ›</Text></Pressable>{canCancel && <PrimaryButton label={isCancelling ? t('login.pleaseWait') : t('rides.cancelRide')} onPress={() => cancel(record.id)} disabled={isCancelling} danger />}</View>; })}</ScrollView><CustomerTabBar active="bookings" onHome={onHome} onBookings={() => undefined} onProfile={onProfile} /></SafeAreaView>;
+}
+
+function CustomerTabBar({ active, onHome, onBookings, onProfile }: { active: 'home' | 'bookings'; onHome: () => void; onBookings: () => void; onProfile: () => void }) {
+  const { t } = useTranslation();
+  return <View style={styles.homeTabBar}><HomeTab icon="⌂" label={t('home.tabHome')} active={active === 'home'} onPress={onHome} /><HomeTab icon="▤" label={t('home.tabBookings')} active={active === 'bookings'} onPress={onBookings} /><HomeTab icon="?" label={t('home.tabHelp')} onPress={() => Alert.alert(t('home.helpTitle'), t('home.helpMessage'))} /><HomeTab icon="♙" label={t('home.tabProfile')} onPress={onProfile} /></View>;
 }
 
 /* ─────────────────────────── STYLES ─────────────────────────── */
@@ -975,7 +1031,7 @@ const styles = StyleSheet.create({
   rideOptionsTop: { flexDirection: 'row', gap: 10, paddingHorizontal: 16 },
   rideOptionsBack: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 46, justifyContent: 'center', width: 46 },
   rideOptionsBackText: { color: colors.textPrimary, fontSize: 34, lineHeight: 36, marginTop: -4 },
-  routeSummary: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.96)', borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flex: 1, flexDirection: 'row', gap: 7, height: 48, paddingHorizontal: 12 },
+  routeSummary: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.96)', borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flex: 1, flexDirection: 'row', gap: 7, height: 48, paddingHorizontal: 12 }, routeSummaryPlace: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: 5, minWidth: 0 }, routeSummaryDropDot: { color: colors.accent },
   routeSummaryDot: { color: colors.success, fontSize: 15 },
   routeSummaryText: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.xs, fontWeight: '700' },
   routeSummaryArrow: { color: colors.accent, fontSize: 16, fontWeight: '800' },
@@ -1245,7 +1301,7 @@ const styles = StyleSheet.create({
   // Captain assigned: same seamless map + sheet composition as ride selection.
   assignedSafe: { flex: 1, backgroundColor: colors.primaryLight },
   assignedBack: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 46, justifyContent: 'center', left: 16, position: 'absolute', top: 18, width: 46 },
-  assignedSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 0, left: 0, maxHeight: '68%', position: 'absolute', right: 0 },
+  assignedSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 76, left: 0, maxHeight: '68%', position: 'absolute', right: 0 },
   assignedSheetContent: { gap: 13, padding: 16, paddingBottom: 22 },
   bookingStatus: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   assignedHeading: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
@@ -1269,7 +1325,8 @@ const styles = StyleSheet.create({
   sosButton: { alignItems: 'center', backgroundColor: colors.error, borderRadius: radii.pill, minHeight: 52, justifyContent: 'center' },
   sosText: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
   assignedPickupDot: { backgroundColor: colors.success, borderRadius: radii.pill, height: 10, marginTop: 6, width: 10 },
-  assignedPickupText: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.md, fontWeight: '800', lineHeight: 23 },
+  assignedPickupText: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.md, fontWeight: '800', lineHeight: 23 }, assignedDropDot: { backgroundColor: colors.accent }, editLocation: { color: colors.primary, fontSize: 28, fontWeight: '800' },
+  bookingsSafe: { backgroundColor: colors.bg, flex: 1 }, bookingsContent: { gap: 16, padding: 20 }, bookingsTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize['2xl'], fontWeight: '900' }, bookingsEmpty: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, lineHeight: 24 }, bookingCard: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 8, padding: 18 }, bookingCardStatus: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '900' }, bookingCardRoute: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '800' }, bookingCardArrow: { color: colors.textMuted, fontSize: 20 }, bookingCardAction: { color: colors.primaryDark, fontFamily, fontSize: fontSize.sm, fontWeight: '900', marginTop: 5 },
   cancellationOverlay: { backgroundColor: 'rgba(35, 29, 24, 0.52)', bottom: 0, justifyContent: 'flex-end', left: 0, position: 'absolute', right: 0, top: 0, zIndex: 10 },
   cancellationSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, maxHeight: '88%', paddingBottom: 28, paddingHorizontal: 20, paddingTop: 14 },
   cancellationContent: { gap: 14 },
