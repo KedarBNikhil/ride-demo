@@ -88,6 +88,23 @@ async function getCaptainOpenOffer() {
   return data ? toCaptainRequest(data) : null;
 }
 
+type CaptainOfferRow = {
+  id: string;
+  ride_id: string;
+  expires_at: string;
+  pickup_distance_meters: number | null;
+  estimated_pickup_eta_seconds: number | null;
+  rides: {
+    pickup_address: string;
+    drop_address: string;
+    pickup_latitude: number | null;
+    pickup_longitude: number | null;
+    drop_latitude: number | null;
+    drop_longitude: number | null;
+    estimated_fare: number;
+  } | null;
+};
+
 export const rideDispatchService = {
   isEnabled: isSupabaseConfigured,
 
@@ -164,6 +181,29 @@ export const rideDispatchService = {
     };
   },
 
+  async getCaptainPendingOffer(rideId: string, offerId: string): Promise<CaptainRideRequest | null> {
+    const { data, error } = await requireClient()
+      .from('ride_offers')
+      .select('id, ride_id, expires_at, pickup_distance_meters, estimated_pickup_eta_seconds, rides!inner(pickup_address, drop_address, pickup_latitude, pickup_longitude, drop_latitude, drop_longitude, estimated_fare)')
+      .eq('id', offerId)
+      .eq('ride_id', rideId)
+      .eq('status', 'offered')
+      .eq('rides.status', 'searching')
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+    if (error) throw error;
+    const offer = data as CaptainOfferRow | null;
+    if (!offer?.rides) return null;
+    return toCaptainRequest({
+      offer_id: offer.id,
+      ride_id: offer.ride_id,
+      expires_at: offer.expires_at,
+      pickup_distance_meters: offer.pickup_distance_meters,
+      pickup_eta_seconds: offer.estimated_pickup_eta_seconds,
+      ...offer.rides,
+    });
+  },
+
   subscribeToRide(rideId: string, onRide: (ride: DispatchRide) => void, onError?: (error: Error) => void) {
     if (!supabase) return () => {};
     const client = supabase;
@@ -190,12 +230,6 @@ export const rideDispatchService = {
       updated_at: new Date().toISOString(),
     });
     if (error) throw error;
-    if (isOnline) await this.refreshCaptainDispatch();
-  },
-
-  async refreshCaptainDispatch() {
-    const { error } = await requireClient().rpc('refresh_captain_dispatch');
-    if (error) throw error;
   },
 
   subscribeToCaptainOffers(onRequest: (request: CaptainRideRequest | null) => void, onError?: (error: Error) => void) {
@@ -206,7 +240,7 @@ export const rideDispatchService = {
     const start = async () => {
       try {
         const captainId = await currentUserId();
-        const refresh = () => { void this.refreshCaptainDispatch().then(() => getCaptainOpenOffer()).then(onRequest).catch((error) => onError?.(error)); };
+        const refresh = () => { void getCaptainOpenOffer().then(onRequest).catch((error) => onError?.(error)); };
         refresh();
         channel = client.channel(`captain-offers:${captainId}`)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'ride_offers', filter: `captain_id=eq.${captainId}` }, refresh)
@@ -225,7 +259,7 @@ export const rideDispatchService = {
     return data as DispatchRide;
   },
 
-  async transitionRide(rideId: string, nextStatus: 'arrived' | 'in_progress' | 'completed') {
+  async transitionRide(rideId: string, nextStatus: 'arrived' | 'completed') {
     const { data, error } = await requireClient().rpc('captain_transition_ride', { p_ride_id: rideId, p_next_status: nextStatus });
     if (error || !data) throw error ?? new Error('Ride status could not be updated');
     return data as DispatchRide;

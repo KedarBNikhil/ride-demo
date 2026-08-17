@@ -45,6 +45,28 @@ verify all required documents and approve the onboarding application.
 
 The launcher provides separate Customer and Captain experiences. Language choices persist independently at `nandyal-ride-demo.customer.language` and `nandyal-ride-demo.captain.language`.
 
+## Captain ride-notification handoff
+
+Captain ride notifications carry a `rideId` and `offerId`. Tapping one from the
+background or after the Captain app was terminated opens the app and displays
+that exact offer only when it is still pending and belongs to the signed-in
+captain. Foreground dispatch remains on the existing Supabase Realtime flow.
+
+This cannot be tested in Expo Go. Build and install the Captain development
+client after configuring FCM credentials for `com.nandyalride.captain` in the
+Captain EAS project, then run:
+
+```bash
+eas build --platform android --profile development-captain
+npm run start:captain
+```
+
+On a physical device, send a `ride_offer` notification with the real pending
+`rideId` and `offerId`, background or terminate the Captain app, tap it, and
+confirm the matching request sheet appears. The included `firebase/nandyalride-captain.json`
+is native build input, so any Firebase credential/configuration change requires
+a new development build before it can be tested.
+
 ## Supabase Phase 2: ride creation
 
 Apply `supabase/migrations/004_ride_creation.sql` after the existing migrations.

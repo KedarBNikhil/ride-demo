@@ -11,6 +11,7 @@ import { EndRideScreen } from '../screens/captain/EndRideScreen';
 import { RateCustomerScreen } from '../screens/captain/RateCustomerScreen';
 import type { CaptainRideRequest, DispatchRide } from '../services/rideDispatch';
 import { rideDispatchService } from '../services/rideDispatch';
+import { subscribeToCaptainOfferNotificationResponses } from '../services/pushNotifications';
 import { SettingsScreen } from '../screens/SettingsScreen';
 
 const Stack = createNativeStackNavigator();
@@ -25,6 +26,11 @@ export function CaptainMainStack({ online, onToggle, onLanguageChange, onTripCom
   const [request, setRequest] = useState<CaptainRideRequest | null>(null);
   const [requestCycle, setRequestCycle] = useState(0);
   const dismissRequest = useCallback(() => { setRequest(null); setRequestCycle((cycle) => cycle + 1); }, []);
+  useEffect(() => subscribeToCaptainOfferNotificationResponses(({ rideId, offerId }) => {
+    void rideDispatchService.getCaptainPendingOffer(rideId, offerId).then((offer) => {
+      if (offer) setRequest(offer);
+    }).catch(() => undefined);
+  }), []);
   return <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', animationDuration: 260 }}>
     <Stack.Screen name="CaptainHome">{({ navigation }) => <CaptainDashboardScreen online={online} onToggle={onToggle} onSettings={() => navigation.navigate('Settings')} onRequest={setRequest} request={request} requestCycle={requestCycle} onResumeRide={(ride) => { if (ride.status === 'accepted') navigation.navigate('ToPickup', { request: ride }); else if (ride.status === 'arrived') navigation.navigate('StartRide', { request: ride }); else navigation.navigate('TripInProgress', { request: ride }); }} onReject={() => { const active = request; dismissRequest(); if (active) void rideDispatchService.respondToOffer(active.offerId, false); }} onAccept={() => { const active = request; if (!active) return; void rideDispatchService.respondToOffer(active.offerId, true).then(() => { dismissRequest(); navigation.navigate('ToPickup', { request: active }); }); }} />}</Stack.Screen>
     <Stack.Screen name="ToPickup">{({ navigation, route }) => { const params = route.params as { request: CaptainRideRequest; arrived?: boolean }; const active = params.request; const cancelled = (ride: DispatchRide) => { Alert.alert('Ride cancelled', cancellationMessage(ride)); navigation.popToTop(); }; return <CaptainRideCancellationGuard rideId={active.rideId} onCancelled={cancelled}><ToPickupScreen request={active} arrived={params.arrived} onBack={() => navigation.goBack()} onPrimaryAction={() => { if (params.arrived) navigation.navigate('StartRide', { request: active }); else void rideDispatchService.transitionRide(active.rideId, 'arrived').then(() => navigation.navigate('StartRide', { request: active })); }} /></CaptainRideCancellationGuard>; }}</Stack.Screen>
