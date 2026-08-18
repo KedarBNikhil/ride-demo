@@ -19,13 +19,14 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, { clamp, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenShell } from '../components/ScreenShell';
 import { PhoneOtpAuth } from '../components/PhoneOtpAuth';
 import { customerAuthService } from '../services/customerAuth';
 import { rideCreationService, type CancellationReason } from '../services/rideCreation';
-import { rideDispatchService, type DispatchRide, type RideStatus } from '../services/rideDispatch';
+import { rideDispatchService, type AssignedCaptainDetails, type DispatchRide, type RideStatus } from '../services/rideDispatch';
 import { calculateFare } from '../services/fareEngine';
 import { straightLineDistanceMeters } from '../services/distanceProvider';
 import { LiveLocationMap } from '../components/LiveLocationMap';
@@ -59,6 +60,7 @@ export function CustomerHomeScreen({
   ride,
   onPickLocation,
   onStartBooking,
+  onPickupHere,
   onBookings,
   hasActiveRide,
   onProfile,
@@ -67,13 +69,16 @@ export function CustomerHomeScreen({
   ride: CustomerRide;
   onPickLocation: (target: LocationTarget) => void;
   onStartBooking: (pickup: string, coordinate: Coordinate) => void;
+  onPickupHere: (pickup: string, coordinate: Coordinate) => void;
   onBookings: () => void;
   hasActiveRide: boolean;
   onProfile: () => void;
   onBack: () => void;
 }) {
   const { t } = useTranslation();
+  const isFocused = useIsFocused();
   const mapRef = useRef<MapView>(null);
+  const freshLocationRequest = useRef<Promise<Location.LocationObject> | null>(null);
   const sheetHeight = Math.min(520, Dimensions.get('window').height * 0.62);
   const collapsedOffset = Math.max(142, sheetHeight - 278);
   const sheetOffset = useSharedValue(collapsedOffset);
@@ -83,6 +88,15 @@ export function CustomerHomeScreen({
   const [cachedAddress, setCachedAddress] = useState('');
   const [locationUnavailable, setLocationUnavailable] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [pickupMarkerReset, setPickupMarkerReset] = useState(0);
+
+  const requestFreshLocation = () => {
+    if (!freshLocationRequest.current) {
+      freshLocationRequest.current = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+        .finally(() => { freshLocationRequest.current = null; });
+    }
+    return freshLocationRequest.current;
+  };
 
   useEffect(() => {
     let active = true;
@@ -96,6 +110,7 @@ export function CustomerHomeScreen({
       if (active) setCachedAddress(address);
       if (firstFix) {
         firstFix = false;
+        setPickupMarkerReset((token) => token + 1);
         mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.018, longitudeDelta: 0.018 }, 500);
       }
     };
@@ -104,11 +119,13 @@ export function CustomerHomeScreen({
       if (!active) return;
       if (permission.status !== 'granted') { setLocationUnavailable(true); return; }
       try {
-        const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const cached = await Location.getLastKnownPositionAsync({ maxAge: 60_000, requiredAccuracy: 100 });
+        if (cached && active) await updateCachedLocation(cached);
+        const current = await requestFreshLocation();
         if (!active) return;
         await updateCachedLocation(current);
         subscription = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Balanced, distanceInterval: 100, timeInterval: 30000 },
+          { accuracy: Location.Accuracy.Balanced, distanceInterval: 5, timeInterval: 5000 },
           (next) => { void updateCachedLocation(next); },
         );
       } catch { if (active) setLocationUnavailable(true); }
@@ -116,6 +133,34 @@ export function CustomerHomeScreen({
     void loadLocation();
     return () => { active = false; subscription?.remove(); };
   }, []);
+
+  useEffect(() => {
+    if (!isFocused) return;
+    let active = true;
+    const refreshWhenHomeReturns = async () => {
+      const permission = await Location.getForegroundPermissionsAsync();
+      if (!active || permission.status !== 'granted') return;
+      const cached = await Location.getLastKnownPositionAsync({ maxAge: 60_000, requiredAccuracy: 100 });
+      if (cached && active) {
+        const coordinate = { latitude: cached.coords.latitude, longitude: cached.coords.longitude };
+        setUserLocation(coordinate);
+        setLocationUnavailable(false);
+        mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.018, longitudeDelta: 0.018 }, 250);
+        void reverseGeocodeAddress(coordinate, t('location.gpsDefault')).then((address) => { if (active) setCachedAddress(address); });
+      }
+      try {
+        const current = await requestFreshLocation();
+        if (!active) return;
+        const coordinate = { latitude: current.coords.latitude, longitude: current.coords.longitude };
+        setUserLocation(coordinate);
+        setLocationUnavailable(false);
+        mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.018, longitudeDelta: 0.018 }, cached ? 220 : 420);
+        void reverseGeocodeAddress(coordinate, t('location.gpsDefault')).then((address) => { if (active) setCachedAddress(address); });
+      } catch { if (active && !cached) setLocationUnavailable(true); }
+    };
+    void refreshWhenHomeReturns();
+    return () => { active = false; };
+  }, [isFocused, t]);
 
   const setSheet = (expanded: boolean) => {
     setSheetExpanded(expanded);
@@ -142,6 +187,7 @@ export function CustomerHomeScreen({
       ]);
       return;
     }
+    setPickupMarkerReset((token) => token + 1);
     // Recenter immediately to the latest foreground location. A subsequent
     // one-off reading quietly refines this point rather than making the tap
     // appear unresponsive while GPS acquires a new fix.
@@ -151,7 +197,7 @@ export function CustomerHomeScreen({
     const permission = await Location.requestForegroundPermissionsAsync();
     if (permission.status !== 'granted') { setLocationUnavailable(true); return; }
     try {
-      const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const current = await requestFreshLocation();
       const coordinate = { latitude: current.coords.latitude, longitude: current.coords.longitude };
       setUserLocation(coordinate);
       setLocationUnavailable(false);
@@ -178,10 +224,15 @@ export function CustomerHomeScreen({
     if (userLocation) { onStartBooking(cachedAddress || t('location.gpsDefault'), userLocation); return; }
     onPickLocation('pickup');
   };
+  const pickupHere = async (coordinate: Coordinate) => {
+    if (hasActiveRide) { onBookings(); return; }
+    const isLiveLocation = userLocation && coordinate.latitude === userLocation.latitude && coordinate.longitude === userLocation.longitude;
+    onPickupHere(isLiveLocation ? cachedAddress || t('location.gpsDefault') : await reverseGeocodeAddress(coordinate, t('location.gpsDefault')), coordinate);
+  };
 
   return (
     <SafeAreaView style={styles.mapHomeSafe} edges={['top', 'left', 'right']}>
-      <LiveLocationMap mapRef={mapRef} location={userLocation} onMapReady={() => setMapReady(true)} />
+      <LiveLocationMap mapRef={mapRef} location={userLocation} onMapReady={() => setMapReady(true)} pickupHereLabel={t('home.pickupHere')} onPickupHere={userLocation ? pickupHere : undefined} locationResetToken={pickupMarkerReset} />
 
       <View style={styles.mapHomeTopBar}>
         <View style={styles.mapHomeBrand}><Text style={styles.mapHomeBrandText}>{t('app.name')}</Text></View>
@@ -389,7 +440,6 @@ export function LocationPickerScreen({
   };
 
   const shown = results.length ? results : localResults.filter((item) => item.toLowerCase().includes(query.toLowerCase()));
-  const showNoMatches = query.trim().length >= 2 && shown.length === 0;
 
   if (pinMode) {
     return <PinDropPicker
@@ -433,12 +483,10 @@ export function LocationPickerScreen({
             drop
           />
         </View>
-        <PrimaryButton
-          label={gpsLoading ? t('location.gpsLoading') : t('location.gps')}
-          onPress={useGps}
-          secondary
-          small
-        />
+        <View style={styles.locationQuickActions}>
+          <Pressable onPress={useGps} disabled={gpsLoading} accessibilityRole="button" style={styles.locationQuickAction}><Text style={styles.locationQuickActionText} numberOfLines={1}>{gpsLoading ? t('location.gpsLoading') : t('location.gps')}</Text></Pressable>
+          <Pressable onPress={() => setPinMode(true)} accessibilityRole="button" style={styles.locationQuickAction}><Text style={styles.locationQuickActionText} numberOfLines={1}>{t('location.dropPin')}</Text></Pressable>
+        </View>
         <Text style={styles.sectionLabel}>{query.trim().length ? t('location.addressMatches') : t('location.nearby')}</Text>
         {shown.length > 0 && <View style={[styles.resultsCard, shadows.soft]}>{shown.map((place, i) => (
           <Pressable key={place} onPress={() => choosePlace(place)} style={[styles.resultRow, i < shown.length - 1 && styles.resultRowDivider]}>
@@ -446,7 +494,6 @@ export function LocationPickerScreen({
           </Pressable>
         ))}</View>}
         {!query.trim() && <Text style={styles.hint}>{t('location.placesUnavailable')}</Text>}
-        {(target === 'drop' || showNoMatches) && <View style={styles.pinFallback}><Text style={styles.pinFallbackTitle}>{t('location.pinPrompt')}</Text><Text style={styles.pinFallbackHint}>{t('location.pinFallbackHint')}</Text><PrimaryButton label={t('location.dropPin')} onPress={() => setPinMode(true)} secondary small /></View>}
         {ready && <PrimaryButton label={t('location.showRideOptions')} onPress={onContinue} />}
       </>
     </ScreenShell>
@@ -796,7 +843,7 @@ const cancellationReasons: Array<{ code: CancellationReason; labelKey: string }>
   { code: 'other', labelKey: 'Other' },
 ];
 
-export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onProfile, onEditLocations }: { ride: CustomerRide; onHome: () => void; onCancelled: () => void; onBookings: () => void; onProfile: () => void; onEditLocations: (target: LocationTarget) => void }) {
+export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onProfile }: { ride: CustomerRide; onHome: () => void; onCancelled: () => void; onBookings: () => void; onProfile: () => void }) {
   const { t } = useTranslation();
   const mapRef = useRef<MapView>(null);
   const [step, setStep] = useState(0);
@@ -820,7 +867,8 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
   const etaMinutes = Math.max(1, 4 - Math.floor(step / 2));
   const captainDistanceKm = Math.max(0.2, 1.8 - (step * 0.2));
   const arrived = liveStatus === 'arrived' || liveStatus === 'in_progress' || liveStatus === 'completed';
-  const canCancel = liveStatus === 'searching' || liveStatus === 'accepted';
+  const canCancel = liveStatus === 'searching' || liveStatus === 'accepted' || liveStatus === 'arrived' || liveStatus === 'in_progress';
+  const cancellationMayIncurCharge = liveStatus === 'arrived' || liveStatus === 'in_progress';
   const captainName = captainDetails?.fullName || t('rides.captain');
   const vehicleType = captainDetails?.vehicleType;
 
@@ -854,8 +902,8 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
     if (!ride.id) return setCancellationError(t('login.tryAgain'));
     setCancelling(true);
     try {
-      const result = await rideCreationService.cancel(ride.id, cancellationReason, otherReason);
-      Alert.alert(t('rides.rideCancelled'), t('rides.cancellationCharge', { charge: formatFare(result.cancellationCharge ?? 0) }), [{ text: t('actions.done'), onPress: onCancelled }]);
+      await rideCreationService.cancel(ride.id, cancellationReason, otherReason);
+      Alert.alert(t('rides.rideCancelled'), cancellationMayIncurCharge ? t('rides.cancellationChargePending') : undefined, [{ text: t('actions.done'), onPress: onCancelled }]);
     } catch {
       setCancellationError(t('login.tryAgain'));
     } finally {
@@ -911,8 +959,8 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
         <PrimaryButton label={updatingFareQuote ? t('login.pleaseWait') : t('rides.acceptFareQuote')} onPress={() => { void respondToFareQuote(true); }} disabled={updatingFareQuote} />
         <Pressable onPress={declineFareQuote} disabled={updatingFareQuote} accessibilityRole="button" style={styles.declineFareQuote}><Text style={styles.declineFareQuoteText}>{t('rides.declineFareQuote')}</Text></Pressable>
       </View>}
-      <Pressable onPress={() => onEditLocations('pickup')} accessibilityRole="button" style={styles.assignedPickupRow}><View style={styles.assignedPickupDot} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.pickup')} · {ride.pickup}</Text><Text style={styles.editLocation}>›</Text></Pressable>
-      <Pressable onPress={() => onEditLocations('drop')} accessibilityRole="button" style={styles.assignedPickupRow}><View style={[styles.assignedPickupDot, styles.assignedDropDot]} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.drop')} · {ride.drop}</Text><Text style={styles.editLocation}>›</Text></Pressable>
+      <View style={styles.assignedPickupRow}><View style={styles.assignedPickupDot} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.pickup')} · {ride.pickup}</Text></View>
+      <View style={styles.assignedPickupRow}><View style={[styles.assignedPickupDot, styles.assignedDropDot]} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.drop')} · {ride.drop}</Text></View>
       {!!pickupPin && !inProgress && <View style={styles.pickupPinCard}><Text style={styles.pickupPinLabel}>{t('rides.pickupPinLabel')}</Text><Text style={styles.pickupPin}>{pickupPin}</Text><Text style={styles.pickupPinHint}>{t('rides.pickupPinHint')}</Text></View>}
       {inProgress && <><View style={styles.tripStatRow}><Text style={styles.tripStatLabel}>{t('rides.destinationDistance')}</Text><Text style={styles.tripStatValue}>{formatNumber(destinationDistanceKm, { maximumFractionDigits: 1 })} km · {formatNumber(destinationMinutes)} min</Text></View><Pressable onPress={() => { void Linking.openURL('tel:112'); }} accessibilityRole="button" style={styles.sosButton}><Text style={styles.sosText}>{t('rides.sos')}</Text></Pressable></>}
       {canCancel && <PrimaryButton label={t('rides.cancelRide')} onPress={startCancellation} danger />}
@@ -927,8 +975,9 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
             <Text style={styles.cancellationTitle}>{t('rides.cancelTitle')}</Text>
             <View style={styles.captainStatusCard}>
               <Text style={styles.captainStatusIcon}>🛺</Text>
-              <View style={styles.captainStatusText}><Text style={styles.captainStatusTitle}>{captainName}</Text><Text style={styles.captainStatusMessage}>{inProgress ? t('rides.cancelTripStatus', { distance: formatNumber(destinationDistanceKm, { maximumFractionDigits: 1 }), minutes: formatNumber(destinationMinutes) }) : t('rides.cancelCaptainStatus', { captain: captainName, distance: formatNumber(captainDistanceKm), minutes: formatNumber(etaMinutes) })}</Text></View>
+              <View style={styles.captainStatusText}><Text style={styles.captainStatusTitle}>{captainName}</Text><Text style={styles.captainStatusMessage}>{inProgress ? t('rides.cancelTripStatus', { distance: formatNumber(destinationDistanceKm, { maximumFractionDigits: 1 }), minutes: formatNumber(destinationMinutes) }) : liveStatus === 'arrived' ? t('rides.cancelArrivalStatus', { captain: captainName }) : t('rides.cancelCaptainStatus', { captain: captainName, distance: formatNumber(captainDistanceKm), minutes: formatNumber(etaMinutes) })}</Text></View>
             </View>
+            {cancellationMayIncurCharge && <Text style={styles.cancellationMessage}>{t('rides.cancellationChargeWarning')}</Text>}
             <Text style={styles.cancellationMessage}>{t('rides.cancelConfirmMessage')}</Text>
             <PrimaryButton label={t('rides.confirmCancel')} onPress={() => setCancelStep('reason')} danger />
             <PrimaryButton label={t('rides.continueRide')} onPress={() => setCancelStep('none')} secondary />
@@ -950,9 +999,33 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
   </SafeAreaView>;
 }
 
+function BookingDetailsSheet({ ride, captain, onClose }: { ride: DispatchRide; captain: AssignedCaptainDetails | null | undefined; onClose: () => void }) {
+  const { t } = useTranslation();
+  const progress = useRef(new Animated.Value(0)).current;
+  const [closing, setClosing] = useState(false);
+  const finalFare = ride.final_fare == null ? null : Number(ride.final_fare);
+  const rating = Number(ride.customer_rating ?? 0);
+  useEffect(() => { Animated.timing(progress, { toValue: 1, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(); }, [progress]);
+  const dismiss = () => { if (closing) return; setClosing(true); Animated.timing(progress, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => { if (finished) onClose(); }); };
+  return <Animated.View style={[styles.bookingDetailsOverlay, { opacity: progress }]}>
+    <Pressable onPress={dismiss} style={StyleSheet.absoluteFill} accessibilityRole="button" />
+    <Animated.View style={[styles.bookingDetailsSheet, shadows.card, { transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [420, 0] }) }] }]}>
+      <View style={styles.sheetHandle} />
+      <View style={styles.bookingDetailsHero}><View style={styles.bookingDetailsHeroIcon}><Text style={styles.bookingDetailsHeroIconText}>{ride.ride_type === 'bike' ? '🏍️' : '🛺'}</Text></View><View style={styles.bookingDetailsHeroText}><Text style={styles.bookingDetailsTitle}>{t('rides.rideDetailsTitle')}</Text><Text style={styles.bookingDetailsStatus}>{t(`rides.status${ride.status}`)}</Text></View><Pressable onPress={dismiss} accessibilityRole="button" style={styles.bookingDetailsClose}><Text style={styles.bookingDetailsCloseText}>×</Text></Pressable></View>
+      <ScrollView contentContainerStyle={styles.bookingDetailsContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.bookingDetailsSection}><Text style={styles.bookingDetailsSectionTitle}>{t('rides.routeDetails')}</Text><View style={styles.bookingDetailRow}><View style={styles.assignedPickupDot} /><View style={styles.bookingDetailText}><Text style={styles.bookingDetailLabel}>{t('rides.pickup')}</Text><Text style={styles.bookingDetailValue}>{ride.pickup_address}</Text></View></View><View style={styles.bookingDetailDivider} /><View style={styles.bookingDetailRow}><View style={[styles.assignedPickupDot, styles.assignedDropDot]} /><View style={styles.bookingDetailText}><Text style={styles.bookingDetailLabel}>{t('rides.drop')}</Text><Text style={styles.bookingDetailValue}>{ride.drop_address}</Text></View></View></View>
+        <View style={styles.bookingDetailsSection}><Text style={styles.bookingDetailsSectionTitle}>{t('rides.fareDetails')}</Text><View style={styles.bookingFareGrid}><View style={styles.bookingFareTile}><Text style={styles.bookingDetailLabel}>{t('rides.estimatedFare')}</Text><Text style={styles.bookingDetailAmountValue}>{formatFare(Number(ride.estimated_fare ?? 0))}</Text></View>{finalFare != null && <View style={styles.bookingFareTile}><Text style={styles.bookingDetailLabel}>{t('rides.finalFare')}</Text><Text style={styles.bookingDetailAmountValue}>{formatFare(finalFare)}</Text></View>}</View>{Number(ride.cancellation_charge ?? 0) > 0 && <View style={styles.bookingDetailAmount}><Text style={styles.bookingDetailLabel}>{t('rides.cancellationCharge')}</Text><Text style={styles.bookingDetailAmountValue}>{formatFare(Number(ride.cancellation_charge))}</Text></View>}</View>
+        <View style={styles.bookingDetailsSection}><Text style={styles.bookingDetailsSectionTitle}>{t('rides.captainDetails')}</Text><View style={styles.bookingCaptainRow}><View style={styles.bookingCaptainAvatar}><Text style={styles.bookingCaptainAvatarText}>👤</Text></View><View style={styles.bookingDetailText}>{captain === undefined ? <Text style={styles.bookingDetailLoading}>{t('login.pleaseWait')}</Text> : captain ? <><Text style={styles.bookingDetailValue}>{captain.fullName}</Text><Text style={styles.bookingDetailLabel}>{captain.vehicleType ? t(`rides.${captain.vehicleType}`) : t('rides.captain')}</Text></> : <Text style={styles.bookingDetailLabel}>{t('rides.noCaptainAssigned')}</Text>}</View></View></View>
+        <View style={styles.bookingDetailsSection}><Text style={styles.bookingDetailsSectionTitle}>{t('rides.ratingGiven')}</Text><View style={styles.bookingRatingRow}>{rating > 0 ? <><Text style={styles.bookingRating}>{'★'.repeat(Math.min(5, rating))}{'☆'.repeat(Math.max(0, 5 - rating))}</Text><Text style={styles.bookingRatingNumber}>{rating}/5</Text></> : <Text style={styles.bookingDetailLabel}>{t('rides.notRatedYet')}</Text>}</View></View>
+      </ScrollView>
+      <PrimaryButton label={t('actions.done')} onPress={dismiss} />
+    </Animated.View>
+  </Animated.View>;
+}
+
 export function CustomerBookingsScreen({ ride, onHome, onProfile, onCancelled, onOpenRide }: { ride: CustomerRide; onHome: () => void; onProfile: () => void; onCancelled: () => void; onOpenRide: (ride: CustomerRide, status: RideStatus) => void }) {
   const { t } = useTranslation();
-  const [history, setHistory] = useState<DispatchRide[]>([]); const [loaded, setLoaded] = useState(!rideDispatchService.isEnabled); const [cancellingRideId, setCancellingRideId] = useState<string | null>(null);
+  const [history, setHistory] = useState<DispatchRide[]>([]); const [loaded, setLoaded] = useState(!rideDispatchService.isEnabled); const [cancellingRideId, setCancellingRideId] = useState<string | null>(null); const [detailsRide, setDetailsRide] = useState<DispatchRide | null>(null); const [detailsCaptain, setDetailsCaptain] = useState<AssignedCaptainDetails | null | undefined>(null);
   useEffect(() => {
     if (!rideDispatchService.isEnabled) return;
     return rideDispatchService.subscribeToCustomerRideHistory((rides) => { setHistory(rides); setLoaded(true); }, () => setLoaded(true));
@@ -964,7 +1037,8 @@ export function CustomerBookingsScreen({ ride, onHome, onProfile, onCancelled, o
     { text: t('rides.confirmCancel'), style: 'destructive', onPress: () => { setCancellingRideId(rideId); void rideCreationService.cancel(rideId, 'change_plans').then(onCancelled).catch(() => Alert.alert(t('login.tryAgain'))).finally(() => setCancellingRideId(null)); } },
   ]);
   const customerRide = (record: DispatchRide): CustomerRide => ({ id: record.id, kind: record.ride_type, passengerCount: record.ride_type === 'auto' ? Number(record.passenger_count ?? 1) : 1, pickup: record.pickup_address, drop: record.drop_address, ...(record.pickup_latitude != null && record.pickup_longitude != null ? { pickupCoordinate: { latitude: Number(record.pickup_latitude), longitude: Number(record.pickup_longitude) } } : {}), ...(record.drop_latitude != null && record.drop_longitude != null ? { dropCoordinate: { latitude: Number(record.drop_latitude), longitude: Number(record.drop_longitude) } } : {}) });
-  return <SafeAreaView style={styles.bookingsSafe} edges={['top', 'left', 'right']}><ScrollView contentContainerStyle={styles.bookingsContent} showsVerticalScrollIndicator={false}><Text style={styles.bookingsTitle}>{t('home.bookingsTitle')}</Text>{!loaded && <Text style={styles.bookingsEmpty}>{t('login.pleaseWait')}</Text>}{loaded && !rides.length && <Text style={styles.bookingsEmpty}>{t('home.bookingsMessage')}</Text>}{rides.map((record) => { const canCancel = record.status === 'searching' || record.status === 'accepted'; const actionLabel = record.status === 'cancelled' || record.status === 'completed' ? t('rides.bookThisRoute') : t('rides.viewRideStatus'); const isCancelling = cancellingRideId === record.id; return <View key={record.id} style={[styles.bookingCard, shadows.card]}><Pressable onPress={() => onOpenRide(customerRide(record), record.status)} accessibilityRole="button"><Text style={styles.bookingCardStatus}>{t(`rides.status${record.status}`)}</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.pickup_address}</Text><Text style={styles.bookingCardArrow}>→</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.drop_address}</Text><Text style={styles.bookingCardAction}>{actionLabel} ›</Text></Pressable>{canCancel && <PrimaryButton label={isCancelling ? t('login.pleaseWait') : t('rides.cancelRide')} onPress={() => cancel(record.id)} disabled={isCancelling} danger />}</View>; })}</ScrollView><CustomerTabBar active="bookings" onHome={onHome} onBookings={() => undefined} onProfile={onProfile} /></SafeAreaView>;
+  const openDetails = (record: DispatchRide) => { setDetailsRide(record); setDetailsCaptain(record.captain_id ? undefined : null); if (record.captain_id && rideDispatchService.isEnabled) void rideDispatchService.getAssignedCaptain(record.id).then(setDetailsCaptain).catch(() => setDetailsCaptain(null)); };
+  return <SafeAreaView style={styles.bookingsSafe} edges={['top', 'left', 'right']}><ScrollView contentContainerStyle={styles.bookingsContent} showsVerticalScrollIndicator={false}><Text style={styles.bookingsTitle}>{t('home.bookingsTitle')}</Text>{!loaded && <Text style={styles.bookingsEmpty}>{t('login.pleaseWait')}</Text>}{loaded && !rides.length && <Text style={styles.bookingsEmpty}>{t('home.bookingsMessage')}</Text>}{rides.map((record) => { const canCancel = record.status === 'searching' || record.status === 'accepted'; const actionLabel = record.status === 'cancelled' || record.status === 'completed' ? t('rides.bookThisRoute') : t('rides.viewRideStatus'); const isCancelling = cancellingRideId === record.id; return <View key={record.id} style={[styles.bookingCard, shadows.card]}><Text style={styles.bookingCardStatus}>{t(`rides.status${record.status}`)}</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.pickup_address}</Text><Text style={styles.bookingCardArrow}>→</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.drop_address}</Text><View style={styles.bookingCardActions}><Pressable onPress={() => openDetails(record)} accessibilityRole="button" style={styles.bookingDetailsButton}><Text style={styles.bookingDetailsButtonText}>{t('rides.rideDetails')}</Text></Pressable><Pressable onPress={() => onOpenRide(customerRide(record), record.status)} accessibilityRole="button" style={styles.bookingRouteButton}><Text style={styles.bookingRouteButtonText}>{actionLabel}</Text></Pressable></View>{canCancel && <PrimaryButton label={isCancelling ? t('login.pleaseWait') : t('rides.cancelRide')} onPress={() => cancel(record.id)} disabled={isCancelling} danger />}</View>; })}</ScrollView><CustomerTabBar active="bookings" onHome={onHome} onBookings={() => undefined} onProfile={onProfile} />{detailsRide && <BookingDetailsSheet ride={detailsRide} captain={detailsCaptain} onClose={() => setDetailsRide(null)} />}</SafeAreaView>;
 }
 
 function CustomerTabBar({ active, onHome, onBookings, onProfile }: { active: 'home' | 'bookings'; onHome: () => void; onBookings: () => void; onProfile: () => void }) {
@@ -1038,6 +1112,9 @@ const styles = StyleSheet.create({
   locationFieldLabel: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, fontWeight: '700' },
   locationFieldInput: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, minHeight: 34, padding: 0 },
   locationFieldDivider: { backgroundColor: colors.divider, height: 1, marginLeft: 53 },
+  locationQuickActions: { flexDirection: 'row', gap: 10 },
+  locationQuickAction: { alignItems: 'center', backgroundColor: colors.primaryLight, borderColor: colors.primary, borderRadius: radii.md, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: 8 },
+  locationQuickActionText: { color: colors.primaryDark, fontFamily, fontSize: fontSize.xs, fontWeight: '800', textAlign: 'center' },
   pinFallback: { backgroundColor: colors.primaryLight, borderColor: '#BFE8DE', borderRadius: radii.lg, borderWidth: 1, gap: 8, padding: 14 },
   pinFallbackTitle: { color: colors.primaryDark, fontFamily, fontSize: fontSize.md, fontWeight: '800' },
   pinFallbackHint: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 21 },
@@ -1380,7 +1457,7 @@ const styles = StyleSheet.create({
   sosText: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
   assignedPickupDot: { backgroundColor: colors.success, borderRadius: radii.pill, height: 10, marginTop: 6, width: 10 },
   assignedPickupText: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.md, fontWeight: '800', lineHeight: 23 }, assignedDropDot: { backgroundColor: colors.accent }, editLocation: { color: colors.primary, fontSize: 28, fontWeight: '800' },
-  bookingsSafe: { backgroundColor: colors.bg, flex: 1 }, bookingsContent: { gap: 16, padding: 20 }, bookingsTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize['2xl'], fontWeight: '900' }, bookingsEmpty: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, lineHeight: 24 }, bookingCard: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 8, padding: 18 }, bookingCardStatus: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '900' }, bookingCardRoute: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '800' }, bookingCardArrow: { color: colors.textMuted, fontSize: 20 }, bookingCardAction: { color: colors.primaryDark, fontFamily, fontSize: fontSize.sm, fontWeight: '900', marginTop: 5 },
+  bookingsSafe: { backgroundColor: colors.bg, flex: 1 }, bookingsContent: { gap: 16, padding: 20, paddingBottom: 112 }, bookingsTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize['2xl'], fontWeight: '900' }, bookingsEmpty: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, lineHeight: 24 }, bookingCard: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 8, padding: 18 }, bookingCardStatus: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '900' }, bookingCardRoute: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '800' }, bookingCardArrow: { color: colors.textMuted, fontSize: 20 }, bookingCardActions: { flexDirection: 'row', gap: 10, marginTop: 8 }, bookingDetailsButton: { alignItems: 'center', borderColor: colors.primary, borderRadius: radii.md, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 46, paddingHorizontal: 8 }, bookingDetailsButtonText: { color: colors.primaryDark, fontFamily, fontSize: fontSize.sm, fontWeight: '800', textAlign: 'center' }, bookingRouteButton: { alignItems: 'center', backgroundColor: colors.primaryDark, borderRadius: radii.md, flex: 1, justifyContent: 'center', minHeight: 46, paddingHorizontal: 8 }, bookingRouteButtonText: { color: colors.bg, fontFamily, fontSize: fontSize.sm, fontWeight: '800', textAlign: 'center' }, bookingDetailsOverlay: { backgroundColor: 'rgba(6, 78, 69, 0.58)', bottom: 0, justifyContent: 'flex-end', left: 0, position: 'absolute', right: 0, top: 0, zIndex: 20 }, bookingDetailsSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, gap: 16, maxHeight: '90%', paddingBottom: 24, paddingHorizontal: 20, paddingTop: 14 }, bookingDetailsHero: { alignItems: 'center', backgroundColor: colors.primaryDark, borderRadius: radii.lg, flexDirection: 'row', gap: 11, padding: 14 }, bookingDetailsHeroIcon: { alignItems: 'center', backgroundColor: colors.surfaceMint, borderRadius: radii.pill, height: 46, justifyContent: 'center', width: 46 }, bookingDetailsHeroIconText: { fontSize: 23 }, bookingDetailsHeroText: { flex: 1, gap: 3 }, bookingDetailsTitle: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '900' }, bookingDetailsClose: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: radii.pill, height: 34, justifyContent: 'center', width: 34 }, bookingDetailsCloseText: { color: colors.textOnPrimary, fontSize: 27, lineHeight: 30 }, bookingDetailsContent: { gap: 12, paddingBottom: 2 }, bookingDetailsStatus: { alignSelf: 'flex-start', backgroundColor: colors.surfaceMint, borderRadius: radii.pill, color: colors.primaryDark, fontFamily, fontSize: fontSize.xs, fontWeight: '800', overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4 }, bookingDetailsSection: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, gap: 10, padding: 14 }, bookingDetailsSectionTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' }, bookingDetailRow: { alignItems: 'flex-start', flexDirection: 'row', gap: 10 }, bookingDetailDivider: { backgroundColor: colors.divider, height: 1, marginLeft: 20 }, bookingDetailText: { flex: 1 }, bookingDetailLabel: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 20 }, bookingDetailValue: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '800', lineHeight: 22 }, bookingDetailAmount: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }, bookingFareGrid: { flexDirection: 'row', gap: 10 }, bookingFareTile: { backgroundColor: colors.primaryLight, borderRadius: radii.sm, flex: 1, gap: 3, padding: 11 }, bookingDetailAmountValue: { color: colors.primaryDark, fontFamily, fontSize: fontSize.md, fontWeight: '900' }, bookingCaptainRow: { alignItems: 'center', flexDirection: 'row', gap: 10 }, bookingCaptainAvatar: { alignItems: 'center', backgroundColor: colors.accentLight, borderRadius: radii.pill, height: 42, justifyContent: 'center', width: 42 }, bookingCaptainAvatarText: { fontSize: 20 }, bookingDetailLoading: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm }, bookingRatingRow: { alignItems: 'center', flexDirection: 'row', gap: 10 }, bookingRating: { color: '#F59E0B', fontSize: 27, letterSpacing: 2 }, bookingRatingNumber: { color: colors.primaryDark, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
   cancellationOverlay: { backgroundColor: 'rgba(35, 29, 24, 0.52)', bottom: 0, justifyContent: 'flex-end', left: 0, position: 'absolute', right: 0, top: 0, zIndex: 10 },
   cancellationSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, maxHeight: '88%', paddingBottom: 28, paddingHorizontal: 20, paddingTop: 14 },
   cancellationContent: { gap: 14 },
