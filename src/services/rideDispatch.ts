@@ -123,20 +123,13 @@ export const rideDispatchService = {
     passengerCount: number;
     pickupCoordinate?: Coordinate;
     dropCoordinate?: Coordinate;
+    routeQuote?: { id: string; distanceMeters: number; durationSeconds: number; encodedPolyline: string };
   }) {
     const client = requireClient();
-    const { data, error } = await client.rpc('request_ride', {
-      p_ride_type: draft.kind,
-      p_pickup_address: draft.pickup.trim(),
-      p_drop_address: draft.drop.trim(),
-      p_pickup_latitude: draft.pickupCoordinate?.latitude ?? null,
-      p_pickup_longitude: draft.pickupCoordinate?.longitude ?? null,
-      p_drop_latitude: draft.dropCoordinate?.latitude ?? null,
-      p_drop_longitude: draft.dropCoordinate?.longitude ?? null,
-      p_passenger_count: draft.passengerCount,
-    });
-    if (error || !data) throw error ?? new Error('Ride request was not created');
-    return data as string;
+    const { data, error } = await client.functions.invoke('ride-maps', { body: { action: 'create_routed_ride', draft } });
+    const rideId = (data as { data?: { rideId?: string }; error?: string } | null)?.data?.rideId;
+    if (error || !rideId) throw error ?? new Error((data as { error?: string } | null)?.error ?? 'Ride request was not created');
+    return rideId;
   },
 
   async getRide(rideId: string) {
@@ -300,6 +293,12 @@ export const rideDispatchService = {
   },
 
   async respondToOffer(offerId: string, accept: boolean) {
+    if (accept) {
+      const { data, error } = await requireClient().functions.invoke('ride-maps', { body: { action: 'accept_offer', offerId } });
+      const ride = (data as { data?: { ride?: DispatchRide }; error?: string } | null)?.data?.ride;
+      if (error || !ride) throw error ?? new Error((data as { error?: string } | null)?.error ?? 'Ride offer could not be updated');
+      return ride;
+    }
     const { data, error } = await requireClient().rpc('respond_to_ride_offer', { p_offer_id: offerId, p_accept: accept });
     if (error || !data) throw error ?? new Error('Ride offer could not be updated');
     return data as DispatchRide;

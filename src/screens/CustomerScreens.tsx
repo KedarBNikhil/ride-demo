@@ -27,6 +27,9 @@ import { PhoneOtpAuth } from '../components/PhoneOtpAuth';
 import { customerAuthService } from '../services/customerAuth';
 import { rideCreationService, type CancellationReason } from '../services/rideCreation';
 import { rideDispatchService, type AssignedCaptainDetails, type DispatchRide, type RideStatus } from '../services/rideDispatch';
+import { googleMapsService } from '../services/googleMaps';
+import { offlineLocationCatalogue, type OfflineLocation } from '../services/offlineLocationCatalogue';
+import { decodeGooglePolyline } from '../utils/polyline';
 import { calculateFare } from '../services/fareEngine';
 import { straightLineDistanceMeters } from '../services/distanceProvider';
 import { LiveLocationMap } from '../components/LiveLocationMap';
@@ -36,10 +39,21 @@ import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 
 export type RideKind = 'bike' | 'auto';
 export type Coordinate = { latitude: number; longitude: number };
-export type CustomerRide = { id?: string; pickup: string; drop: string; kind: RideKind; passengerCount: number; pickupCoordinate?: Coordinate; dropCoordinate?: Coordinate };
+export type RouteQuote = { id: string; distanceMeters: number; durationSeconds: number; encodedPolyline: string };
+export type CustomerRide = { id?: string; pickup: string; drop: string; kind: RideKind; passengerCount: number; pickupCoordinate?: Coordinate; dropCoordinate?: Coordinate; routeQuote?: RouteQuote };
 type LocationTarget = 'pickup' | 'drop';
 const NANDYAL: Region = { latitude: 15.4889, longitude: 78.4836, latitudeDelta: 0.035, longitudeDelta: 0.035 };
 const estimateCoordinateDistanceKm = (a: Coordinate, b: Coordinate) => Math.sqrt((a.latitude - b.latitude) ** 2 + (a.longitude - b.longitude) ** 2) * 111;
+
+function hasUsableRouteQuote(quote: RouteQuote | undefined): quote is RouteQuote {
+  return Boolean(
+    typeof quote?.id === 'string' && quote.id &&
+    Number.isFinite(quote.distanceMeters) && quote.distanceMeters > 0 &&
+    Number.isFinite(quote.durationSeconds) && quote.durationSeconds > 0 &&
+    typeof quote.encodedPolyline === 'string' && quote.encodedPolyline &&
+    decodeGooglePolyline(quote.encodedPolyline).length > 1,
+  );
+}
 
 /* ─────────────────────────── LOGIN ─────────────────────────── */
 
@@ -106,10 +120,10 @@ export function CustomerHomeScreen({
       const coordinate = { latitude: location.coords.latitude, longitude: location.coords.longitude };
       setUserLocation(coordinate);
       setLocationUnavailable(false);
-      const address = await reverseGeocodeAddress(coordinate, t('location.gpsDefault'));
-      if (active) setCachedAddress(address);
       if (firstFix) {
         firstFix = false;
+        const address = await reverseGeocodeAddress(coordinate, t('location.gpsDefault'));
+        if (active) setCachedAddress(address);
         setPickupMarkerReset((token) => token + 1);
         mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.018, longitudeDelta: 0.018 }, 500);
       }
@@ -320,10 +334,13 @@ export function LocationPickerScreen({
   const { t } = useTranslation();
   const [drafts, setDrafts] = useState<Record<LocationTarget, string>>({ pickup: ride.pickup, drop: ride.drop });
   const [target, setTarget] = useState<LocationTarget>(initialTarget);
-  const [results, setResults] = useState<string[]>([]);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [pinMode, setPinMode] = useState(false);
-  const [pin, setPin] = useState({ latitude: NANDYAL.latitude, longitude: NANDYAL.longitude });
+  const [cataloguePin, setCataloguePin] = useState<OfflineLocation | null>(null);
+  const [resolution, setResolution] = useState<Record<LocationTarget, 'unresolved' | 'located' | 'failed'>>({
+    pickup: ride.pickupCoordinate ? 'located' : 'unresolved',
+    drop: ride.dropCoordinate ? 'located' : 'unresolved',
+  });
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationUnavailable, setLocationUnavailable] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -332,48 +349,51 @@ export function LocationPickerScreen({
   const pickupInput = useRef<TextInput>(null);
   const dropInput = useRef<TextInput>(null);
   const query = drafts[target];
-  const ready = Boolean(ride.pickup && ride.drop);
+  const ready = resolution.pickup === 'located' && resolution.drop === 'located';
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const queryTerms = normalizedQuery.split(/\s+/).filter(Boolean);
+  // Start suggesting after three characters, not three complete words. Every
+  // typed term still has to match the catalogue label, in any order.
+  const hasCatalogueQuery = normalizedQuery.length >= 3;
+  const shown = hasCatalogueQuery
+    ? offlineLocationCatalogue.filter((place) => {
+      const label = (place.labelKey ? t(`location.${place.labelKey}`) : place.label).toLocaleLowerCase();
+      return queryTerms.every((term) => label.includes(term));
+    })
+    : [];
 
   useEffect(() => {
     requestAnimationFrame(() => (initialTarget === 'pickup' ? pickupInput : dropInput).current?.focus());
   }, [initialTarget]);
 
-  const localResults = useMemo(
-    () => [t('location.busStand'), t('location.railway'), t('location.medical')],
-    [t],
-  );
-
-  useEffect(() => {
-    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
-    if (!apiKey || query.trim().length < 2) { setResults([]); return; }
-    const timer = setTimeout(() => {
-      fetch(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&components=country:in&key=${apiKey}`,
-      )
-        .then((r) => r.json())
-        .then((data) =>
-          setResults(
-            (data.predictions ?? []).slice(0, 5).map((item: { description: string }) => item.description),
-          ),
-        )
-        .catch(() => setResults([]));
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [query]);
-
   const setDraft = (nextTarget: LocationTarget, value: string) => {
     setTarget(nextTarget);
     setDrafts((current) => ({ ...current, [nextTarget]: value }));
+    setResolution((current) => ({ ...current, [nextTarget]: 'unresolved' }));
+    // Text alone must never retain a previous pin or route quote.
+    onChange(nextTarget, value, undefined);
   };
 
-  const choosePlace = async (place: string, suppliedCoordinate?: Coordinate) => {
-    const coordinate = suppliedCoordinate ?? await geocodeAddress(place);
+  const choosePlace = (place: string, coordinate?: Coordinate) => {
+    if (!coordinate) {
+      setResolution((current) => ({ ...current, [target]: 'failed' }));
+      return;
+    }
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setDrafts((current) => ({ ...current, [target]: place }));
+    setResolution((current) => ({ ...current, [target]: 'located' }));
     onChange(target, place, coordinate);
     if (target === 'pickup') {
       setTarget('drop');
       requestAnimationFrame(() => dropInput.current?.focus());
+    }
+  };
+
+  const resolveTypedAddress = () => {
+    // Typed text only filters the offline catalogue. It never triggers an
+    // address lookup, so the customer must select a verified suggestion.
+    if (!hasCatalogueQuery || shown.length === 0) {
+      setResolution((current) => ({ ...current, [target]: 'failed' }));
     }
   };
 
@@ -436,17 +456,17 @@ export function LocationPickerScreen({
     } finally {
       setGpsLoading(false);
     }
-    choosePlace(t('location.gpsDefault'));
+    setResolution((current) => ({ ...current, [target]: 'failed' }));
   };
-
-  const shown = results.length ? results : localResults.filter((item) => item.toLowerCase().includes(query.toLowerCase()));
 
   if (pinMode) {
     return <PinDropPicker
       target={target}
-      initialCoordinate={target === 'pickup' ? ride.pickupCoordinate : ride.dropCoordinate}
-      onBack={() => setPinMode(false)}
-      onConfirm={(address, coordinate) => { void choosePlace(address, coordinate); setPinMode(false); }}
+      initialCoordinate={cataloguePin ? cataloguePin.coordinate : (target === 'pickup' ? ride.pickupCoordinate : ride.dropCoordinate)}
+      initialAddress={cataloguePin ? (cataloguePin.labelKey ? t(`location.${cataloguePin.labelKey}`) : cataloguePin.label) : undefined}
+      requiresManualPin={Boolean(cataloguePin && !cataloguePin.coordinate)}
+      onBack={() => { setCataloguePin(null); setPinMode(false); }}
+      onConfirm={(address, coordinate) => { choosePlace(address, coordinate); setCataloguePin(null); setPinMode(false); }}
     />;
   }
 
@@ -468,6 +488,7 @@ export function LocationPickerScreen({
             onFocus={() => { setTarget('pickup'); setFocused(true); }}
             onBlur={() => setFocused(false)}
             onChangeText={(value) => setDraft('pickup', value)}
+            onSubmitEditing={() => void resolveTypedAddress()}
           />
           <View style={styles.locationFieldDivider} />
           <LocationField
@@ -480,6 +501,7 @@ export function LocationPickerScreen({
             onFocus={() => { setTarget('drop'); setFocused(true); }}
             onBlur={() => setFocused(false)}
             onChangeText={(value) => setDraft('drop', value)}
+            onSubmitEditing={() => void resolveTypedAddress()}
             drop
           />
         </View>
@@ -487,43 +509,52 @@ export function LocationPickerScreen({
           <Pressable onPress={useGps} disabled={gpsLoading} accessibilityRole="button" style={styles.locationQuickAction}><Text style={styles.locationQuickActionText} numberOfLines={1}>{gpsLoading ? t('location.gpsLoading') : t('location.gps')}</Text></Pressable>
           <Pressable onPress={() => setPinMode(true)} accessibilityRole="button" style={styles.locationQuickAction}><Text style={styles.locationQuickActionText} numberOfLines={1}>{t('location.dropPin')}</Text></Pressable>
         </View>
-        <Text style={styles.sectionLabel}>{query.trim().length ? t('location.addressMatches') : t('location.nearby')}</Text>
-        {shown.length > 0 && <View style={[styles.resultsCard, shadows.soft]}>{shown.map((place, i) => (
-          <Pressable key={place} onPress={() => choosePlace(place)} style={[styles.resultRow, i < shown.length - 1 && styles.resultRowDivider]}>
-            <Text style={styles.resultPin}>📍</Text><Text style={styles.resultText} numberOfLines={2}>{place}</Text>
+        <Text style={styles.sectionLabel}>{hasCatalogueQuery ? t('location.addressMatches') : t('location.nearby')}</Text>
+        {shown.length > 0 && <View style={[styles.resultsCard, shadows.soft]}>{shown.map((place, i) => {
+          const label = place.labelKey ? t(`location.${place.labelKey}`) : place.label;
+          return <Pressable key={place.id} onPress={() => { setCataloguePin(place); setPinMode(true); }} style={[styles.resultRow, i < shown.length - 1 && styles.resultRowDivider]}>
+            <Text style={styles.resultPin}>📍</Text><Text style={styles.resultText} numberOfLines={2}>{label}</Text>
           </Pressable>
-        ))}</View>}
-        {!query.trim() && <Text style={styles.hint}>{t('location.placesUnavailable')}</Text>}
-        {ready && <PrimaryButton label={t('location.showRideOptions')} onPress={onContinue} />}
+        })}</View>}
+        {resolution[target] === 'failed' && <Text style={[styles.locationResolution, styles.locationResolutionFailed]}>{t('location.addressNotLocated')}</Text>}
+        <PrimaryButton label={t('location.showRideOptions')} onPress={onContinue} disabled={!ready} />
       </>
     </ScreenShell>
   );
 }
 
-function LocationField({ inputRef, active, icon, label, value, placeholder, onFocus, onBlur, onChangeText, drop }: {
-  inputRef: React.RefObject<TextInput | null>; active: boolean; icon: string; label: string; value: string; placeholder: string; onFocus: () => void; onBlur: () => void; onChangeText: (value: string) => void; drop?: boolean;
+function LocationField({ inputRef, active, icon, label, value, placeholder, onFocus, onBlur, onChangeText, onSubmitEditing, drop }: {
+  inputRef: React.RefObject<TextInput | null>; active: boolean; icon: string; label: string; value: string; placeholder: string; onFocus: () => void; onBlur: () => void; onChangeText: (value: string) => void; onSubmitEditing: () => void; drop?: boolean;
 }) {
-  return <View style={[styles.locationField, active && styles.locationFieldActive]}><View style={[styles.locationFieldDot, drop && styles.locationFieldDotDrop]}><Text style={[styles.locationFieldDotText, drop && styles.locationFieldDotTextDrop]}>{icon}</Text></View><View style={styles.locationFieldTextWrap}><Text style={styles.locationFieldLabel}>{label}</Text><TextInput ref={inputRef} value={value} onFocus={onFocus} onBlur={onBlur} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={colors.textMuted} style={styles.locationFieldInput} returnKeyType="next" /></View></View>;
+  return <View style={[styles.locationField, active && styles.locationFieldActive]}><View style={[styles.locationFieldDot, drop && styles.locationFieldDotDrop]}><Text style={[styles.locationFieldDotText, drop && styles.locationFieldDotTextDrop]}>{icon}</Text></View><View style={styles.locationFieldTextWrap}><Text style={styles.locationFieldLabel}>{label}</Text><TextInput ref={inputRef} value={value} onFocus={onFocus} onBlur={onBlur} onChangeText={onChangeText} onSubmitEditing={onSubmitEditing} placeholder={placeholder} placeholderTextColor={colors.textMuted} style={styles.locationFieldInput} returnKeyType="done" /></View></View>;
 }
 
-function PinDropPicker({ target, initialCoordinate, onBack, onConfirm }: { target: LocationTarget; initialCoordinate?: Coordinate; onBack: () => void; onConfirm: (address: string, coordinate: Coordinate) => void }) {
+function PinDropPicker({ target, initialCoordinate, initialAddress, requiresManualPin, onBack, onConfirm }: { target: LocationTarget; initialCoordinate?: Coordinate; initialAddress?: string; requiresManualPin?: boolean; onBack: () => void; onConfirm: (address: string, coordinate: Coordinate) => void }) {
   const { t } = useTranslation();
   const mapRef = useRef<MapView>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const coordinate = initialCoordinate ?? { latitude: NANDYAL.latitude, longitude: NANDYAL.longitude };
   const [selectedCoordinate, setSelectedCoordinate] = useState<Coordinate>(coordinate);
-  const [address, setAddress] = useState(t('location.resolvingAddress'));
+  const [address, setAddress] = useState(initialAddress ?? t('location.resolvingAddress'));
+  const lastResolvedCoordinate = useRef<Coordinate | null>(null);
+  const skipInitialRegionResolution = useRef(Boolean(initialAddress) || requiresManualPin);
+  const [hasPlacedPin, setHasPlacedPin] = useState(!requiresManualPin);
 
   const resolveAddress = (next: Coordinate) => {
     if (timer.current) clearTimeout(timer.current);
+    const previous = lastResolvedCoordinate.current;
+    // A pin can emit many region updates while the user pans. Only resolve
+    // once it has moved roughly 25 m from the last address lookup.
+    if (previous && straightLineDistanceMeters(previous, next) < 25) return;
     setAddress(t('location.resolvingAddress'));
     timer.current = setTimeout(() => {
+      lastResolvedCoordinate.current = next;
       reverseGeocodeAddress(next, t('location.pinAddressFallback')).then(setAddress);
-    }, 350);
+    }, 1200);
   };
 
   useEffect(() => {
-    resolveAddress(coordinate);
+    if (!initialAddress && !requiresManualPin) resolveAddress(coordinate);
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, []);
 
@@ -535,6 +566,11 @@ function PinDropPicker({ target, initialCoordinate, onBack, onConfirm }: { targe
       onRegionChangeComplete={(region) => {
         const next = { latitude: region.latitude, longitude: region.longitude };
         setSelectedCoordinate(next);
+        if (skipInitialRegionResolution.current) {
+          skipInitialRegionResolution.current = false;
+          return;
+        }
+        setHasPlacedPin(true);
         resolveAddress(next);
       }}
       style={StyleSheet.absoluteFill}
@@ -545,12 +581,20 @@ function PinDropPicker({ target, initialCoordinate, onBack, onConfirm }: { targe
       <View style={styles.sheetHandle} />
       <Text style={styles.pinPickerTitle}>{t(target === 'pickup' ? 'location.selectPickup' : 'location.selectDrop')}</Text>
       <View style={styles.pinAddressCard}><Text style={styles.pinAddressIcon}>●</Text><Text style={styles.pinAddressText} numberOfLines={3}>{address}</Text></View>
-      <PrimaryButton label={t(target === 'pickup' ? 'location.confirmPickup' : 'location.confirmDrop')} onPress={() => onConfirm(address, selectedCoordinate)} />
+      {requiresManualPin && <Text style={styles.pinPickerHint}>Move the map to place the exact pin for this location.</Text>}
+      <PrimaryButton label={t(target === 'pickup' ? 'location.confirmPickup' : 'location.confirmDrop')} onPress={() => onConfirm(address, selectedCoordinate)} disabled={!hasPlacedPin} />
     </View>
   </SafeAreaView>;
 }
 
 async function reverseGeocodeAddress(coordinate: Coordinate, fallback: string) {
+  try {
+    const { address } = await googleMapsService.reverseGeocode(coordinate);
+    if (address) return address;
+  } catch {
+    // Expo's local provider keeps the location picker usable during an outage,
+    // without ever exposing a Google server key to the application.
+  }
   try {
     const [place] = await Location.reverseGeocodeAsync(coordinate);
     if (!place) return fallback;
@@ -560,13 +604,6 @@ async function reverseGeocodeAddress(coordinate: Coordinate, fallback: string) {
   } catch { return fallback; }
 }
 
-async function geocodeAddress(address: string): Promise<Coordinate | undefined> {
-  try {
-    const [place] = await Location.geocodeAsync(address);
-    return place ? { latitude: place.latitude, longitude: place.longitude } : undefined;
-  } catch { return undefined; }
-}
-
 /* ─────────────────────────── RIDE TYPE ─────────────────────────── */
 
 export function RideTypeScreen({
@@ -574,6 +611,7 @@ export function RideTypeScreen({
   selected,
   onSelect,
   onPassengerCountChange,
+  onRouteQuote,
   onNext,
   onBack,
   onEditLocation,
@@ -582,6 +620,7 @@ export function RideTypeScreen({
   selected: RideKind;
   onSelect: (kind: RideKind) => void;
   onPassengerCountChange: (count: number) => void;
+  onRouteQuote: (quote: RouteQuote) => void;
   onNext: () => void;
   onBack: () => void;
   onEditLocation: (target: LocationTarget) => void;
@@ -590,37 +629,58 @@ export function RideTypeScreen({
   const mapRef = useRef<MapView>(null);
   const pickupCoordinate = ride.pickupCoordinate ?? locationCoordinate(ride.pickup, 0);
   const dropCoordinate = ride.dropCoordinate ?? locationCoordinate(ride.drop, 1);
-  const routeCoordinates = [
-    pickupCoordinate,
-    { latitude: (pickupCoordinate.latitude + dropCoordinate.latitude) / 2 + 0.0014, longitude: (pickupCoordinate.longitude + dropCoordinate.longitude) / 2 - 0.0012 },
-    dropCoordinate,
-  ];
+  const [routeQuote, setRouteQuote] = useState<RouteQuote | undefined>(ride.routeQuote);
+  const [routeLoading, setRouteLoading] = useState(!hasUsableRouteQuote(ride.routeQuote));
+  const [routeError, setRouteError] = useState<string | null>(null);
+  const routeId = typeof routeQuote?.id === 'string' ? routeQuote.id : null;
+  const encodedPolyline = typeof routeQuote?.encodedPolyline === 'string' ? routeQuote.encodedPolyline : '';
+  const routeCoordinates = decodeGooglePolyline(encodedPolyline);
+  const hasValidRouteQuote = hasUsableRouteQuote(routeQuote);
+  const routeDiagnostic = routeLoading
+    ? 'Route diagnostic: requesting preview…'
+    : routeError
+      ? `Route diagnostic: ${routeError}`
+      : routeQuote
+        ? `Route diagnostic: id ${routeId ?? 'missing'} · ${encodedPolyline.length} encoded chars · ${routeCoordinates.length} decoded points`
+        : 'Route diagnostic: no quote returned';
 
   useEffect(() => {
+    let active = true;
+    if (hasUsableRouteQuote(ride.routeQuote)) { setRouteQuote(ride.routeQuote); setRouteError(null); setRouteLoading(false); return; }
+    setRouteQuote(undefined);
+    setRouteLoading(true);
+    setRouteError(null);
+    googleMapsService.previewTripRoute(pickupCoordinate, dropCoordinate)
+      .then((quote) => { if (active) { setRouteQuote(quote); onRouteQuote(quote); } })
+      .catch((error) => { if (active) { setRouteQuote(undefined); setRouteError(error instanceof Error ? error.message : 'Road route is unavailable'); } })
+      .finally(() => { if (active) setRouteLoading(false); });
+    return () => { active = false; };
+  }, [ride.routeQuote, pickupCoordinate.latitude, pickupCoordinate.longitude, dropCoordinate.latitude, dropCoordinate.longitude, onRouteQuote]);
+
+  useEffect(() => {
+    if (routeCoordinates.length < 2) return;
     const timer = setTimeout(() => mapRef.current?.fitToCoordinates(routeCoordinates, { animated: true, edgePadding: { top: 34, right: 34, bottom: 34, left: 34 } }), 100);
     return () => clearTimeout(timer);
-  }, [ride.drop, ride.pickup]);
-  const tripDistanceMeters = straightLineDistanceMeters(pickupCoordinate, dropCoordinate);
-  const options: Array<{ kind: RideKind; icon: string; fare: number; eta: number }> = [
-    { kind: 'bike', icon: '🏍️', fare: calculateFare({ rideType: 'bike', passengerCount: 1, tripDistanceMeters }).total, eta: 3 },
-    { kind: 'auto', icon: '🛺', fare: calculateFare({ rideType: 'auto', passengerCount: ride.passengerCount, tripDistanceMeters }).total, eta: 5 },
+  }, [routeQuote?.id]);
+  const options: Array<{ kind: RideKind; icon: string; fare?: number; eta: number }> = [
+    { kind: 'bike', icon: '🏍️', fare: hasValidRouteQuote ? calculateFare({ rideType: 'bike', passengerCount: 1, tripDistanceMeters: routeQuote.distanceMeters }).total : undefined, eta: 3 },
+    { kind: 'auto', icon: '🛺', fare: hasValidRouteQuote ? calculateFare({ rideType: 'auto', passengerCount: ride.passengerCount, tripDistanceMeters: routeQuote.distanceMeters }).total : undefined, eta: 5 },
   ];
 
   return <SafeAreaView style={styles.rideOptionsSafe} edges={['top', 'left', 'right']}>
     <MapView ref={mapRef} provider={PROVIDER_GOOGLE} initialRegion={NANDYAL} style={StyleSheet.absoluteFill}>
       <Marker coordinate={pickupCoordinate} pinColor={colors.success} title={t('rides.pickup')} />
       <Marker coordinate={dropCoordinate} pinColor={colors.accent} title={t('rides.drop')} />
-      <Polyline coordinates={routeCoordinates} strokeColor={colors.primaryDark} strokeWidth={5} />
-      <Marker coordinate={{ latitude: routeCoordinates[1].latitude + 0.001, longitude: routeCoordinates[1].longitude - 0.001 }}><View style={styles.captainMarker}><Text style={styles.captainMarkerText}>🛺</Text></View></Marker>
-      <Marker coordinate={{ latitude: routeCoordinates[1].latitude - 0.0012, longitude: routeCoordinates[1].longitude + 0.001 }}><View style={styles.captainMarker}><Text style={styles.captainMarkerText}>🏍️</Text></View></Marker>
+      {routeCoordinates.length > 1 && <Polyline coordinates={routeCoordinates} strokeColor={colors.primaryDark} strokeWidth={5} />}
     </MapView>
     <View style={styles.rideOptionsTop}>
       <Pressable onPress={onBack} accessibilityRole="button" style={[styles.rideOptionsBack, styles.rideOptionsBackFloating, shadows.soft]}><Text style={styles.rideOptionsBackText}>‹</Text></Pressable>
       <View style={[styles.routeSummary, shadows.soft]}><Pressable onPress={() => onEditLocation('pickup')} accessibilityRole="button" style={styles.routeSummaryPlace}><Text style={styles.routeSummaryDot}>●</Text><Text style={styles.routeSummaryText} numberOfLines={1}>{ride.pickup}</Text></Pressable><Text style={styles.routeSummaryArrow}>→</Text><Pressable onPress={() => onEditLocation('drop')} accessibilityRole="button" style={styles.routeSummaryPlace}><Text style={[styles.routeSummaryDot, styles.routeSummaryDropDot]}>●</Text><Text style={styles.routeSummaryText} numberOfLines={1}>{ride.drop}</Text></Pressable></View>
     </View>
+    <Text style={styles.routeDiagnostic}>{routeDiagnostic}</Text>
     <View style={[styles.rideOptionsSheet, shadows.card]}>
       <View style={styles.sheetHandle} />
-      <View style={styles.rideOptionsHeader}><Text style={styles.rideOptionsHeading}>{t('rides.selectRide')}</Text><Text style={styles.rideFareHeading}>{t('rides.estimate')}</Text></View>
+      <View style={styles.rideOptionsHeader}><Text style={styles.rideOptionsHeading}>{t('rides.selectRide')}</Text><Text style={[styles.rideFareHeading, routeError && styles.rideFareHeadingError]}>{routeLoading ? 'Finding road route…' : routeError ? t('rides.routeUnavailable') : t('rides.estimate')}</Text></View>
       <View style={styles.rideOptionList}>{options.map((option) => (
         <RideCard
           key={option.kind}
@@ -632,7 +692,7 @@ export function RideTypeScreen({
       ))}</View>
       {selected === 'auto' && <View style={styles.passengerPicker}><Text style={styles.passengerPickerLabel}>{t('rides.autoPassengers')}</Text><View style={styles.passengerChoices}>{[1, 2, 3].map((count) => <Pressable key={count} onPress={() => onPassengerCountChange(count)} accessibilityRole="button" accessibilityState={{ selected: ride.passengerCount === count }} style={[styles.passengerChoice, ride.passengerCount === count && styles.passengerChoiceSelected]}><Text style={[styles.passengerChoiceText, ride.passengerCount === count && styles.passengerChoiceTextSelected]}>{formatNumber(count)}</Text></Pressable>)}</View></View>}
       <View style={styles.rideOptionsExtras}><Text style={styles.rideOptionsExtra}>₹ {t('rides.cash')}</Text><View style={styles.rideOptionsDivider} /><Text style={styles.rideOptionsExtra}>{t('rides.offers')}</Text></View>
-      <PrimaryButton label={t('rides.bookSelected', { ride: t(`rides.${selected}`) })} onPress={onNext} />
+      <PrimaryButton label={t('rides.bookSelected', { ride: t(`rides.${selected}`) })} onPress={onNext} disabled={!hasValidRouteQuote || routeLoading} />
     </View>
   </SafeAreaView>;
 }
@@ -651,7 +711,7 @@ function RideCard({
   onSelect,
   t,
 }: {
-  option: { kind: RideKind; icon: string; fare: number; eta: number };
+  option: { kind: RideKind; icon: string; fare?: number; eta: number };
   selected: boolean;
   onSelect: () => void;
   t: (k: string) => string;
@@ -687,7 +747,7 @@ function RideCard({
           <Text style={styles.rideName}>{t(`rides.${option.kind}`)}</Text>
           <Text style={styles.rideDetail}>{t(`rides.${option.kind}Detail`)} · {(t as any)('rides.eta', { minutes: formatNumber(option.eta) })}</Text>
         </View>
-        <Text style={styles.rideFare}>{formatFare(option.fare)}</Text>
+        <Text style={styles.rideFare}>{option.fare === undefined ? '—' : formatFare(option.fare)}</Text>
         {selected && (
           <View style={styles.rideCheck}>
             <Text style={styles.rideCheckText}>✓</Text>
@@ -718,11 +778,14 @@ export function BookingConfirmScreen({
   onBack: () => void;
 }) {
   const { t } = useTranslation();
-  const pickupCoordinate = ride.pickupCoordinate ?? locationCoordinate(ride.pickup, 0);
-  const dropCoordinate = ride.dropCoordinate ?? locationCoordinate(ride.drop, 1);
-  const fare = calculateFare({ rideType: ride.kind, passengerCount: ride.kind === 'bike' ? 1 : ride.passengerCount, tripDistanceMeters: straightLineDistanceMeters(pickupCoordinate, dropCoordinate) });
+  const routeQuote = hasUsableRouteQuote(ride.routeQuote) ? ride.routeQuote : undefined;
+  const fare = routeQuote ? calculateFare({ rideType: ride.kind, passengerCount: ride.kind === 'bike' ? 1 : ride.passengerCount, tripDistanceMeters: routeQuote.distanceMeters }) : null;
   const [booking, setBooking] = useState(false);
   const book = async () => {
+    if (!routeQuote) {
+      Alert.alert(t('rides.routeUnavailable'));
+      return;
+    }
     setBooking(true);
     try {
       const createdRide = await rideCreationService.create(ride);
@@ -740,7 +803,7 @@ export function BookingConfirmScreen({
         <SummaryRow label={t('rides.drop')} value={ride.drop} icon="●" locationTone="drop" />
         <SummaryRow label={t('rides.ride')} value={t(`rides.${ride.kind}`)} icon={ride.kind === 'bike' ? '🏍️' : '🛺'} />
         {ride.kind === 'auto' && <SummaryRow label={t('rides.passengers')} value={formatNumber(ride.passengerCount)} icon="👤" />}
-        <SummaryRow label={t('rides.estimate')} value={formatFare(fare.total)} icon="💰" last />
+        <SummaryRow label={t('rides.estimate')} value={fare ? formatFare(fare.total) : '—'} icon="💰" last />
       </View>
       <PrimaryButton label={booking ? t('login.pleaseWait') : t('rides.book')} onPress={() => { void book(); }} disabled={booking} />
     </ScreenShell>
@@ -857,6 +920,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
   const [liveRide, setLiveRide] = useState<DispatchRide | null>(null);
   const [captainDetails, setCaptainDetails] = useState<{ fullName: string; vehicleType: RideKind | null } | null>(null);
   const [pickupPin, setPickupPin] = useState<string | null>(null);
+  const [captainRoute, setCaptainRoute] = useState<Coordinate[]>([]);
   const pickup = ride.pickupCoordinate ?? locationCoordinate(ride.pickup, 0);
   const captainStart = { latitude: pickup.latitude - 0.008, longitude: pickup.longitude - 0.006 };
   const captainCoordinate = {
@@ -890,6 +954,18 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
       }
     });
   }, [onHome, ride.id]);
+  useEffect(() => {
+    if (!ride.id || ride.id.startsWith('local-')) return;
+    const rideId = ride.id;
+    let active = true;
+    const loadRoute = () => {
+      void googleMapsService.rideRoute(rideId, 'captain_to_pickup')
+        .then((stored) => { if (active) setCaptainRoute(decodeGooglePolyline(stored.encoded_polyline)); })
+        .catch(() => { if (active) setCaptainRoute([]); });
+    };
+    loadRoute();
+    return rideDispatchService.subscribeToRide(rideId, loadRoute);
+  }, [ride.id]);
   const startCancellation = () => {
     setCancellationReason(null);
     setOtherReason('');
@@ -933,6 +1009,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
   const displayedCaptainCoordinate = liveRide?.captain_latitude != null && liveRide?.captain_longitude != null
     ? { latitude: Number(liveRide.captain_latitude), longitude: Number(liveRide.captain_longitude) }
     : captainCoordinate;
+  const displayedApproachRoute = captainRoute.length > 1 ? captainRoute : approachRoute;
   const inProgress = liveStatus === 'in_progress';
   const awaitingFareApproval = liveRide?.fare_approval_status === 'pending';
   const destinationDistanceKm = estimateCoordinateDistanceKm(displayedCaptainCoordinate, ride.dropCoordinate ?? locationCoordinate(ride.drop, 1));
@@ -941,7 +1018,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
   return <SafeAreaView style={styles.assignedSafe} edges={['top', 'left', 'right']}>
     <MapView ref={mapRef} provider={PROVIDER_GOOGLE} initialRegion={NANDYAL} style={StyleSheet.absoluteFill}>
       <Marker coordinate={pickup} pinColor={colors.success} title={t('rides.pickup')} />
-      <Polyline coordinates={approachRoute} strokeColor={colors.primaryDark} strokeWidth={5} />
+      <Polyline coordinates={displayedApproachRoute} strokeColor={colors.primaryDark} strokeWidth={5} />
       <Marker.Animated coordinate={displayedCaptainCoordinate}><View style={styles.liveCaptainMarker}><Text style={styles.liveCaptainIcon}>🛺</Text></View></Marker.Animated>
     </MapView>
     <Pressable onPress={onHome} accessibilityRole="button" style={[styles.assignedBack, shadows.soft]}><Text style={styles.rideOptionsBackText}>‹</Text></Pressable>
@@ -1115,6 +1192,9 @@ const styles = StyleSheet.create({
   locationQuickActions: { flexDirection: 'row', gap: 10 },
   locationQuickAction: { alignItems: 'center', backgroundColor: colors.primaryLight, borderColor: colors.primary, borderRadius: radii.md, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: 8 },
   locationQuickActionText: { color: colors.primaryDark, fontFamily, fontSize: fontSize.xs, fontWeight: '800', textAlign: 'center' },
+  locationResolution: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 20, marginTop: 2 },
+  locationResolutionFailed: { color: '#B42318', fontWeight: '700' },
+  pinPickerHint: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 20, marginBottom: 8 },
   pinFallback: { backgroundColor: colors.primaryLight, borderColor: '#BFE8DE', borderRadius: radii.lg, borderWidth: 1, gap: 8, padding: 14 },
   pinFallbackTitle: { color: colors.primaryDark, fontFamily, fontSize: fontSize.md, fontWeight: '800' },
   pinFallbackHint: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 21 },
@@ -1159,6 +1239,8 @@ const styles = StyleSheet.create({
   rideOptionList: { gap: 2 },
   rideOptionsExtras: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', height: 48, justifyContent: 'space-around' },
   rideOptionsExtra: { color: colors.textPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '700' },
+  rideFareHeadingError: { color: '#B42318' },
+  routeDiagnostic: { backgroundColor: 'rgba(255,255,255,0.92)', color: colors.textPrimary, fontFamily, fontSize: 11, left: 18, padding: 8, position: 'absolute', right: 18, top: 112 },
   rideOptionsDivider: { backgroundColor: colors.divider, height: 24, width: 1 },
 
   // Login

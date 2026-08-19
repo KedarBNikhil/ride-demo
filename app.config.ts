@@ -40,7 +40,6 @@ const config: ExpoConfig = {
     ...(isCaptain ? [['expo-image-picker', { cameraPermission: 'Allow Nandyal Ride Captain to use your camera for documents.', photosPermission: 'Allow Nandyal Ride Captain to access document photos.' }]] : []),
   ],
   extra: {
-    googlePlacesApiKey: process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '',
     appMode: variant,
     // Public EAS project identifiers. Each independently installed app has its
     // own EAS project because it also has a distinct Android package identifier.

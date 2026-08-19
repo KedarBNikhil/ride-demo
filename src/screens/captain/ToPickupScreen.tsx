@@ -6,7 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { LiveLocationMap, type LiveCoordinate } from '../../components/LiveLocationMap';
 import { PrimaryButton } from '../../components/PrimaryButton';
-import type { CaptainRideRequest } from '../../services/rideDispatch';
+import { type CaptainRideRequest } from '../../services/rideDispatch';
+import { googleMapsService } from '../../services/googleMaps';
+import { decodeGooglePolyline } from '../../utils/polyline';
 import { colors, fontFamily, fontSize, radii, shadows } from '../../theme';
 import { hasMovedSignificantly } from '../../utils/location';
 
@@ -17,6 +19,7 @@ export function ToPickupScreen({ request, arrived, onPrimaryAction, onBack }: { 
   const mapRef = useRef<MapView>(null);
   const [location, setLocation] = useState<LiveCoordinate | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [storedRoute, setStoredRoute] = useState<LiveCoordinate[]>([]);
   const routeStart = location ?? routeFallback;
 
   useEffect(() => {
@@ -40,6 +43,14 @@ export function ToPickupScreen({ request, arrived, onPrimaryAction, onBack }: { 
   }, []);
 
   useEffect(() => {
+    let active = true;
+    void googleMapsService.rideRoute(request.rideId, 'captain_to_pickup')
+      .then((route) => { if (active) setStoredRoute(decodeGooglePolyline(route.encoded_polyline)); })
+      .catch(() => { if (active) setStoredRoute([]); });
+    return () => { active = false; };
+  }, [request.rideId]);
+
+  useEffect(() => {
     if (!mapReady) return;
     mapRef.current?.fitToCoordinates([routeStart, request.pickup], { animated: true, edgePadding: { top: 110, right: 70, bottom: 270, left: 70 } });
   }, [mapReady, request.pickup, routeStart.latitude, routeStart.longitude]);
@@ -50,7 +61,7 @@ export function ToPickupScreen({ request, arrived, onPrimaryAction, onBack }: { 
   return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
     <LiveLocationMap mapRef={mapRef} location={location} onMapReady={() => setMapReady(true)}>
       <Marker coordinate={request.pickup} pinColor={colors.accent} title={t('captain.pickup')} description={request.pickupArea} />
-      <Polyline coordinates={[routeStart, request.pickup]} strokeColor={colors.primary} strokeWidth={5} />
+      <Polyline coordinates={storedRoute.length > 1 ? storedRoute : [routeStart, request.pickup]} strokeColor={colors.primary} strokeWidth={5} />
     </LiveLocationMap>
     <Pressable onPress={onBack} style={[styles.back, shadows.card]}><Text style={styles.backText}>‹</Text></Pressable>
     <View style={[styles.sheet, shadows.card]}>

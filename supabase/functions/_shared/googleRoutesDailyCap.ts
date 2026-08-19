@@ -23,7 +23,7 @@ export class GoogleRoutesDailyCapError extends Error {
  * reservation: a network failure may still have reached Google and counting
  * it is the safer financial boundary.
  */
-export async function reserveGoogleRoutesCall(rideId: string, routeKind: RouteKind): Promise<string> {
+export async function reserveGoogleRoutesCall(rideId: string | null, routeKind: RouteKind): Promise<string> {
   const { data, error } = await admin.rpc('reserve_google_routes_call', {
     p_ride_id: rideId,
     p_route_kind: routeKind,

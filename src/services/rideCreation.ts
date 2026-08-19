@@ -8,6 +8,7 @@ export type RideDraft = {
   passengerCount: number;
   pickupCoordinate?: { latitude: number; longitude: number };
   dropCoordinate?: { latitude: number; longitude: number };
+  routeQuote?: { id: string; distanceMeters: number; durationSeconds: number; encodedPolyline: string };
 };
 
 export type CreatedRide = { id: string; persisted: boolean };
