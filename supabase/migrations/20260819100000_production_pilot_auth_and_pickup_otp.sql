@@ -127,7 +127,7 @@ create or replace function public.issue_customer_pickup_otp(p_ride_id uuid)
 returns text language plpgsql security definer set search_path = '' as $$
 declare v_ride public.rides; v_bytes bytea; v_otp text; v_salt bytea; v_value bigint;
 begin
-  perform public.require_production_user('customer');
+  perform public.require_pilot_user('customer');
   select * into v_ride from public.rides where id = p_ride_id and customer_id = auth.uid()
     and status in ('accepted', 'arrived') and fare_approval_status = 'approved' for update;
   if not found then raise exception 'Pickup OTP is not available for this ride'; end if;
@@ -148,7 +148,7 @@ create or replace function public.captain_start_ride(p_ride_id uuid, p_pickup_ot
 returns public.rides language plpgsql security definer set search_path = '' as $$
 declare v_ride public.rides;
 begin
-  perform public.require_production_user('captain');
+  perform public.require_pilot_user('captain');
   select * into v_ride from public.rides where id = p_ride_id and captain_id = auth.uid() and status = 'arrived' for update;
   if not found then raise exception 'Pickup OTP could not be verified'; end if;
   if not public.production_auth_is_enforced() then

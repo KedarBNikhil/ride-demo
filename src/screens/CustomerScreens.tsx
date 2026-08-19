@@ -790,8 +790,9 @@ export function BookingConfirmScreen({
     try {
       const createdRide = await rideCreationService.create(ride);
       await onBook(createdRide.id);
-    } catch {
-      Alert.alert(t('login.tryAgain'));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      Alert.alert(message.includes('Route quote expired') ? 'Route expired. Go back and refresh the route before booking.' : t('login.tryAgain'));
     } finally {
       setBooking(false);
     }
