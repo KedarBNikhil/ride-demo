@@ -1,6 +1,8 @@
 import { supabase } from '../lib/supabase';
 import { demoAuthService } from './demoAuth';
 import { registerPushNotifications } from './pushNotifications';
+import { isProductionAuthMode } from './authMode';
+import { createProductionAuthService } from './productionAuth';
 
 async function ensureCustomerSession() {
   if (!supabase) return null;
@@ -13,8 +15,13 @@ async function ensureCustomerSession() {
 
 /** Demo phone verification plus a persistent Supabase customer profile. */
 export const customerAuthService = {
-  sendOtp: demoAuthService.sendOtp,
+  sendOtp: isProductionAuthMode ? createProductionAuthService('customer').sendOtp : demoAuthService.sendOtp,
   async verifyOtp(phone: string, otp: string) {
+    if (isProductionAuthMode) {
+      await createProductionAuthService('customer').verifyOtp(phone, otp);
+      void registerPushNotifications('customer').catch(() => undefined);
+      return { verified: true };
+    }
     await demoAuthService.verifyOtp(phone, otp);
     await ensureCustomerSession();
     void registerPushNotifications('customer').catch(() => undefined);

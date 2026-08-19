@@ -89,6 +89,11 @@ async function placeCall<T>(kind: string, work: () => Promise<T>) {
   }
 }
 
+async function requirePilotIdentity(userId: string, appVariant: 'customer' | 'captain') {
+  const { error } = await admin.rpc('assert_pilot_identity_for_user', { p_user_id: userId, p_app_variant: appVariant });
+  if (error) throw new Error(error.message);
+}
+
 Deno.serve(async (request) => {
   if (request.method !== 'POST') return fail('Method not allowed', 405);
   const authorization = request.headers.get('Authorization');
@@ -101,6 +106,7 @@ Deno.serve(async (request) => {
   if (typeof action !== 'string') return fail('Action is required');
 
   try {
+    await requirePilotIdentity(userData.user.id, action === 'accept_offer' ? 'captain' : 'customer');
     if (action === 'autocomplete') {
       const input = String(body?.input ?? '').trim();
       if (input.length < 3 || input.length > 160) return response([]);

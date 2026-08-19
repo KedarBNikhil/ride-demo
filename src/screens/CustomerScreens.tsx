@@ -920,6 +920,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
   const [liveRide, setLiveRide] = useState<DispatchRide | null>(null);
   const [captainDetails, setCaptainDetails] = useState<{ fullName: string; vehicleType: RideKind | null } | null>(null);
   const [pickupPin, setPickupPin] = useState<string | null>(null);
+  const pickupOtpIssuedForRide = useRef<string | null>(null);
   const [captainRoute, setCaptainRoute] = useState<Coordinate[]>([]);
   const pickup = ride.pickupCoordinate ?? locationCoordinate(ride.pickup, 0);
   const captainStart = { latitude: pickup.latitude - 0.008, longitude: pickup.longitude - 0.006 };
@@ -949,8 +950,12 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
       if (updatedRide.captain_id) {
         void rideDispatchService.getAssignedCaptain(updatedRide.id).then(setCaptainDetails).catch(() => setCaptainDetails(null));
       }
-      if (updatedRide.status === 'accepted' || updatedRide.status === 'arrived') {
-        void rideDispatchService.getCustomerPickupPin(updatedRide.id).then(setPickupPin).catch(() => setPickupPin(null));
+      if ((updatedRide.status === 'accepted' || updatedRide.status === 'arrived') && pickupOtpIssuedForRide.current !== updatedRide.id) {
+        pickupOtpIssuedForRide.current = updatedRide.id;
+        void rideDispatchService.issueCustomerPickupOtp(updatedRide.id).then(setPickupPin).catch(() => {
+          pickupOtpIssuedForRide.current = null;
+          setPickupPin(null);
+        });
       }
     });
   }, [onHome, ride.id]);

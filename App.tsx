@@ -15,7 +15,7 @@ export default function App() {
     'NotoSansTelugu-Bold': NotoSansTelugu_700Bold,
     'NotoSansTelugu-ExtraBold': NotoSansTelugu_800ExtraBold,
   });
-  const initialMode: AppMode | null = isSeparateApp ? (appVariant === 'captain' ? 'captain' : 'customer') : null;
+  const initialMode: AppMode | null = isSeparateApp ? (appVariant === 'captain' ? 'captain' : appVariant === 'operator' ? 'operator' : 'customer') : null;
   const [mode, setMode] = useState<AppMode | null>(initialMode);
   const [flowVersion, setFlowVersion] = useState(0);
   if (!fontsLoaded) return null;

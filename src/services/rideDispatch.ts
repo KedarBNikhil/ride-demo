@@ -29,7 +29,7 @@ export type DispatchRide = {
   fare_approval_status?: 'estimated' | 'pending' | 'approved' | 'declined';
   captain_latitude?: number | null;
   captain_longitude?: number | null;
-  payment_status?: 'pending' | 'paid';
+  payment_status?: 'pending' | 'declared';
   payment_method?: 'cash' | 'upi' | null;
   customer_rating?: number | null;
   cancellation_reason_code?: string | null;
@@ -41,6 +41,21 @@ export type DispatchRide = {
 export type AssignedCaptainDetails = {
   fullName: string;
   vehicleType: RideKind | null;
+};
+
+export type SettlementQueueItem = {
+  settlement_id: string;
+  ride_id: string;
+  declared_method: 'cash' | 'upi';
+  amount_due: number;
+  settlement_status: 'awaiting_review' | 'confirmed' | 'flagged';
+  declared_at: string;
+  reviewed_at: string | null;
+  review_note: string | null;
+  pickup_address: string;
+  drop_address: string;
+  customer_name: string;
+  captain_name: string;
 };
 
 export type CaptainRideRequest = {
@@ -177,8 +192,8 @@ export const rideDispatchService = {
     return { fullName: assignedCaptain.full_name, vehicleType: assignedCaptain.vehicle_type };
   },
 
-  async getCustomerPickupPin(rideId: string) {
-    const { data, error } = await requireClient().rpc('customer_pickup_pin', { p_ride_id: rideId });
+  async issueCustomerPickupOtp(rideId: string) {
+    const { data, error } = await requireClient().rpc('issue_customer_pickup_otp', { p_ride_id: rideId });
     if (error) throw error;
     return data as string | null;
   },
@@ -333,6 +348,21 @@ export const rideDispatchService = {
     const { data, error } = await requireClient().rpc('customer_confirm_payment', { p_ride_id: rideId, p_method: method });
     if (error || !data) throw error ?? new Error('Payment could not be saved');
     return data as DispatchRide;
+  },
+
+  async getSettlementQueue(status: SettlementQueueItem['settlement_status'] | null = 'awaiting_review') {
+    const { data, error } = await requireClient().rpc('operator_settlement_queue', { p_status: status });
+    if (error) throw error;
+    return (data ?? []).map((item: SettlementQueueItem) => ({ ...item, amount_due: asNumber(item.amount_due) })) as SettlementQueueItem[];
+  },
+
+  async reviewSettlement(settlementId: string, action: 'confirmed' | 'flagged', note?: string) {
+    const { error } = await requireClient().rpc('operator_review_settlement', {
+      p_settlement_id: settlementId,
+      p_action: action,
+      p_note: note?.trim() || null,
+    });
+    if (error) throw error;
   },
 
   async rateCaptain(rideId: string, rating: number, note?: string) {

@@ -2,6 +2,8 @@ import type { AppLanguage } from '../i18n/createI18n';
 import { demoAuthService } from './demoAuth';
 import { supabase } from '../lib/supabase';
 import { registerPushNotifications } from './pushNotifications';
+import { isProductionAuthMode } from './authMode';
+import { createProductionAuthService } from './productionAuth';
 
 export type CaptainProfile = { name: string; language: AppLanguage; vehicleType: 'bike' | 'auto' | null };
 export type CaptainDocumentType = 'license' | 'rc' | 'insurance';
@@ -20,6 +22,7 @@ async function currentCaptainUser() {
   const client = requireSupabase();
   const { data: { session } } = await client.auth.getSession();
   if (session?.user) return session.user;
+  if (isProductionAuthMode) throw new Error('AUTHENTICATION_REQUIRED');
   const { data, error: signInError } = await client.auth.signInAnonymously();
   if (signInError?.code === 'anonymous_provider_disabled') throw new Error('DEMO_ANONYMOUS_SIGN_IN_DISABLED');
   if (signInError || !data.user) throw signInError ?? new Error('Unable to create a test captain session');
@@ -41,8 +44,13 @@ function payoutDetails(payout: CaptainPayout) {
 
 /** Replace these functions with API calls later; screens depend only on this contract. */
 export const captainOnboardingService = {
-  sendOtp: demoAuthService.sendOtp,
+  sendOtp: isProductionAuthMode ? createProductionAuthService('captain').sendOtp : demoAuthService.sendOtp,
   async verifyOtp(phone: string, otp: string) {
+    if (isProductionAuthMode) {
+      await createProductionAuthService('captain').verifyOtp(phone, otp);
+      void registerPushNotifications('captain').catch(() => undefined);
+      return { verified: true };
+    }
     await demoAuthService.verifyOtp(phone, otp);
     await currentCaptainUser();
     void registerPushNotifications('captain').catch(() => undefined);
