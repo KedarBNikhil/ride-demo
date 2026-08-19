@@ -103,6 +103,20 @@ export function CustomerHomeScreen({
   const [locationUnavailable, setLocationUnavailable] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [pickupMarkerReset, setPickupMarkerReset] = useState(0);
+  const [showOutOfAreaModal, setShowOutOfAreaModal] = useState(false);
+  const [hasShownOutOfAreaModal, setHasShownOutOfAreaModal] = useState(false);
+  const NANDYAL_CENTER = { latitude: 15.4889, longitude: 78.4836 };
+  const isOutOfArea = userLocation && straightLineDistanceMeters(userLocation, NANDYAL_CENTER) > 9000;
+
+  useEffect(() => {
+    if (userLocation) {
+      const distance = straightLineDistanceMeters(userLocation, NANDYAL_CENTER);
+      if (distance > 9000 && !hasShownOutOfAreaModal) {
+        setShowOutOfAreaModal(true);
+        setHasShownOutOfAreaModal(true);
+      }
+    }
+  }, [userLocation, hasShownOutOfAreaModal]);
 
   const requestFreshLocation = () => {
     if (!freshLocationRequest.current) {
@@ -231,14 +245,30 @@ export function CustomerHomeScreen({
     { icon: '🏛️', label: t('home.fort'), target: 'drop' as const },
   ];
 
+  const handlePickLocation = (target: LocationTarget) => {
+    if (isOutOfArea) {
+      setShowOutOfAreaModal(true);
+      return;
+    }
+    onPickLocation(target);
+  };
+
   const startBooking = async () => {
+    if (isOutOfArea) {
+      setShowOutOfAreaModal(true);
+      return;
+    }
     // An active ride remains available through Bookings; never start a second
     // selection flow while its cancellation/dispatch state is still open.
     if (hasActiveRide) { onBookings(); return; }
     if (userLocation) { onStartBooking(cachedAddress || t('location.gpsDefault'), userLocation); return; }
-    onPickLocation('pickup');
+    handlePickLocation('pickup');
   };
   const pickupHere = async (coordinate: Coordinate) => {
+    if (isOutOfArea) {
+      setShowOutOfAreaModal(true);
+      return;
+    }
     if (hasActiveRide) { onBookings(); return; }
     const isLiveLocation = userLocation && coordinate.latitude === userLocation.latitude && coordinate.longitude === userLocation.longitude;
     onPickupHere(isLiveLocation ? cachedAddress || t('location.gpsDefault') : await reverseGeocodeAddress(coordinate, t('location.gpsDefault')), coordinate);
@@ -265,12 +295,12 @@ export function CustomerHomeScreen({
               <Text style={styles.destinationPin}>⌖</Text><View style={styles.destinationTextWrap}><Text style={styles.destinationLabel}>{t('home.whereTo')}</Text><Text style={styles.destinationSub}>{t('home.whereToHint')}</Text></View><Text style={styles.destinationArrow}>→</Text>
             </Pressable>
             <View style={styles.savedRow}>
-              <SavedPlace icon="⌂" label={t('home.home')} sublabel={t('home.savedPlaceHint')} onPress={() => onPickLocation('pickup')} />
-              <SavedPlace icon="▣" label={t('home.work')} sublabel={t('home.savedPlaceHint')} onPress={() => onPickLocation('pickup')} />
+              <SavedPlace icon="⌂" label={t('home.home')} sublabel={t('home.savedPlaceHint')} onPress={() => handlePickLocation('pickup')} />
+              <SavedPlace icon="▣" label={t('home.work')} sublabel={t('home.savedPlaceHint')} onPress={() => handlePickLocation('pickup')} />
             </View>
             <View style={styles.homeExpandedOnly}>
-              <View style={styles.sectionHeading}><Text style={styles.homeSectionTitle}>{t('home.nearby')}</Text><Text style={styles.homeSectionLink}>{t('home.seeAll')}</Text></View>
-              <View style={styles.landmarkRow}>{landmarks.map((landmark) => <Pressable key={landmark.label} accessibilityRole="button" onPress={() => onPickLocation(landmark.target)} style={styles.landmarkCard}><Text style={styles.landmarkIcon}>{landmark.icon}</Text><Text style={styles.landmarkText} numberOfLines={2}>{landmark.label}</Text></Pressable>)}</View>
+              <View style={styles.sectionHeading}><Text style={styles.homeSectionTitle}>{t('home.nearby')}</Text><Text style={styles.homeSectionLink} onPress={() => handlePickLocation('drop')}>{t('home.seeAll')}</Text></View>
+              <View style={styles.landmarkRow}>{landmarks.map((landmark) => <Pressable key={landmark.label} accessibilityRole="button" onPress={() => handlePickLocation(landmark.target)} style={styles.landmarkCard}><Text style={styles.landmarkIcon}>{landmark.icon}</Text><Text style={styles.landmarkText} numberOfLines={2}>{landmark.label}</Text></Pressable>)}</View>
               <Pressable onPress={onProfile} accessibilityRole="button" style={styles.safetyCard}><Text style={styles.safetyIcon}>✓</Text><View style={styles.safetyTextWrap}><Text style={styles.safetyTitle}>{t('home.safetyTitle')}</Text><Text style={styles.safetySubtitle}>{t('home.safetySubtitle')}</Text></View><Text style={styles.safetyArrow}>›</Text></Pressable>
             </View>
           </View>
@@ -282,6 +312,24 @@ export function CustomerHomeScreen({
         <HomeTab icon="?" label={t('home.tabHelp')} onPress={() => Alert.alert(t('home.helpTitle'), t('home.helpMessage'))} />
         <HomeTab icon="♙" label={t('home.tabProfile')} onPress={onProfile} />
       </View>
+      {showOutOfAreaModal && (
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, shadows.card]}>
+            <Text style={styles.modalEmoji}>📍</Text>
+            <Text style={styles.modalTitle}>{t('home.outOfAreaTitle', 'Out of Service Area')}</Text>
+            <Text style={styles.modalMessage}>
+              {t('home.outOfAreaMessage', 'You seem to be out of Nandyal. Captains cannot reach you here at the moment.')}
+            </Text>
+            <Pressable
+              onPress={() => setShowOutOfAreaModal(false)}
+              accessibilityRole="button"
+              style={styles.modalButton}
+            >
+              <Text style={styles.modalButtonText}>{t('actions.done', 'Done')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1134,6 +1182,13 @@ function CustomerTabBar({ active, onHome, onBookings, onProfile }: { active: 'ho
 const styles = StyleSheet.create({
   // Map-led customer home
   mapHomeSafe: { flex: 1, backgroundColor: colors.primaryLight },
+  modalOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0, 0, 0, 0.45)', justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+  modalCard: { backgroundColor: colors.surface, borderRadius: radii.xl, padding: 24, width: '85%', maxWidth: 340, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  modalEmoji: { fontSize: 48, marginBottom: 16 },
+  modalTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '900', textAlign: 'center', marginBottom: 10 },
+  modalMessage: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  modalButton: { backgroundColor: colors.primary, borderRadius: radii.pill, paddingVertical: 12, paddingHorizontal: 32, width: '100%', alignItems: 'center' },
+  modalButtonText: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '800' },
   mapHomeTopBar: { alignItems: 'flex-start', paddingHorizontal: 18, paddingTop: 8 },
   mapHomeBrand: { backgroundColor: 'rgba(255,255,255,0.94)', borderColor: colors.border, borderRadius: radii.pill, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 8, ...shadows.soft },
   mapHomeBrandText: { color: colors.primaryDark, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },

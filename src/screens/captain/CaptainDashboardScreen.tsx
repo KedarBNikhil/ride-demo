@@ -1,7 +1,7 @@
 import * as Location from 'expo-location';
 import MapView from 'react-native-maps';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { LiveLocationMap, type LiveCoordinate } from '../../components/LiveLocationMap';
@@ -11,6 +11,39 @@ import { IncomingRideRequestSheet } from './IncomingRideRequestSheet';
 import { colors, fontFamily, fontSize, radii, shadows } from '../../theme';
 export function CaptainDashboardScreen({ online, onToggle, onSettings, onBookings, onRequest, request, onAccept, onReject, requestCycle, onResumeRide }: { online: boolean; onToggle: () => void; onSettings: () => void; onBookings?: () => void; onRequest: (request: CaptainRideRequest | null) => void; request: CaptainRideRequest | null; onAccept: () => void; onReject: () => void; requestCycle: number; onResumeRide?: (ride: CaptainActiveRide) => void }) {
   const { t } = useTranslation(); const mapRef = useRef<MapView>(null); const [location, setLocation] = useState<LiveCoordinate | null>(null); const [locationUnavailable, setLocationUnavailable] = useState(false);
+  const freshLocationRequest = useRef<Promise<Location.LocationObject> | null>(null);
+  const requestFreshLocation = () => {
+    if (!freshLocationRequest.current) {
+      freshLocationRequest.current = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+        .finally(() => { freshLocationRequest.current = null; });
+    }
+    return freshLocationRequest.current;
+  };
+  const centerOnLocation = async () => {
+    const servicesEnabled = await Location.hasServicesEnabledAsync();
+    if (!servicesEnabled) {
+      Alert.alert(t('home.locationServicesTitle'), t('home.locationServicesMessage'), [
+        { text: t('actions.cancel'), style: 'cancel' },
+        { text: t('home.openSettings'), onPress: () => { void Linking.openSettings(); } },
+      ]);
+      return;
+    }
+    if (location) {
+      mapRef.current?.animateToRegion({ ...location, latitudeDelta: 0.018, longitudeDelta: 0.018 }, 350);
+    }
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (permission.status !== 'granted') { setLocationUnavailable(true); return; }
+    try {
+      const current = await requestFreshLocation();
+      const coordinate = { latitude: current.coords.latitude, longitude: current.coords.longitude };
+      setLocation(coordinate);
+      setLocationUnavailable(false);
+      mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.018, longitudeDelta: 0.018 }, location ? 250 : 450);
+    } catch {
+      if (location) mapRef.current?.animateToRegion({ ...location, latitudeDelta: 0.018, longitudeDelta: 0.018 }, 650);
+      else setLocationUnavailable(true);
+    }
+  };
   useEffect(() => {
     let active = true;
     let subscription: Location.LocationSubscription | null = null;
@@ -63,6 +96,7 @@ export function CaptainDashboardScreen({ online, onToggle, onSettings, onBooking
   const showEarnings = () => Alert.alert(t('captain.earningsTitle'), t('captain.earningsMessage'));
   return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
     <LiveLocationMap mapRef={mapRef} location={location} />
+    <Pressable onPress={centerOnLocation} accessibilityRole="button" accessibilityLabel={t('home.recenter')} style={[styles.recenterButton, shadows.card]}><Text style={styles.recenterIcon}>⌖</Text></Pressable>
     <View style={styles.header}>
       <View style={[styles.badge, online ? styles.onlineBadge : styles.offlineBadge]}><Text style={styles.badgeText}>{online ? t('captain.onlineWaiting') : t('captain.offlineStatus')}</Text></View>
     </View>
@@ -98,4 +132,4 @@ export function CaptainBookingsScreen({ onHome, onSettings, onResumeRide }: { on
 function CaptainTab({ icon, label, active, onPress }: { icon: string; label: string; active?: boolean; onPress?: () => void }) {
   return <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: active }} style={styles.tab}><Text style={[styles.tabIcon, active && styles.tabIconActive]}>{icon}</Text><Text style={[styles.tabLabel, active && styles.tabLabelActive]} numberOfLines={1}>{label}</Text></Pressable>;
 }
-const styles = StyleSheet.create({ safe: { backgroundColor: colors.bg, flex: 1 }, header: { padding: 16 }, badge: { alignSelf: 'flex-start', borderRadius: radii.pill, paddingHorizontal: 14, paddingVertical: 10 }, onlineBadge: { backgroundColor: colors.success }, offlineBadge: { backgroundColor: '#6B7280' }, badgeText: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' }, locationNotice: { alignSelf: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, marginTop: 6, paddingHorizontal: 16, paddingVertical: 10 }, locationText: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm }, sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 76, left: 0, maxHeight: '55%', minHeight: 270, position: 'absolute', right: 0 }, handle: { alignSelf: 'center', backgroundColor: colors.border, borderRadius: 3, height: 5, marginTop: 10, width: 42 }, sheetContent: { gap: 10, padding: 20, paddingBottom: 28 }, bottomTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.xl, fontWeight: '900' }, bottomDetail: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm }, toggle: { alignItems: 'center', borderRadius: radii.pill, flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 7, minHeight: 58, paddingHorizontal: 18 }, toggleOnline: { backgroundColor: colors.primary }, toggleOffline: { backgroundColor: '#6B7280' }, knob: { backgroundColor: '#FFFFFF', borderRadius: 11, height: 22, width: 22 }, knobOnline: { backgroundColor: colors.surfaceMint }, toggleText: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' }, summaryRow: { flexDirection: 'row', gap: 10, marginTop: 4 }, summaryCard: { backgroundColor: colors.bg, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flex: 1, padding: 13 }, summaryValue: { color: colors.primaryDark, fontFamily, fontSize: fontSize.lg, fontWeight: '900' }, summaryLabel: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, marginTop: 3 }, sheetHint: { color: colors.textMuted, fontFamily, fontSize: fontSize.xs, lineHeight: 18, marginTop: 2 }, bookings: { gap: 16, padding: 20 }, bookingsTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize['2xl'], fontWeight: '900' }, bookingsEmpty: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md }, booking: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 7, padding: 18 }, bookingStatus: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '900' }, bookingRoute: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '800' }, bookingArrow: { color: colors.textMuted, fontSize: 20 }, bookingAction: { color: colors.primaryDark, fontFamily, fontSize: fontSize.sm, fontWeight: '900', marginTop: 6 }, tabBar: { backgroundColor: colors.surface, borderColor: colors.border, borderTopWidth: 1, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', left: 0, minHeight: 76, paddingBottom: 11, paddingTop: 9, position: 'absolute', right: 0, zIndex: 3 }, tab: { alignItems: 'center', flex: 1, gap: 2, minWidth: 0 }, tabIcon: { color: colors.textMuted, fontSize: 23, lineHeight: 25 }, tabIconActive: { color: colors.primary }, tabLabel: { color: colors.textMuted, fontFamily, fontSize: 11 }, tabLabelActive: { color: colors.primaryDark, fontWeight: '800' } });
+const styles = StyleSheet.create({ safe: { backgroundColor: colors.bg, flex: 1 }, header: { padding: 16 }, badge: { alignSelf: 'flex-start', borderRadius: radii.pill, paddingHorizontal: 14, paddingVertical: 10 }, onlineBadge: { backgroundColor: colors.success }, offlineBadge: { backgroundColor: '#6B7280' }, badgeText: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' }, locationNotice: { alignSelf: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, marginTop: 6, paddingHorizontal: 16, paddingVertical: 10 }, locationText: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm }, sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 76, left: 0, maxHeight: '55%', minHeight: 270, position: 'absolute', right: 0 }, handle: { alignSelf: 'center', backgroundColor: colors.border, borderRadius: 3, height: 5, marginTop: 10, width: 42 }, sheetContent: { gap: 10, padding: 20, paddingBottom: 28 }, bottomTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.xl, fontWeight: '900' }, bottomDetail: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm }, toggle: { alignItems: 'center', borderRadius: radii.pill, flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 7, minHeight: 58, paddingHorizontal: 18 }, toggleOnline: { backgroundColor: colors.primary }, toggleOffline: { backgroundColor: '#6B7280' }, knob: { backgroundColor: '#FFFFFF', borderRadius: 11, height: 22, width: 22 }, knobOnline: { backgroundColor: colors.surfaceMint }, toggleText: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' }, summaryRow: { flexDirection: 'row', gap: 10, marginTop: 4 }, summaryCard: { backgroundColor: colors.bg, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flex: 1, padding: 13 }, summaryValue: { color: colors.primaryDark, fontFamily, fontSize: fontSize.lg, fontWeight: '900' }, summaryLabel: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, marginTop: 3 }, sheetHint: { color: colors.textMuted, fontFamily, fontSize: fontSize.xs, lineHeight: 18, marginTop: 2 }, bookings: { gap: 16, padding: 20 }, bookingsTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize['2xl'], fontWeight: '900' }, bookingsEmpty: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md }, booking: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 7, padding: 18 }, bookingStatus: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '900' }, bookingRoute: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '800' }, bookingArrow: { color: colors.textMuted, fontSize: 20 }, bookingAction: { color: colors.primaryDark, fontFamily, fontSize: fontSize.sm, fontWeight: '900', marginTop: 6 }, tabBar: { backgroundColor: colors.surface, borderColor: colors.border, borderTopWidth: 1, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', left: 0, minHeight: 76, paddingBottom: 11, paddingTop: 9, position: 'absolute', right: 0, zIndex: 3 }, tab: { alignItems: 'center', flex: 1, gap: 2, minWidth: 0 }, tabIcon: { color: colors.textMuted, fontSize: 23, lineHeight: 25 }, tabIconActive: { color: colors.primary }, tabLabel: { color: colors.textMuted, fontFamily, fontSize: 11 }, tabLabelActive: { color: colors.primaryDark, fontWeight: '800' }, recenterButton: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.pill, borderWidth: 1, height: 50, justifyContent: 'center', position: 'absolute', right: 18, top: 76, width: 50, zIndex: 2 }, recenterIcon: { color: colors.primary, fontSize: 29, fontWeight: '800', lineHeight: 32 } });
