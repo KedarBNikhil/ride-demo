@@ -164,6 +164,11 @@ export const rideDispatchService = {
     return (data ?? []) as DispatchRide[];
   },
 
+  async getCustomerActiveRide(): Promise<DispatchRide | null> {
+    const rides = await this.getCustomerRideHistory();
+    return rides.find((ride) => ['requested', 'searching', 'accepted', 'arrived', 'in_progress'].includes(ride.status)) ?? null;
+  },
+
   subscribeToCustomerRideHistory(onRides: (rides: DispatchRide[]) => void, onError?: (error: Error) => void) {
     if (!supabase) return () => {};
     const client = supabase;
@@ -262,6 +267,7 @@ export const rideDispatchService = {
     if (!supabase) return () => {};
     const client = supabase;
     let channel: RealtimeChannel | null = null;
+    let refreshTimer: ReturnType<typeof setInterval> | null = null;
     const refresh = () => { void this.getRide(rideId).then(onRide).catch((error) => onError?.(error)); };
     refresh();
     // Navigation can briefly mount the next ride screen before React has
@@ -270,7 +276,11 @@ export const rideDispatchService = {
     channel = client.channel(`ride:${rideId}:${++rideSubscriptionSequence}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rides', filter: `id=eq.${rideId}` }, refresh)
       .subscribe();
-    return () => { if (channel) void client.removeChannel(channel); };
+    // Realtime is the low-latency path for captain coordinates. Polling the
+    // authoritative row also keeps the active marker moving when a device
+    // briefly misses a Realtime event while foregrounded.
+    refreshTimer = setInterval(refresh, 10_000);
+    return () => { if (refreshTimer) clearInterval(refreshTimer); if (channel) void client.removeChannel(channel); };
   },
 
   async setCaptainAvailability(isOnline: boolean, location?: Coordinate | null) {

@@ -11,6 +11,7 @@ import { googleMapsService } from '../../services/googleMaps';
 import { decodeGooglePolyline } from '../../utils/polyline';
 import { colors, fontFamily, fontSize, radii, shadows } from '../../theme';
 import { hasMovedSignificantly } from '../../utils/location';
+import { openGoogleMapsNavigation } from '../../utils/googleNavigation';
 
 const routeFallback: LiveCoordinate = { latitude: 15.4889, longitude: 78.4836 };
 
@@ -70,6 +71,7 @@ export function ToPickupScreen({ request, arrived, onPrimaryAction, onBack }: { 
         <Pressable onPress={callCustomer} style={styles.contactButton}><Text style={styles.contactText}>☎ {t('captain.call')}</Text></Pressable>
         <Pressable onPress={messageCustomer} style={styles.contactButton}><Text style={styles.contactText}>✉ {t('captain.message')}</Text></Pressable>
       </View>
+      <PrimaryButton label={t('captain.navigate')} onPress={() => openGoogleMapsNavigation(request.pickup)} secondary />
       <PrimaryButton label={t(arrived ? 'captain.startRideTitle' : 'captain.arrivedAtPickup')} onPress={onPrimaryAction} />
     </View>
   </SafeAreaView>;

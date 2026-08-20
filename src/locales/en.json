@@ -405,6 +405,16 @@
     "activityTitle": "Your activity",
     "activityMessage": "Completed and cancelled rides will appear here.",
     "earningsTitle": "Your earnings",
-    "earningsMessage": "Your daily earnings and payout details will appear here."
+    "earningsMessage": "Your daily earnings and payout details will appear here.",
+    "monthlyEarnings": "Monthly earnings summary",
+    "dailyEarnings": "Daily earnings",
+    "onlineTime": "Online time",
+    "rideTime": "Ride time",
+    "earningsBreakdown": "Earnings breakdown",
+    "rideEarnings": "Ride earnings",
+    "tips": "Tips",
+    "bonuses": "Bonuses",
+    "totalEarnings": "Total earnings",
+    "earningsRetry": "Could not load earnings. Tap to retry."
   }
 }

@@ -9,9 +9,11 @@ import { rideDispatchService, type CaptainActiveRide, type CaptainRideRequest, t
 import { registerPushNotifications } from '../../services/pushNotifications';
 import { IncomingRideRequestSheet } from './IncomingRideRequestSheet';
 import { colors, fontFamily, fontSize, radii, shadows } from '../../theme';
-export function CaptainDashboardScreen({ online, onToggle, onSettings, onBookings, onRequest, request, onAccept, onReject, requestCycle, onResumeRide }: { online: boolean; onToggle: () => void; onSettings: () => void; onBookings?: () => void; onRequest: (request: CaptainRideRequest | null) => void; request: CaptainRideRequest | null; onAccept: () => void; onReject: () => void; requestCycle: number; onResumeRide?: (ride: CaptainActiveRide) => void }) {
+import { captainEarningsService } from '../../services/captainEarnings';
+import { formatFare } from '../../utils/format';
+export function CaptainDashboardScreen({ online, onToggle, onSettings, onBookings, onEarnings, onRequest, request, onAccept, onReject, requestCycle, onResumeRide }: { online: boolean; onToggle: () => void; onSettings: () => void; onBookings?: () => void; onEarnings?: () => void; onRequest: (request: CaptainRideRequest | null) => void; request: CaptainRideRequest | null; onAccept: () => void; onReject: () => void; requestCycle: number; onResumeRide?: (ride: CaptainActiveRide) => void }) {
   const { t } = useTranslation(); const mapRef = useRef<MapView>(null); const [location, setLocation] = useState<LiveCoordinate | null>(null); const [locationUnavailable, setLocationUnavailable] = useState(false);
-  const freshLocationRequest = useRef<Promise<Location.LocationObject> | null>(null);
+  const freshLocationRequest = useRef<Promise<Location.LocationObject> | null>(null); const [today, setToday] = useState({ earnings: 0, trips: 0 });
   const requestFreshLocation = () => {
     if (!freshLocationRequest.current) {
       freshLocationRequest.current = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
@@ -82,6 +84,7 @@ export function CaptainDashboardScreen({ online, onToggle, onSettings, onBooking
     return () => { active = false; subscription?.remove(); };
   }, []);
   useEffect(() => { void registerPushNotifications('captain').catch(() => undefined); }, []);
+  useEffect(() => { void captainEarningsService.getToday().then((overview) => setToday({ earnings: overview.totalEarnings, trips: overview.tripCount })).catch(() => undefined); }, []);
   useEffect(() => { void rideDispatchService.getCaptainActiveRide().then((ride) => { if (ride) onResumeRide?.(ride); }).catch(() => undefined); }, [onResumeRide]);
   useEffect(() => { if (!online || request) return; return rideDispatchService.subscribeToCaptainOffers(onRequest); }, [online, onRequest, request, requestCycle]);
   useEffect(() => {
@@ -93,7 +96,7 @@ export function CaptainDashboardScreen({ online, onToggle, onSettings, onBooking
   }, [location, online]);
   const toggleAvailability = () => { void rideDispatchService.setCaptainAvailability(!online, location).then(onToggle); };
   const showBookings = () => onBookings?.();
-  const showEarnings = () => Alert.alert(t('captain.earningsTitle'), t('captain.earningsMessage'));
+  const showEarnings = () => onEarnings?.();
   return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
     <LiveLocationMap mapRef={mapRef} location={location} />
     <Pressable onPress={centerOnLocation} accessibilityRole="button" accessibilityLabel={t('home.recenter')} style={[styles.recenterButton, shadows.card]}><Text style={styles.recenterIcon}>⌖</Text></Pressable>
@@ -108,8 +111,8 @@ export function CaptainDashboardScreen({ online, onToggle, onSettings, onBooking
         <Text style={styles.bottomDetail}>{t(online ? 'captain.onlineWaiting' : 'captain.offlineDetail')}</Text>
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: online }} onPress={toggleAvailability} style={[styles.toggle, online ? styles.toggleOnline : styles.toggleOffline]}><View style={[styles.knob, online && styles.knobOnline]} /><Text style={styles.toggleText}>{t(online ? 'captain.goOffline' : 'captain.goOnline')}</Text></Pressable>
         <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}><Text style={styles.summaryValue}>₹0</Text><Text style={styles.summaryLabel}>{t('captain.todayEarnings')}</Text></View>
-          <View style={styles.summaryCard}><Text style={styles.summaryValue}>0</Text><Text style={styles.summaryLabel}>{t('captain.todayTrips')}</Text></View>
+          <View style={styles.summaryCard}><Text style={styles.summaryValue}>{formatFare(today.earnings)}</Text><Text style={styles.summaryLabel}>{t('captain.todayEarnings')}</Text></View>
+          <View style={styles.summaryCard}><Text style={styles.summaryValue}>{today.trips}</Text><Text style={styles.summaryLabel}>{t('captain.todayTrips')}</Text></View>
         </View>
         <Text style={styles.sheetHint}>{t('captain.homeSheetHint')}</Text>
       </ScrollView>
@@ -122,12 +125,12 @@ export function CaptainDashboardScreen({ online, onToggle, onSettings, onBooking
     </View>
   </SafeAreaView>;
 }
-export function CaptainBookingsScreen({ onHome, onSettings, onResumeRide }: { onHome: () => void; onSettings: () => void; onResumeRide: (ride: CaptainActiveRide) => void }) {
+export function CaptainBookingsScreen({ onHome, onSettings, onEarnings, onResumeRide }: { onHome: () => void; onSettings: () => void; onEarnings: () => void; onResumeRide: (ride: CaptainActiveRide) => void }) {
   const { t } = useTranslation(); const [ride, setRide] = useState<DispatchRide | null>(null);
   useEffect(() => { void rideDispatchService.getCaptainLatestRide().then(setRide).catch(() => setRide(null)); }, []);
   const active = ride?.status === 'accepted' || ride?.status === 'arrived' || ride?.status === 'in_progress';
   const resume = async () => { const current = await rideDispatchService.getCaptainActiveRide(); if (current) onResumeRide(current); };
-  return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}><View style={styles.bookings}><Text style={styles.bookingsTitle}>{t('captain.bookingsTitle')}</Text>{ride ? <Pressable accessibilityRole="button" onPress={() => { if (active) void resume(); }} style={[styles.booking, shadows.card]}><Text style={styles.bookingStatus}>{t(`captain.status${ride.status}`)}</Text><Text style={styles.bookingRoute} numberOfLines={1}>{ride.pickup_address}</Text><Text style={styles.bookingArrow}>→</Text><Text style={styles.bookingRoute} numberOfLines={1}>{ride.drop_address}</Text>{active && <Text style={styles.bookingAction}>{t('captain.viewBooking')} ›</Text>}</Pressable> : <Text style={styles.bookingsEmpty}>{t('captain.bookingsEmpty')}</Text>}</View><View style={styles.tabBar}><CaptainTab icon="⌂" label={t('captain.tabHome')} onPress={onHome} /><CaptainTab icon="▤" label={t('captain.tabBookings')} active /><CaptainTab icon="₹" label={t('captain.tabEarnings')} onPress={() => Alert.alert(t('captain.earningsTitle'), t('captain.earningsMessage'))} /><CaptainTab icon="♙" label={t('captain.tabProfile')} onPress={onSettings} /></View></SafeAreaView>;
+  return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}><View style={styles.bookings}><Text style={styles.bookingsTitle}>{t('captain.bookingsTitle')}</Text>{ride ? <Pressable accessibilityRole="button" onPress={() => { if (active) void resume(); }} style={[styles.booking, shadows.card]}><Text style={styles.bookingStatus}>{t(`captain.status${ride.status}`)}</Text><Text style={styles.bookingRoute} numberOfLines={1}>{ride.pickup_address}</Text><Text style={styles.bookingArrow}>→</Text><Text style={styles.bookingRoute} numberOfLines={1}>{ride.drop_address}</Text>{active && <Text style={styles.bookingAction}>{t('captain.viewBooking')} ›</Text>}</Pressable> : <Text style={styles.bookingsEmpty}>{t('captain.bookingsEmpty')}</Text>}</View><View style={styles.tabBar}><CaptainTab icon="⌂" label={t('captain.tabHome')} onPress={onHome} /><CaptainTab icon="▤" label={t('captain.tabBookings')} active /><CaptainTab icon="₹" label={t('captain.tabEarnings')} onPress={onEarnings} /><CaptainTab icon="♙" label={t('captain.tabProfile')} onPress={onSettings} /></View></SafeAreaView>;
 }
 function CaptainTab({ icon, label, active, onPress }: { icon: string; label: string; active?: boolean; onPress?: () => void }) {
   return <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: active }} style={styles.tab}><Text style={[styles.tabIcon, active && styles.tabIconActive]}>{icon}</Text><Text style={[styles.tabLabel, active && styles.tabLabelActive]} numberOfLines={1}>{label}</Text></Pressable>;

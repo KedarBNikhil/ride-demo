@@ -1,5 +1,6 @@
--- Cancellation charges are deliberately deferred. This migration only records
--- the cancellation and reason while allowing the customer to end an active ride.
+-- The customer client treats a cancellation as durable only when both the
+-- terminal status and timestamp are returned. Keep this consistent for every
+-- eligible stage, including when the captain has arrived.
 create or replace function public.customer_cancel_ride(p_ride_id uuid, p_reason_code text, p_reason_detail text default null)
 returns public.rides language plpgsql security definer set search_path = '' as $$
 declare v_ride public.rides;
@@ -45,6 +46,3 @@ begin
   return v_ride;
 end;
 $$;
-
-revoke all on function public.customer_cancel_ride(uuid, text, text) from public, anon;
-grant execute on function public.customer_cancel_ride(uuid, text, text) to authenticated;

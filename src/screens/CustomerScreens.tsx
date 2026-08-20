@@ -982,7 +982,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
   const captainDistanceKm = Math.max(0.2, 1.8 - (step * 0.2));
   const arrived = liveStatus === 'arrived' || liveStatus === 'in_progress' || liveStatus === 'completed';
   const canCancel = liveStatus === 'searching' || liveStatus === 'accepted' || liveStatus === 'arrived' || liveStatus === 'in_progress';
-  const cancellationMayIncurCharge = liveStatus === 'arrived' || liveStatus === 'in_progress';
+  const cancellationMayIncurCharge = liveStatus === 'in_progress';
   const captainName = captainDetails?.fullName || t('rides.captain');
   const vehicleType = captainDetails?.vehicleType;
 
@@ -1013,13 +1013,13 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
     const rideId = ride.id;
     let active = true;
     const loadRoute = () => {
-      void googleMapsService.rideRoute(rideId, 'captain_to_pickup')
+      void googleMapsService.rideRoute(rideId, liveStatus === 'in_progress' ? 'initial_trip' : 'captain_to_pickup')
         .then((stored) => { if (active) setCaptainRoute(decodeGooglePolyline(stored.encoded_polyline)); })
         .catch(() => { if (active) setCaptainRoute([]); });
     };
     loadRoute();
-    return rideDispatchService.subscribeToRide(rideId, loadRoute);
-  }, [ride.id]);
+    return undefined;
+  }, [liveStatus, ride.id]);
   const startCancellation = () => {
     setCancellationReason(null);
     setOtherReason('');
@@ -1029,10 +1029,12 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
   const submitCancellation = async () => {
     if (!cancellationReason) return setCancellationError(t('rides.cancelReasonRequired'));
     if (cancellationReason === 'other' && !otherReason.trim()) return setCancellationError(t('rides.cancelReasonOtherRequired'));
-    if (!ride.id) return setCancellationError(t('login.tryAgain'));
     setCancelling(true);
     try {
-      await rideCreationService.cancel(ride.id, cancellationReason, otherReason);
+      const activeRide = await rideDispatchService.getCustomerActiveRide();
+      const rideId = activeRide?.id ?? liveRide?.id ?? ride.id;
+      if (!rideId || !activeRide || !['requested', 'searching', 'accepted', 'arrived', 'in_progress'].includes(activeRide.status)) throw new Error('Ride can no longer be cancelled');
+      await rideCreationService.cancel(rideId, cancellationReason, otherReason);
       Alert.alert(t('rides.rideCancelled'), cancellationMayIncurCharge ? t('rides.cancellationChargePending') : undefined, [{ text: t('actions.done'), onPress: onCancelled }]);
     } catch {
       setCancellationError(t('login.tryAgain'));
@@ -1076,7 +1078,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
       <Marker.Animated coordinate={displayedCaptainCoordinate}><View style={styles.liveCaptainMarker}><Text style={styles.liveCaptainIcon}>🛺</Text></View></Marker.Animated>
     </MapView>
     <Pressable onPress={onHome} accessibilityRole="button" style={[styles.assignedBack, shadows.soft]}><Text style={styles.rideOptionsBackText}>‹</Text></Pressable>
-    <ScrollView style={[styles.assignedSheet, shadows.card]} contentContainerStyle={styles.assignedSheetContent} showsVerticalScrollIndicator={false} bounces={false}>
+    <ScrollView style={[styles.assignedSheet, shadows.card]} contentContainerStyle={styles.assignedSheetContent} showsVerticalScrollIndicator={false} nestedScrollEnabled bounces={false}>
       <View style={styles.sheetHandle} />
       {!arrived && <Text style={styles.bookingStatus}>{awaitingFareApproval ? t('rides.fareQuoteWaiting') : liveStatus === 'accepted' ? t('rides.bookedMessage') : t('rides.searchingSubtitle')}</Text>}
       <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(inProgress ? 'rides.startedTitle' : arrived ? 'rides.hereTitle' : awaitingFareApproval ? 'rides.fareQuoteTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{inProgress ? t('rides.startedSubtitle') : arrived ? t('rides.hereSubtitle') : awaitingFareApproval ? t('rides.fareQuoteWaiting') : `${t('rides.arriving')} · ${t('rides.eta', { minutes: formatNumber(etaMinutes) })}`}</Text></View>{!arrived && !awaitingFareApproval && <View style={styles.etaBadge}><Text style={styles.etaBadgeText}>{formatNumber(etaMinutes)} min</Text></View>}</View>

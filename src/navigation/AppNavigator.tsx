@@ -3,7 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
-import { ActivityIndicator, Platform, View } from 'react-native';
+import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { createAppI18n, type AppLanguage } from '../i18n/createI18n';
 import { LanguageSelectScreen } from '../screens/LanguageSelectScreen';
@@ -79,6 +79,25 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
         else navigationRef.reset({ index: 0, routes: [{ name: 'RideConfirmed' as never }] });
       }).catch(() => undefined);
     });
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== 'customer') return;
+    const reconcileActiveRide = () => {
+      void rideDispatchService.getCustomerActiveRide().then((ride) => {
+        if (!ride) return;
+        setCustomerRide(customerRideFromDispatch(ride));
+        setCustomerRideStatus(ride.status);
+        if (!navigationRef.isReady()) return;
+        if (ride.status === 'requested' || ride.status === 'searching') navigationRef.reset({ index: 0, routes: [{ name: 'Searching' as never }] });
+        else navigationRef.reset({ index: 0, routes: [{ name: 'RideConfirmed' as never }] });
+      }).catch(() => undefined);
+    };
+    reconcileActiveRide();
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') reconcileActiveRide();
+    });
+    return () => subscription.remove();
   }, [mode]);
 
   useEffect(() => {
