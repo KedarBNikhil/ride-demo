@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -19,7 +19,6 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, { clamp, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useIsFocused } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenShell } from '../components/ScreenShell';
@@ -44,6 +43,19 @@ export type CustomerRide = { id?: string; pickup: string; drop: string; kind: Ri
 type LocationTarget = 'pickup' | 'drop';
 const NANDYAL: Region = { latitude: 15.4889, longitude: 78.4836, latitudeDelta: 0.035, longitudeDelta: 0.035 };
 const estimateCoordinateDistanceKm = (a: Coordinate, b: Coordinate) => Math.sqrt((a.latitude - b.latitude) ** 2 + (a.longitude - b.longitude) ** 2) * 111;
+
+async function getCustomerGpsPosition() {
+  if (!await Location.hasServicesEnabledAsync()) throw new Error('LOCATION_SERVICES_DISABLED');
+  const existing = await Location.getForegroundPermissionsAsync();
+  const permission = existing.status === 'granted' ? existing : await Location.requestForegroundPermissionsAsync();
+  if (permission.status !== 'granted') throw new Error('LOCATION_PERMISSION_DENIED');
+  const cached = await Location.getLastKnownPositionAsync({ maxAge: 60_000, requiredAccuracy: 500 });
+  return cached ?? await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+}
+
+function coordinateFromPosition(position: Location.LocationObject): Coordinate {
+  return { latitude: position.coords.latitude, longitude: position.coords.longitude };
+}
 
 function hasUsableRouteQuote(quote: RouteQuote | undefined): quote is RouteQuote {
   return Boolean(
@@ -90,105 +102,59 @@ export function CustomerHomeScreen({
   onBack: () => void;
 }) {
   const { t } = useTranslation();
-  const isFocused = useIsFocused();
   const mapRef = useRef<MapView>(null);
-  const freshLocationRequest = useRef<Promise<Location.LocationObject> | null>(null);
   const sheetHeight = Math.min(520, Dimensions.get('window').height * 0.62);
   const collapsedOffset = Math.max(142, sheetHeight - 278);
   const sheetOffset = useSharedValue(collapsedOffset);
   const sheetDragStart = useSharedValue(collapsedOffset);
   const [sheetExpanded, setSheetExpanded] = useState(false);
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<Coordinate | null>(null);
   const [cachedAddress, setCachedAddress] = useState('');
   const [locationUnavailable, setLocationUnavailable] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [pickupMarkerReset, setPickupMarkerReset] = useState(0);
-  const [showOutOfAreaModal, setShowOutOfAreaModal] = useState(false);
-  const [hasShownOutOfAreaModal, setHasShownOutOfAreaModal] = useState(false);
-  const NANDYAL_CENTER = { latitude: 15.4889, longitude: 78.4836 };
-  const isOutOfArea = userLocation && straightLineDistanceMeters(userLocation, NANDYAL_CENTER) > 9000;
-
-  useEffect(() => {
-    if (userLocation) {
-      const distance = straightLineDistanceMeters(userLocation, NANDYAL_CENTER);
-      if (distance > 9000 && !hasShownOutOfAreaModal) {
-        setShowOutOfAreaModal(true);
-        setHasShownOutOfAreaModal(true);
-      }
-    }
-  }, [userLocation, hasShownOutOfAreaModal]);
-
+  const freshLocationRequest = useRef<Promise<Location.LocationObject> | null>(null);
   const requestFreshLocation = () => {
-    if (!freshLocationRequest.current) {
-      freshLocationRequest.current = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-        .finally(() => { freshLocationRequest.current = null; });
-    }
+    if (!freshLocationRequest.current) freshLocationRequest.current = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).finally(() => { freshLocationRequest.current = null; });
     return freshLocationRequest.current;
   };
 
   useEffect(() => {
     let active = true;
-    let subscription: Location.LocationSubscription | undefined;
+    let subscription: Location.LocationSubscription | null = null;
     let firstFix = true;
-    const updateCachedLocation = async (location: Location.LocationObject) => {
-      const coordinate = { latitude: location.coords.latitude, longitude: location.coords.longitude };
+    const applyLocation = async (position: Location.LocationObject) => {
+      if (!active) return;
+      const coordinate = coordinateFromPosition(position);
       setUserLocation(coordinate);
       setLocationUnavailable(false);
       if (firstFix) {
         firstFix = false;
+        setPickupMarkerReset((token) => token + 1);
+        mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.018, longitudeDelta: 0.018 }, 450);
         const address = await reverseGeocodeAddress(coordinate, t('location.gpsDefault'));
         if (active) setCachedAddress(address);
-        setPickupMarkerReset((token) => token + 1);
-        mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.018, longitudeDelta: 0.018 }, 500);
       }
     };
-    const loadLocation = async () => {
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (!active) return;
-      if (permission.status !== 'granted') { setLocationUnavailable(true); return; }
+    const start = async () => {
       try {
-        const cached = await Location.getLastKnownPositionAsync({ maxAge: 60_000, requiredAccuracy: 100 });
-        if (cached && active) await updateCachedLocation(cached);
-        const current = await requestFreshLocation();
-        if (!active) return;
-        await updateCachedLocation(current);
+        if (!await Location.hasServicesEnabledAsync()) throw new Error('LOCATION_SERVICES_DISABLED');
+        const existing = await Location.getForegroundPermissionsAsync();
+        const permission = existing.status === 'granted' ? existing : await Location.requestForegroundPermissionsAsync();
+        if (!active || permission.status !== 'granted') throw new Error('LOCATION_PERMISSION_DENIED');
+        const cached = await Location.getLastKnownPositionAsync({ maxAge: 60_000, requiredAccuracy: 500 });
+        if (cached) applyLocation(cached);
         subscription = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Balanced, distanceInterval: 5, timeInterval: 5000 },
-          (next) => { void updateCachedLocation(next); },
+          { accuracy: Location.Accuracy.Balanced, distanceInterval: 10, timeInterval: 10_000 },
+          (next) => { if (active) void applyLocation(next); },
+          () => { if (active && !userLocation) setLocationUnavailable(true); },
         );
+        void requestFreshLocation().then((next) => { if (active) void applyLocation(next); }).catch(() => { if (active && !cached) setLocationUnavailable(true); });
       } catch { if (active) setLocationUnavailable(true); }
     };
-    void loadLocation();
+    void start();
     return () => { active = false; subscription?.remove(); };
-  }, []);
-
-  useEffect(() => {
-    if (!isFocused) return;
-    let active = true;
-    const refreshWhenHomeReturns = async () => {
-      const permission = await Location.getForegroundPermissionsAsync();
-      if (!active || permission.status !== 'granted') return;
-      const cached = await Location.getLastKnownPositionAsync({ maxAge: 60_000, requiredAccuracy: 100 });
-      if (cached && active) {
-        const coordinate = { latitude: cached.coords.latitude, longitude: cached.coords.longitude };
-        setUserLocation(coordinate);
-        setLocationUnavailable(false);
-        mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.018, longitudeDelta: 0.018 }, 250);
-        void reverseGeocodeAddress(coordinate, t('location.gpsDefault')).then((address) => { if (active) setCachedAddress(address); });
-      }
-      try {
-        const current = await requestFreshLocation();
-        if (!active) return;
-        const coordinate = { latitude: current.coords.latitude, longitude: current.coords.longitude };
-        setUserLocation(coordinate);
-        setLocationUnavailable(false);
-        mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.018, longitudeDelta: 0.018 }, cached ? 220 : 420);
-        void reverseGeocodeAddress(coordinate, t('location.gpsDefault')).then((address) => { if (active) setCachedAddress(address); });
-      } catch { if (active && !cached) setLocationUnavailable(true); }
-    };
-    void refreshWhenHomeReturns();
-    return () => { active = false; };
-  }, [isFocused, t]);
+  }, [t]);
 
   const setSheet = (expanded: boolean) => {
     setSheetExpanded(expanded);
@@ -206,38 +172,6 @@ export function CustomerHomeScreen({
       runOnJS(setSheetExpanded)(expand);
     }), [collapsedOffset, sheetDragStart, sheetOffset]);
 
-  const centerOnLocation = async () => {
-    const servicesEnabled = await Location.hasServicesEnabledAsync();
-    if (!servicesEnabled) {
-      Alert.alert(t('home.locationServicesTitle'), t('home.locationServicesMessage'), [
-        { text: t('actions.cancel'), style: 'cancel' },
-        { text: t('home.openSettings'), onPress: () => { void Linking.openSettings(); } },
-      ]);
-      return;
-    }
-    setPickupMarkerReset((token) => token + 1);
-    // Recenter immediately to the latest foreground location. A subsequent
-    // one-off reading quietly refines this point rather than making the tap
-    // appear unresponsive while GPS acquires a new fix.
-    if (userLocation) {
-      mapRef.current?.animateToRegion({ ...userLocation, latitudeDelta: 0.012, longitudeDelta: 0.012 }, 350);
-    }
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (permission.status !== 'granted') { setLocationUnavailable(true); return; }
-    try {
-      const current = await requestFreshLocation();
-      const coordinate = { latitude: current.coords.latitude, longitude: current.coords.longitude };
-      setUserLocation(coordinate);
-      setLocationUnavailable(false);
-      mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.012, longitudeDelta: 0.012 }, userLocation ? 250 : 450);
-      void reverseGeocodeAddress(coordinate, t('location.gpsDefault')).then(setCachedAddress);
-    } catch {
-      // Keep a useful fallback if the one-off high-accuracy request times out.
-      if (userLocation) mapRef.current?.animateToRegion({ ...userLocation, latitudeDelta: 0.012, longitudeDelta: 0.012 }, 650);
-      else setLocationUnavailable(true);
-    }
-  };
-
   const landmarks = [
     { icon: '🚌', label: t('location.busStand'), target: 'drop' as const },
     { icon: '🚉', label: t('location.railway'), target: 'drop' as const },
@@ -246,34 +180,29 @@ export function CustomerHomeScreen({
   ];
 
   const handlePickLocation = (target: LocationTarget) => {
-    if (isOutOfArea) {
-      setShowOutOfAreaModal(true);
-      return;
-    }
     onPickLocation(target);
   };
 
   const startBooking = async () => {
-    if (isOutOfArea) {
-      setShowOutOfAreaModal(true);
-      return;
-    }
     // An active ride remains available through Bookings; never start a second
     // selection flow while its cancellation/dispatch state is still open.
     if (hasActiveRide) { onBookings(); return; }
-    if (userLocation) { onStartBooking(cachedAddress || t('location.gpsDefault'), userLocation); return; }
     handlePickLocation('pickup');
   };
-  const pickupHere = async (coordinate: Coordinate) => {
-    if (isOutOfArea) {
-      setShowOutOfAreaModal(true);
-      return;
-    }
-    if (hasActiveRide) { onBookings(); return; }
-    const isLiveLocation = userLocation && coordinate.latitude === userLocation.latitude && coordinate.longitude === userLocation.longitude;
-    onPickupHere(isLiveLocation ? cachedAddress || t('location.gpsDefault') : await reverseGeocodeAddress(coordinate, t('location.gpsDefault')), coordinate);
+  const centerOnLocation = async () => {
+    try {
+      const coordinate = coordinateFromPosition(await getCustomerGpsPosition());
+      setUserLocation(coordinate);
+      setLocationUnavailable(false);
+      setPickupMarkerReset((token) => token + 1);
+      mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.012, longitudeDelta: 0.012 }, 350);
+      void reverseGeocodeAddress(coordinate, t('location.gpsDefault')).then(setCachedAddress);
+    } catch { setLocationUnavailable(true); }
   };
-
+  const pickupHere = async (coordinate: Coordinate) => {
+    if (hasActiveRide) { onBookings(); return; }
+    onPickupHere(await reverseGeocodeAddress(coordinate, t('location.gpsDefault')), coordinate);
+  };
   return (
     <SafeAreaView style={styles.mapHomeSafe} edges={['top', 'left', 'right']}>
       <LiveLocationMap mapRef={mapRef} location={userLocation} onMapReady={() => setMapReady(true)} pickupHereLabel={t('home.pickupHere')} onPickupHere={userLocation ? pickupHere : undefined} locationResetToken={pickupMarkerReset} />
@@ -312,24 +241,6 @@ export function CustomerHomeScreen({
         <HomeTab icon="?" label={t('home.tabHelp')} onPress={() => Alert.alert(t('home.helpTitle'), t('home.helpMessage'))} />
         <HomeTab icon="♙" label={t('home.tabProfile')} onPress={onProfile} />
       </View>
-      {showOutOfAreaModal && (
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, shadows.card]}>
-            <Text style={styles.modalEmoji}>📍</Text>
-            <Text style={styles.modalTitle}>{t('home.outOfAreaTitle', 'Out of Service Area')}</Text>
-            <Text style={styles.modalMessage}>
-              {t('home.outOfAreaMessage', 'You seem to be out of Nandyal. Captains cannot reach you here at the moment.')}
-            </Text>
-            <Pressable
-              onPress={() => setShowOutOfAreaModal(false)}
-              accessibilityRole="button"
-              style={styles.modalButton}
-            >
-              <Text style={styles.modalButtonText}>{t('actions.done', 'Done')}</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
     </SafeAreaView>
   );
 }
@@ -389,11 +300,7 @@ export function LocationPickerScreen({
     pickup: ride.pickupCoordinate ? 'located' : 'unresolved',
     drop: ride.dropCoordinate ? 'located' : 'unresolved',
   });
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locationUnavailable, setLocationUnavailable] = useState(false);
   const [focused, setFocused] = useState(false);
-  const mapRef = useRef<MapView>(null);
-  const hasCenteredOnUser = useRef(false);
   const pickupInput = useRef<TextInput>(null);
   const dropInput = useRef<TextInput>(null);
   const query = drafts[target];
@@ -422,16 +329,16 @@ export function LocationPickerScreen({
     onChange(nextTarget, value, undefined);
   };
 
-  const choosePlace = (place: string, coordinate?: Coordinate) => {
+  const choosePlace = (place: string, coordinate?: Coordinate, placeTarget: LocationTarget = target) => {
     if (!coordinate) {
-      setResolution((current) => ({ ...current, [target]: 'failed' }));
+      setResolution((current) => ({ ...current, [placeTarget]: 'failed' }));
       return;
     }
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setDrafts((current) => ({ ...current, [target]: place }));
-    setResolution((current) => ({ ...current, [target]: 'located' }));
-    onChange(target, place, coordinate);
-    if (target === 'pickup') {
+    setDrafts((current) => ({ ...current, [placeTarget]: place }));
+    setResolution((current) => ({ ...current, [placeTarget]: 'located' }));
+    onChange(placeTarget, place, coordinate);
+    if (placeTarget === 'pickup') {
       setTarget('drop');
       requestAnimationFrame(() => dropInput.current?.focus());
     }
@@ -445,66 +352,22 @@ export function LocationPickerScreen({
     }
   };
 
-  const updateUserLocation = (location: Location.LocationObject) => {
-    const coordinate = { latitude: location.coords.latitude, longitude: location.coords.longitude };
-    setUserLocation(coordinate);
-    setLocationUnavailable(false);
-    if (!hasCenteredOnUser.current) {
-      hasCenteredOnUser.current = true;
-      mapRef.current?.animateToRegion({ ...coordinate, latitudeDelta: 0.012, longitudeDelta: 0.012 }, 500);
-    }
-    return coordinate;
-  };
-
-  useEffect(() => {
-    if (!pinMode) return;
-    let subscription: Location.LocationSubscription | undefined;
-    let active = true;
-    hasCenteredOnUser.current = false;
-
-    const beginLiveLocation = async () => {
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (!active) return;
-      if (permission.status !== 'granted') { setLocationUnavailable(true); return; }
-      try {
-        const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        if (active) updateUserLocation(current);
-        subscription = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Balanced, distanceInterval: 5, timeInterval: 5000 },
-          (next) => { if (active) updateUserLocation(next); },
-        );
-      } catch {
-        if (active) setLocationUnavailable(true);
-      }
-    };
-    void beginLiveLocation();
-    return () => { active = false; subscription?.remove(); };
-  }, [pinMode]);
-
-  const centerOnLiveLocation = async () => {
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (permission.status !== 'granted') { setLocationUnavailable(true); return; }
-    try {
-      const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      hasCenteredOnUser.current = false;
-      updateUserLocation(current);
-    } catch { setLocationUnavailable(true); }
-  };
-
   const useGps = async () => {
+    if (gpsLoading) return;
     setGpsLoading(true);
+    const selectedTarget = target;
     try {
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (permission.status === 'granted') {
-        const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const coordinate = { latitude: current.coords.latitude, longitude: current.coords.longitude };
-        choosePlace(await reverseGeocodeAddress(coordinate, t('location.gpsDefault')), coordinate);
-        return;
-      }
+      const coordinate = coordinateFromPosition(await getCustomerGpsPosition());
+      choosePlace(t('location.gpsDefault'), coordinate, selectedTarget);
+      void reverseGeocodeAddress(coordinate, t('location.gpsDefault')).then((address) => {
+        setDrafts((current) => ({ ...current, [selectedTarget]: address }));
+        onChange(selectedTarget, address, coordinate);
+      });
+    } catch {
+      setResolution((current) => ({ ...current, [selectedTarget]: 'failed' }));
     } finally {
       setGpsLoading(false);
     }
-    setResolution((current) => ({ ...current, [target]: 'failed' }));
   };
 
   if (pinMode) {
@@ -640,8 +503,7 @@ async function reverseGeocodeAddress(coordinate: Coordinate, fallback: string) {
     const { address } = await googleMapsService.reverseGeocode(coordinate);
     if (address) return address;
   } catch {
-    // Expo's local provider keeps the location picker usable during an outage,
-    // without ever exposing a Google server key to the application.
+    // Fall through to Expo's local provider without exposing a server key.
   }
   try {
     const [place] = await Location.reverseGeocodeAsync(coordinate);
@@ -955,16 +817,19 @@ const cancellationReasons: Array<{ code: CancellationReason; labelKey: string }>
   { code: 'other', labelKey: 'Other' },
 ];
 
-export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onProfile }: { ride: CustomerRide; onHome: () => void; onCancelled: () => void; onBookings: () => void; onProfile: () => void }) {
+export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCancelled, onBookings, onProfile }: { ride: CustomerRide; onHome: () => void; onCancelled: () => void; onFareQuoteCancelled: () => void; onBookings: () => void; onProfile: () => void }) {
   const { t } = useTranslation();
   const mapRef = useRef<MapView>(null);
-  const [step, setStep] = useState(0);
   const [cancelStep, setCancelStep] = useState<'none' | 'confirm' | 'reason'>('none');
   const [cancellationReason, setCancellationReason] = useState<CancellationReason | null>(null);
   const [otherReason, setOtherReason] = useState('');
   const [cancellationError, setCancellationError] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [updatingFareQuote, setUpdatingFareQuote] = useState(false);
+  const [fareQuoteSecondsRemaining, setFareQuoteSecondsRemaining] = useState<number | null>(null);
+  const fareQuoteDecisionInFlight = useRef(false);
+  const fareQuoteTimeoutHandledForAcceptance = useRef<string | null>(null);
+  const fareQuoteWasPending = useRef(false);
   const [liveStatus, setLiveStatus] = useState<RideStatus>('accepted');
   const [liveRide, setLiveRide] = useState<DispatchRide | null>(null);
   const [captainDetails, setCaptainDetails] = useState<{ fullName: string; vehicleType: RideKind | null } | null>(null);
@@ -972,14 +837,6 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
   const pickupOtpIssuedForRide = useRef<string | null>(null);
   const [captainRoute, setCaptainRoute] = useState<Coordinate[]>([]);
   const pickup = ride.pickupCoordinate ?? locationCoordinate(ride.pickup, 0);
-  const captainStart = { latitude: pickup.latitude - 0.008, longitude: pickup.longitude - 0.006 };
-  const captainCoordinate = {
-    latitude: captainStart.latitude + ((pickup.latitude - captainStart.latitude) * step / 8),
-    longitude: captainStart.longitude + ((pickup.longitude - captainStart.longitude) * step / 8),
-  };
-  const approachRoute = [captainStart, { latitude: captainStart.latitude + 0.003, longitude: captainStart.longitude + 0.002 }, pickup];
-  const etaMinutes = Math.max(1, 4 - Math.floor(step / 2));
-  const captainDistanceKm = Math.max(0.2, 1.8 - (step * 0.2));
   const arrived = liveStatus === 'arrived' || liveStatus === 'in_progress' || liveStatus === 'completed';
   const canCancel = liveStatus === 'searching' || liveStatus === 'accepted' || liveStatus === 'arrived' || liveStatus === 'in_progress';
   const cancellationMayIncurCharge = liveStatus === 'in_progress';
@@ -987,13 +844,17 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
   const vehicleType = captainDetails?.vehicleType;
 
   useEffect(() => {
-    mapRef.current?.fitToCoordinates([captainStart, pickup], { animated: true, edgePadding: { top: 120, right: 50, bottom: 300, left: 50 } });
-    const id = setInterval(() => setStep((current) => Math.min(current + 1, 8)), 3000);
-    return () => clearInterval(id);
+    mapRef.current?.fitToCoordinates([pickup], { animated: true, edgePadding: { top: 120, right: 50, bottom: 300, left: 50 } });
+    return undefined;
   }, []);
   useEffect(() => {
     if (!ride.id || ride.id.startsWith('local-')) return;
     return rideDispatchService.subscribeToRide(ride.id, (updatedRide) => {
+      if (updatedRide.fare_approval_status === 'pending') fareQuoteWasPending.current = true;
+      if (updatedRide.status === 'cancelled' && fareQuoteWasPending.current) {
+        onFareQuoteCancelled();
+        return;
+      }
       setLiveStatus(updatedRide.status);
       setLiveRide(updatedRide);
       if (updatedRide.captain_id) {
@@ -1007,7 +868,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
         });
       }
     });
-  }, [onHome, ride.id]);
+  }, [onFareQuoteCancelled, onHome, ride.id]);
   useEffect(() => {
     if (!ride.id || ride.id.startsWith('local-')) return;
     const rideId = ride.id;
@@ -1042,61 +903,87 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
       setCancelling(false);
     }
   };
-  const respondToFareQuote = async (accept: boolean) => {
-    if (!ride.id) return;
+  const respondToFareQuote = useCallback(async (accept: boolean) => {
+    if (!ride.id || fareQuoteDecisionInFlight.current) return;
+    fareQuoteDecisionInFlight.current = true;
     setUpdatingFareQuote(true);
     try {
-      await rideDispatchService.approveFareQuote(ride.id, accept);
-      if (!accept) onCancelled();
+      const updatedRide = await rideDispatchService.approveFareQuote(ride.id, accept);
+      if (!accept && updatedRide.status === 'cancelled') onFareQuoteCancelled();
     } catch {
+      const currentRide = await rideDispatchService.getRide(ride.id).catch(() => null);
+      if (!accept && currentRide?.status === 'cancelled') {
+        onFareQuoteCancelled();
+        return;
+      }
       Alert.alert(t('login.tryAgain'));
     } finally {
+      fareQuoteDecisionInFlight.current = false;
       setUpdatingFareQuote(false);
     }
-  };
-  const declineFareQuote = () => Alert.alert(t('rides.fareQuoteDeclineTitle'), t('rides.fareQuoteDeclineMessage'), [
-    { text: t('rides.stay'), style: 'cancel' },
-    { text: t('rides.declineFareQuote'), style: 'destructive', onPress: () => { void respondToFareQuote(false); } },
-  ]);
-
+  }, [onFareQuoteCancelled, ride.id, t]);
   if (liveStatus === 'completed' && ride.id) {
     return <CustomerRideSettlement rideId={ride.id} fare={Number(liveRide?.final_fare ?? liveRide?.estimated_fare ?? 0)} captainName={captainName} paymentStatus={liveRide?.payment_status ?? 'pending'} onHome={onHome} />;
   }
   const displayedCaptainCoordinate = liveRide?.captain_latitude != null && liveRide?.captain_longitude != null
     ? { latitude: Number(liveRide.captain_latitude), longitude: Number(liveRide.captain_longitude) }
-    : captainCoordinate;
-  const displayedApproachRoute = captainRoute.length > 1 ? captainRoute : approachRoute;
+    : null;
+  const displayedApproachRoute = captainRoute.length > 1 ? captainRoute : [];
   const inProgress = liveStatus === 'in_progress';
   const awaitingFareApproval = liveRide?.fare_approval_status === 'pending';
-  const destinationDistanceKm = estimateCoordinateDistanceKm(displayedCaptainCoordinate, ride.dropCoordinate ?? locationCoordinate(ride.drop, 1));
-  const destinationMinutes = Math.max(1, Math.ceil(destinationDistanceKm / 0.42));
+
+  useEffect(() => {
+    if (!awaitingFareApproval || !liveRide?.accepted_at || updatingFareQuote) {
+      setFareQuoteSecondsRemaining(null);
+      if (!awaitingFareApproval) {
+        fareQuoteDecisionInFlight.current = false;
+        fareQuoteTimeoutHandledForAcceptance.current = null;
+      }
+      return;
+    }
+    const expiresAt = new Date(liveRide.accepted_at).getTime() + 60_000;
+    let active = true;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+      if (!active) return;
+      setFareQuoteSecondsRemaining(remaining);
+      if (remaining === 0 && fareQuoteTimeoutHandledForAcceptance.current !== liveRide.accepted_at) {
+        fareQuoteTimeoutHandledForAcceptance.current = liveRide.accepted_at ?? null;
+        void respondToFareQuote(false);
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 1_000);
+    return () => { active = false; clearInterval(timer); };
+  }, [awaitingFareApproval, liveRide?.accepted_at, respondToFareQuote, updatingFareQuote]);
 
   return <SafeAreaView style={styles.assignedSafe} edges={['top', 'left', 'right']}>
     <MapView ref={mapRef} provider={PROVIDER_GOOGLE} initialRegion={NANDYAL} style={StyleSheet.absoluteFill}>
       <Marker coordinate={pickup} pinColor={colors.success} title={t('rides.pickup')} />
-      <Polyline coordinates={displayedApproachRoute} strokeColor={colors.primaryDark} strokeWidth={5} />
-      <Marker.Animated coordinate={displayedCaptainCoordinate}><View style={styles.liveCaptainMarker}><Text style={styles.liveCaptainIcon}>🛺</Text></View></Marker.Animated>
+      {displayedApproachRoute.length > 1 && <Polyline coordinates={displayedApproachRoute} strokeColor={colors.primaryDark} strokeWidth={5} />}
+      {displayedCaptainCoordinate && <Marker.Animated coordinate={displayedCaptainCoordinate}><View style={styles.liveCaptainMarker}><Text style={styles.liveCaptainIcon}>🛺</Text></View></Marker.Animated>}
     </MapView>
     <Pressable onPress={onHome} accessibilityRole="button" style={[styles.assignedBack, shadows.soft]}><Text style={styles.rideOptionsBackText}>‹</Text></Pressable>
     <ScrollView style={[styles.assignedSheet, shadows.card]} contentContainerStyle={styles.assignedSheetContent} showsVerticalScrollIndicator={false} nestedScrollEnabled bounces={false}>
       <View style={styles.sheetHandle} />
       {!arrived && <Text style={styles.bookingStatus}>{awaitingFareApproval ? t('rides.fareQuoteWaiting') : liveStatus === 'accepted' ? t('rides.bookedMessage') : t('rides.searchingSubtitle')}</Text>}
-      <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(inProgress ? 'rides.startedTitle' : arrived ? 'rides.hereTitle' : awaitingFareApproval ? 'rides.fareQuoteTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{inProgress ? t('rides.startedSubtitle') : arrived ? t('rides.hereSubtitle') : awaitingFareApproval ? t('rides.fareQuoteWaiting') : `${t('rides.arriving')} · ${t('rides.eta', { minutes: formatNumber(etaMinutes) })}`}</Text></View>{!arrived && !awaitingFareApproval && <View style={styles.etaBadge}><Text style={styles.etaBadgeText}>{formatNumber(etaMinutes)} min</Text></View>}</View>
+      <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(inProgress ? 'rides.startedTitle' : arrived ? 'rides.hereTitle' : awaitingFareApproval ? 'rides.fareQuoteTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{inProgress ? t('rides.startedSubtitle') : arrived ? t('rides.hereSubtitle') : awaitingFareApproval ? t('rides.fareQuoteWaiting') : t('rides.arriving')}</Text></View></View>
       <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{captainName}</Text><Text style={styles.assignedVehicle}>{vehicleType ? t(`rides.${vehicleType}`) : t('rides.captain')}</Text></View></View>
       {liveRide?.fare_approval_status === 'pending' && <View style={styles.fareQuoteCard}>
         <Text style={styles.fareQuoteTitle}>{t('rides.fareQuoteTitle')}</Text>
+        <Text style={styles.fareQuoteCountdown}>{fareQuoteSecondsRemaining ?? 60}s</Text>
         <Text style={styles.fareQuoteMessage}>{t('rides.fareQuoteMessage', { distance: formatNumber(Number(liveRide.pickup_distance_meters ?? 0) / 1000, { maximumFractionDigits: 1 }) })}</Text>
         <SummaryRow label={t('rides.fareQuoteRide')} value={formatFare(Number(liveRide.base_fare ?? 0) + Number(liveRide.distance_surcharge ?? 0))} icon="🛺" />
         <SummaryRow label={t('rides.fareQuotePickup')} value={formatFare(Number(liveRide.pickup_surcharge ?? 0))} icon="⌖" />
         <SummaryRow label={t('rides.fareQuoteTotal')} value={formatFare(Number(liveRide.final_fare ?? 0))} icon="₹" last />
         <PrimaryButton label={updatingFareQuote ? t('login.pleaseWait') : t('rides.acceptFareQuote')} onPress={() => { void respondToFareQuote(true); }} disabled={updatingFareQuote} />
-        <Pressable onPress={declineFareQuote} disabled={updatingFareQuote} accessibilityRole="button" style={styles.declineFareQuote}><Text style={styles.declineFareQuoteText}>{t('rides.declineFareQuote')}</Text></Pressable>
+        <PrimaryButton label={t('rides.declineFareQuote')} onPress={startCancellation} danger disabled={updatingFareQuote} />
       </View>}
       <View style={styles.assignedPickupRow}><View style={styles.assignedPickupDot} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.pickup')} · {ride.pickup}</Text></View>
       <View style={styles.assignedPickupRow}><View style={[styles.assignedPickupDot, styles.assignedDropDot]} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.drop')} · {ride.drop}</Text></View>
       {!!pickupPin && !inProgress && <View style={styles.pickupPinCard}><Text style={styles.pickupPinLabel}>{t('rides.pickupPinLabel')}</Text><Text style={styles.pickupPin}>{pickupPin}</Text><Text style={styles.pickupPinHint}>{t('rides.pickupPinHint')}</Text></View>}
-      {inProgress && <><View style={styles.tripStatRow}><Text style={styles.tripStatLabel}>{t('rides.destinationDistance')}</Text><Text style={styles.tripStatValue}>{formatNumber(destinationDistanceKm, { maximumFractionDigits: 1 })} km · {formatNumber(destinationMinutes)} min</Text></View><Pressable onPress={() => { void Linking.openURL('tel:112'); }} accessibilityRole="button" style={styles.sosButton}><Text style={styles.sosText}>{t('rides.sos')}</Text></Pressable></>}
-      {canCancel && <PrimaryButton label={t('rides.cancelRide')} onPress={startCancellation} danger />}
+      {inProgress && <><View style={styles.tripStatRow}><Text style={styles.tripStatLabel}>{t('rides.destinationDistance')}</Text><Text style={styles.tripStatValue}>—</Text></View><Pressable onPress={() => { void Linking.openURL('tel:112'); }} accessibilityRole="button" style={styles.sosButton}><Text style={styles.sosText}>{t('rides.sos')}</Text></Pressable></>}
+      {canCancel && !awaitingFareApproval && <PrimaryButton label={t('rides.cancelRide')} onPress={startCancellation} danger />}
     </ScrollView>
     <CustomerTabBar active="bookings" onHome={onHome} onBookings={onBookings} onProfile={onProfile} />
     {cancelStep !== 'none' && <View style={styles.cancellationOverlay}>
@@ -1108,7 +995,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
             <Text style={styles.cancellationTitle}>{t('rides.cancelTitle')}</Text>
             <View style={styles.captainStatusCard}>
               <Text style={styles.captainStatusIcon}>🛺</Text>
-              <View style={styles.captainStatusText}><Text style={styles.captainStatusTitle}>{captainName}</Text><Text style={styles.captainStatusMessage}>{inProgress ? t('rides.cancelTripStatus', { distance: formatNumber(destinationDistanceKm, { maximumFractionDigits: 1 }), minutes: formatNumber(destinationMinutes) }) : liveStatus === 'arrived' ? t('rides.cancelArrivalStatus', { captain: captainName }) : t('rides.cancelCaptainStatus', { captain: captainName, distance: formatNumber(captainDistanceKm), minutes: formatNumber(etaMinutes) })}</Text></View>
+              <View style={styles.captainStatusText}><Text style={styles.captainStatusTitle}>{captainName}</Text><Text style={styles.captainStatusMessage}>{inProgress ? t('rides.startedSubtitle') : liveStatus === 'arrived' ? t('rides.cancelArrivalStatus', { captain: captainName }) : t('rides.bookedMessage')}</Text></View>
             </View>
             {cancellationMayIncurCharge && <Text style={styles.cancellationMessage}>{t('rides.cancellationChargeWarning')}</Text>}
             <Text style={styles.cancellationMessage}>{t('rides.cancelConfirmMessage')}</Text>
@@ -1585,6 +1472,7 @@ const styles = StyleSheet.create({
   assignedVehicle: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, marginTop: 2 },
   fareQuoteCard: { backgroundColor: colors.accentLight, borderColor: colors.accent, borderRadius: radii.md, borderWidth: 1, gap: 10, padding: 14 },
   fareQuoteTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '900' },
+  fareQuoteCountdown: { color: colors.error, fontFamily, fontSize: fontSize.md, fontWeight: '900', textAlign: 'center' },
   fareQuoteMessage: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 20 },
   declineFareQuote: { alignItems: 'center', minHeight: 38, justifyContent: 'center' },
   declineFareQuoteText: { color: colors.error, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },

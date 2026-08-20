@@ -12,6 +12,7 @@ import { BookingConfirmScreen, CustomerBookingsScreen, CustomerHomeScreen, Custo
 import { CaptainOnboardingStack } from './CaptainOnboardingStack';
 import { CaptainMainStack } from './CaptainMainStack';
 import type { CaptainProfile } from '../services/captainOnboarding';
+import { captainOnboardingService } from '../services/captainOnboarding';
 import { rideDispatchService, type DispatchRide, type RideStatus } from '../services/rideDispatch';
 import { subscribeToCustomerRideNotificationResponses } from '../services/pushNotifications';
 import { OperatorReconciliationScreen } from '../screens/OperatorReconciliationScreen';
@@ -53,19 +54,21 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
   useEffect(() => {
     if (mode !== 'captain') return;
     void (async () => {
-      const version = await AsyncStorage.getItem(captainOnboardingVersionKey);
-      if (version !== CAPTAIN_ONBOARDING_FLOW_VERSION) {
-        await AsyncStorage.multiRemove([captainOnboardingCompleteKey, captainOnboardingSubmittedKey]);
-        await AsyncStorage.setItem(captainOnboardingVersionKey, CAPTAIN_ONBOARDING_FLOW_VERSION);
+      try {
+        const status = await captainOnboardingService.getReviewStatus();
+        setCaptainOnboardingComplete(status === 'approved');
+        setCaptainOnboardingSubmitted(status === 'submitted');
+      } catch {
         setCaptainOnboardingComplete(false);
         setCaptainOnboardingSubmitted(false);
-        return;
       }
-      const [[, complete], [, submitted]] = await AsyncStorage.multiGet([captainOnboardingCompleteKey, captainOnboardingSubmittedKey]);
-      setCaptainOnboardingComplete(complete === 'true');
-      setCaptainOnboardingSubmitted(submitted === 'true' && complete !== 'true');
     })();
   }, [mode]);
+
+  useEffect(() => {
+    if (mode !== 'captain' || !captainOnboardingComplete) return;
+    void rideDispatchService.getCaptainAvailability().then(setCaptainOnline).catch(() => setCaptainOnline(false));
+  }, [captainOnboardingComplete, mode]);
 
   useEffect(() => {
     if (mode !== 'customer') return;
@@ -112,8 +115,8 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
     setHasLanguage(true);
   };
 
-  const submitCaptainOnboarding = async () => { await AsyncStorage.setItem(captainOnboardingSubmittedKey, 'true'); setCaptainOnboardingSubmitted(true); };
-  const completeCaptainOnboarding = async () => { await AsyncStorage.multiRemove([captainOnboardingSubmittedKey]); await AsyncStorage.setItem(captainOnboardingCompleteKey, 'true'); setCaptainOnboardingSubmitted(false); setCaptainOnboardingComplete(true); };
+  const submitCaptainOnboarding = async () => { setCaptainOnboardingSubmitted(true); };
+  const completeCaptainOnboarding = async () => { setCaptainOnboardingSubmitted(false); setCaptainOnboardingComplete(true); };
   if (hasLanguage === null || (mode === 'captain' && (captainOnboardingComplete === null || captainOnboardingSubmitted === null))) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
   return <I18nextProvider i18n={i18n}>
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -127,7 +130,7 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
           <Stack.Screen name="RideType">{({ navigation }) => <RideTypeScreen ride={customerRide} selected={customerRide.kind} onBack={() => { if (navigation.canGoBack()) navigation.goBack(); else navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onEditLocation={(target) => { setLocationTarget(target); navigation.navigate('LocationPicker'); }} onSelect={(kind) => setCustomerRide((ride) => ({ ...ride, kind, passengerCount: kind === 'bike' ? 1 : ride.passengerCount }))} onPassengerCountChange={(passengerCount) => setCustomerRide((ride) => ({ ...ride, passengerCount }))} onRouteQuote={(routeQuote) => setCustomerRide((ride) => ({ ...ride, routeQuote }))} onNext={() => navigation.navigate('BookingConfirm')} />}</Stack.Screen>
           <Stack.Screen name="BookingConfirm">{({ navigation }) => <BookingConfirmScreen ride={customerRide} onBack={() => navigation.goBack()} onBook={async (rideId) => { setCustomerRide((ride) => ({ ...ride, id: rideId })); setCustomerRideStatus('searching'); navigation.navigate('Searching'); }} />}</Stack.Screen>
           <Stack.Screen name="Searching" options={{ animation: 'fade' }}>{({ navigation }) => <SearchingScreen rideId={customerRide.id} onBack={() => navigation.goBack()} onFound={() => navigation.replace('RideConfirmed')} onUnavailable={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined })); navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onCancel={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined })); navigation.reset({ index: 0, routes: [{ name: 'RideType' }] }); }} onHome={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} onBookings={() => navigation.navigate('CustomerBookings')} onProfile={() => navigation.navigate('Settings', { profile: true })} />}</Stack.Screen>
-          <Stack.Screen name="RideConfirmed" options={{ animation: 'fade' }}>{({ navigation }) => <RideConfirmedScreen ride={customerRide} onHome={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} onCancelled={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined })); navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onBookings={() => navigation.navigate('CustomerBookings')} onProfile={() => navigation.navigate('Settings', { profile: true })} />}</Stack.Screen>
+          <Stack.Screen name="RideConfirmed" options={{ animation: 'fade' }}>{({ navigation }) => <RideConfirmedScreen ride={customerRide} onHome={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} onCancelled={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined })); navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onFareQuoteCancelled={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined })); navigation.reset({ index: 0, routes: [{ name: 'RideType' }] }); }} onBookings={() => navigation.navigate('CustomerBookings')} onProfile={() => navigation.navigate('Settings', { profile: true })} />}</Stack.Screen>
           <Stack.Screen name="CustomerBookings">{({ navigation }) => <CustomerBookingsScreen ride={customerRide} onHome={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} onProfile={() => navigation.navigate('Settings', { profile: true })} onCancelled={() => { setCustomerRideStatus('cancelled'); navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onOpenRide={(selectedRide, status) => { setCustomerRide(selectedRide); setCustomerRideStatus(status); if (status === 'cancelled' || status === 'completed') { setLocationTarget('pickup'); navigation.navigate('LocationPicker'); } else if (status === 'requested' || status === 'searching') navigation.navigate('Searching'); else navigation.navigate('RideConfirmed'); }} />}</Stack.Screen>
         </> : mode === 'captain' ? <>
           {captainOnboardingComplete ? <Stack.Screen name="CaptainMain">{() => <CaptainMainStack online={captainOnline} onToggle={() => setCaptainOnline((online) => !online)} onLanguageChange={chooseLanguage} onTripComplete={() => setCaptainOnline(true)} />}</Stack.Screen> : <Stack.Screen name="CaptainOnboarding">{() => <CaptainOnboardingStack language={language} onLanguageChange={chooseLanguage} profile={captainProfile} onProfileChange={setCaptainProfile} onExit={onExit} submitted={Boolean(captainOnboardingSubmitted)} onSubmitted={submitCaptainOnboarding} onApproved={completeCaptainOnboarding} />}</Stack.Screen>}
@@ -135,7 +138,7 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
           <Stack.Screen name="OperatorLogin">{({ navigation }) => <CustomerLoginScreen onComplete={() => navigation.replace('OperatorReconciliation')} onBack={onExit} />}</Stack.Screen>
           <Stack.Screen name="OperatorReconciliation">{() => <OperatorReconciliationScreen onExit={onExit} />}</Stack.Screen>
         </> : null}
-        <Stack.Screen name="Settings">{({ navigation, route }) => <SettingsScreen profile={Boolean((route.params as { profile?: boolean } | undefined)?.profile)} onBack={() => navigation.goBack()} onLanguageChange={(next) => { chooseLanguage(next).then(() => navigation.goBack()); }} />}</Stack.Screen>
+        <Stack.Screen name="Settings">{({ navigation, route }) => <SettingsScreen profile={Boolean((route.params as { profile?: boolean } | undefined)?.profile)} ratingRole={mode === 'customer' ? 'customer' : undefined} onBack={() => navigation.goBack()} onLanguageChange={(next) => { chooseLanguage(next).then(() => navigation.goBack()); }} />}</Stack.Screen>
       </Stack.Navigator>
     </NavigationContainer>
     </GestureHandlerRootView>

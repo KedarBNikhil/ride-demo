@@ -1,9 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import type { AppLanguage } from '../i18n/createI18n';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 import { ScreenShell } from '../components/ScreenShell';
+import { rideDispatchService, type ReceivedRating } from '../services/rideDispatch';
 
 function LangChip({
   symbol,
@@ -56,12 +58,23 @@ export function SettingsScreen({
   onLanguageChange,
   onBack,
   profile = false,
+  ratingRole,
 }: {
   onLanguageChange: (language: AppLanguage) => void;
   onBack: () => void;
   profile?: boolean;
+  ratingRole?: 'customer' | 'captain';
 }) {
   const { t, i18n } = useTranslation();
+  const [receivedRating, setReceivedRating] = useState<ReceivedRating | null>(null);
+  const profileText = i18n.language === 'te'
+    ? { rating: 'రేటింగ్', noRatings: 'ఇంకా రేటింగ్‌లు లేవు', ratingCount: (count: number) => `${count} రేటింగ్‌లు` }
+    : { rating: 'Rating', noRatings: 'No ratings yet', ratingCount: (count: number) => `${count} ratings` };
+  useFocusEffect(useCallback(() => {
+    if (!ratingRole) return undefined;
+    void rideDispatchService.getReceivedRating(ratingRole).then(setReceivedRating).catch(() => setReceivedRating(null));
+    return undefined;
+  }, [ratingRole]));
   return (
     <ScreenShell back={onBack} title={t(profile ? 'screens.profile' : 'screens.settings')}>
       {/* Section: Language */}
@@ -86,6 +99,12 @@ export function SettingsScreen({
           />
         </View>
       </View>
+
+      {ratingRole && <View style={styles.ratingCard}>
+        <Text style={styles.ratingLabel}>{t('profile.rating', { defaultValue: profileText.rating })}</Text>
+        <Text style={styles.ratingValue}>{receivedRating?.average == null ? '—' : `★ ${receivedRating.average.toFixed(2)}`}</Text>
+        {receivedRating?.count ? <Text style={styles.ratingCount}>{t('profile.ratingCount', { count: receivedRating.count, defaultValue: profileText.ratingCount(receivedRating.count) })}</Text> : <Text style={styles.ratingCount}>{t('profile.noRatings', { defaultValue: profileText.noRatings })}</Text>}
+      </View>}
 
       {/* App info */}
       <View style={styles.infoCard}>
@@ -160,6 +179,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
     padding: 20,
   },
+  ratingCard: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 4, marginTop: 8, padding: 20 },
+  ratingLabel: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, fontWeight: '700', textTransform: 'uppercase' },
+  ratingValue: { color: colors.primaryDark, fontFamily, fontSize: fontSize['2xl'], fontWeight: '900' },
+  ratingCount: { color: colors.textMuted, fontFamily, fontSize: fontSize.sm },
   infoTitle: {
     color: colors.textPrimary,
     fontFamily,

@@ -191,9 +191,7 @@ Deno.serve(async (request) => {
       const pickup = coordinate({ latitude: pendingRide?.pickup_latitude, longitude: pendingRide?.pickup_longitude });
       const { data: availability, error: availabilityError } = await admin.from('captain_availability').select('latitude, longitude').eq('captain_id', userData.user.id).single();
       const captain = coordinate({ latitude: availability?.latitude, longitude: availability?.longitude });
-      if (pendingOfferError || !pendingOffer || !pickup || !captain) throw new Error('Captain location is unavailable; route was not recalculated');
-      // Capture the route exactly once at the acceptance event. If the offer is
-      // lost to another captain, this conservative reservation is still counted.
+      if (pendingOfferError || availabilityError || !pendingOffer || !pickup || !captain) throw new Error('Captain location is unavailable; route was not recalculated');
       const { route, callId } = await computeRoute(captain, pickup, 'captain_to_pickup');
       const key = publicKey();
       if (!key) throw new Error('Supabase publishable key is unavailable');

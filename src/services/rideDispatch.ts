@@ -36,11 +36,19 @@ export type DispatchRide = {
   cancellation_reason_detail?: string | null;
   cancellation_charge?: number | null;
   travelled_distance_km?: number | null;
+  accepted_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
 };
 
 export type AssignedCaptainDetails = {
   fullName: string;
   vehicleType: RideKind | null;
+};
+
+export type ReceivedRating = {
+  average: number | null;
+  count: number;
 };
 
 export type SettlementQueueItem = {
@@ -71,6 +79,13 @@ export type CaptainRideRequest = {
   fare: number;
   pickup: Coordinate;
   drop: Coordinate;
+  tripDistanceMeters?: number | null;
+  travelledDistanceKm?: number | null;
+  pickupDurationSeconds?: number | null;
+  tripDurationSeconds?: number | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  fareBreakdown?: Pick<DispatchRide, 'estimated_fare' | 'final_fare' | 'base_fare' | 'distance_surcharge' | 'pickup_surcharge'>;
 };
 
 export type CaptainActiveRide = CaptainRideRequest & {
@@ -94,13 +109,19 @@ const asNumber = (value: unknown) => typeof value === 'number' ? value : Number(
 function toCaptainRequest(offer: any): CaptainRideRequest | null {
   if (!offer) return null;
   return {
-    offerId: offer.offer_id, rideId: offer.ride_id, customerName: 'Customer', maskedCustomerNumber: '+919876543210',
+    offerId: offer.offer_id ?? '', rideId: offer.ride_id, customerName: offer.customer_name?.trim() || '—', maskedCustomerNumber: offer.customer_phone?.trim() || '',
     pickupArea: offer.pickup_address, destinationArea: offer.drop_address,
     distanceKm: asNumber(offer.pickup_distance_meters) / 1000,
     etaMinutes: Math.max(1, Math.ceil(asNumber(offer.pickup_eta_seconds) / 60)), expiresAt: offer.expires_at,
     fare: asNumber(offer.estimated_fare),
     pickup: { latitude: asNumber(offer.pickup_latitude), longitude: asNumber(offer.pickup_longitude) },
     drop: { latitude: asNumber(offer.drop_latitude), longitude: asNumber(offer.drop_longitude) },
+    tripDistanceMeters: offer.trip_distance_meters == null ? null : asNumber(offer.trip_distance_meters),
+    travelledDistanceKm: offer.travelled_distance_km == null ? null : asNumber(offer.travelled_distance_km),
+    pickupDurationSeconds: offer.pickup_duration_seconds == null ? null : asNumber(offer.pickup_duration_seconds),
+    tripDurationSeconds: offer.trip_duration_seconds == null ? null : asNumber(offer.trip_duration_seconds),
+    startedAt: offer.started_at ?? null, completedAt: offer.completed_at ?? null,
+    fareBreakdown: { estimated_fare: asNumber(offer.estimated_fare), final_fare: offer.final_fare == null ? null : asNumber(offer.final_fare), base_fare: offer.base_fare == null ? null : asNumber(offer.base_fare), distance_surcharge: offer.distance_surcharge == null ? null : asNumber(offer.distance_surcharge), pickup_surcharge: offer.pickup_surcharge == null ? null : asNumber(offer.pickup_surcharge) },
   };
 }
 
@@ -216,21 +237,11 @@ export const rideDispatchService = {
     if (error) throw error;
     if (!data) return null;
     const ride = data as DispatchRide;
-    return {
-      offerId: '',
-      rideId: ride.id,
-      customerName: 'Customer',
-      maskedCustomerNumber: '+919876543210',
-      pickupArea: ride.pickup_address,
-      destinationArea: ride.drop_address,
-      distanceKm: 0,
-      etaMinutes: 1,
-      expiresAt: '',
-      fare: asNumber(ride.estimated_fare),
-      pickup: { latitude: asNumber(ride.pickup_latitude), longitude: asNumber(ride.pickup_longitude) },
-      drop: { latitude: asNumber(ride.drop_latitude), longitude: asNumber(ride.drop_longitude) },
-      status: ride.status as CaptainActiveRide['status'],
-    };
+    const { data: detail, error: detailError } = await requireClient().rpc('captain_ride_detail', { p_ride_id: ride.id }).maybeSingle();
+    if (detailError || !detail) throw detailError ?? new Error('Captain ride detail is unavailable');
+    const request = toCaptainRequest(detail);
+    if (!request) return null;
+    return { ...request, status: ride.status as CaptainActiveRide['status'] };
   },
 
   async getCaptainLatestRide(): Promise<DispatchRide | null> {
@@ -238,6 +249,12 @@ export const rideDispatchService = {
     const { data, error } = await requireClient().from('rides').select('*').eq('captain_id', captainId).order('requested_at', { ascending: false }).limit(1).maybeSingle();
     if (error) throw error;
     return data as DispatchRide | null;
+  },
+
+  async getCaptainRideHistory(before?: string, limit = 20): Promise<DispatchRide[]> {
+    const { data, error } = await requireClient().rpc('captain_ride_history', { p_before: before ?? null, p_limit: limit });
+    if (error) throw error;
+    return (data ?? []) as DispatchRide[];
   },
 
   async getCaptainPendingOffer(rideId: string, offerId: string): Promise<CaptainRideRequest | null> {
@@ -253,14 +270,7 @@ export const rideDispatchService = {
     if (error) throw error;
     const offer = data as CaptainOfferRow | null;
     if (!offer?.rides) return null;
-    return toCaptainRequest({
-      offer_id: offer.id,
-      ride_id: offer.ride_id,
-      expires_at: offer.expires_at,
-      pickup_distance_meters: offer.pickup_distance_meters,
-      pickup_eta_seconds: offer.estimated_pickup_eta_seconds,
-      ...offer.rides,
-    });
+    return getCaptainOpenOffer();
   },
 
   subscribeToRide(rideId: string, onRide: (ride: DispatchRide) => void, onError?: (error: Error) => void) {
@@ -276,24 +286,26 @@ export const rideDispatchService = {
     channel = client.channel(`ride:${rideId}:${++rideSubscriptionSequence}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rides', filter: `id=eq.${rideId}` }, refresh)
       .subscribe();
-    // Realtime is the low-latency path for captain coordinates. Polling the
-    // authoritative row also keeps the active marker moving when a device
-    // briefly misses a Realtime event while foregrounded.
+    // Keep an authoritative status refresh as a fallback if a device briefly
+    // misses a Realtime event.
     refreshTimer = setInterval(refresh, 10_000);
     return () => { if (refreshTimer) clearInterval(refreshTimer); if (channel) void client.removeChannel(channel); };
   },
 
   async setCaptainAvailability(isOnline: boolean, location?: Coordinate | null) {
-    const client = requireClient();
-    const captainId = await currentUserId();
-    const { error } = await client.from('captain_availability').upsert({
-      captain_id: captainId,
-      is_online: isOnline,
-      latitude: location?.latitude ?? null,
-      longitude: location?.longitude ?? null,
-      updated_at: new Date().toISOString(),
+    const { error } = await requireClient().rpc('captain_set_availability', {
+      p_is_online: isOnline,
+      p_latitude: location?.latitude ?? null,
+      p_longitude: location?.longitude ?? null,
     });
     if (error) throw error;
+  },
+
+  async getCaptainAvailability() {
+    const captainId = await currentUserId();
+    const { data, error } = await requireClient().from('captain_availability').select('is_online').eq('captain_id', captainId).maybeSingle();
+    if (error) throw error;
+    return Boolean(data?.is_online);
   },
 
   subscribeToCaptainOffers(onRequest: (request: CaptainRideRequest | null) => void, onError?: (error: Error) => void) {
@@ -349,7 +361,9 @@ export const rideDispatchService = {
 
   async updateCaptainLocation(rideId: string, location: Coordinate) {
     const { error } = await requireClient().rpc('captain_update_ride_location', {
-      p_ride_id: rideId, p_latitude: location.latitude, p_longitude: location.longitude,
+      p_ride_id: rideId,
+      p_latitude: location.latitude,
+      p_longitude: location.longitude,
     });
     if (error) throw error;
   },
@@ -376,7 +390,30 @@ export const rideDispatchService = {
   },
 
   async rateCaptain(rideId: string, rating: number, note?: string) {
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new Error('INVALID_RATING');
     const { error } = await requireClient().rpc('customer_rate_captain', { p_ride_id: rideId, p_rating: rating, p_note: note?.trim() || null });
     if (error) throw error;
+  },
+
+  async rateCustomer(rideId: string, rating: number, note?: string) {
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new Error('INVALID_RATING');
+    const { error } = await requireClient().rpc('captain_rate_customer', { p_ride_id: rideId, p_rating: rating, p_note: note?.trim() || null });
+    if (error) throw error;
+  },
+
+  async getReceivedRating(role: 'customer' | 'captain'): Promise<ReceivedRating> {
+    const userId = await currentUserId();
+    const recipientColumn = role === 'captain' ? 'captain_id' : 'customer_id';
+    const ratingColumn = role === 'captain' ? 'customer_rating' : 'captain_rating';
+    const { data, error } = await requireClient()
+      .from('rides')
+      .select('customer_rating, captain_rating')
+      .eq(recipientColumn, userId)
+      .not(ratingColumn, 'is', null);
+    if (error) throw error;
+    const ratings = (data ?? [])
+      .map((ride) => Number(role === 'captain' ? ride.customer_rating : ride.captain_rating))
+      .filter((rating) => Number.isInteger(rating) && rating >= 1 && rating <= 5);
+    return { count: ratings.length, average: ratings.length ? ratings.reduce((total, rating) => total + rating, 0) / ratings.length : null };
   },
 };

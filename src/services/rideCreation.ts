@@ -1,5 +1,6 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { rideDispatchService } from './rideDispatch';
+import { isProductionAuthMode } from './authMode';
 
 export type RideDraft = {
   pickup: string;
@@ -35,8 +36,12 @@ export const rideCreationService = {
     if (draft.kind === 'auto' && (!Number.isInteger(draft.passengerCount) || draft.passengerCount < 1 || draft.passengerCount > 3)) throw new Error('Auto passenger count must be between 1 and 3');
     if (draft.kind === 'bike' && draft.passengerCount !== 1) throw new Error('Bike rides support one passenger');
 
-    // The visual demo still works before the Supabase environment is supplied.
-    if (!isSupabaseConfigured) return { id: `local-${Date.now()}`, persisted: false };
+    // Local rides exist only for the explicitly selected visual demo. A
+    // production-auth build must fail closed rather than simulate a search.
+    if (!isSupabaseConfigured) {
+      if (isProductionAuthMode) throw new Error('SUPABASE_NOT_CONFIGURED');
+      return { id: `local-${Date.now()}`, persisted: false };
+    }
 
     await currentCustomerId();
     const id = await rideDispatchService.requestRide(draft);

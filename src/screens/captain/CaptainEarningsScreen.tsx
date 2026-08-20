@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { captainEarningsService, formatDuration, type CaptainEarningsOverview } from '../../services/captainEarnings';
 import { formatFare } from '../../utils/format';
@@ -16,7 +17,7 @@ export function CaptainEarningsScreen({ onHome, onBookings, onSettings }: { onHo
     setLoading(true); setFailed(false);
     void captainEarningsService.getMonth(month).then(setOverview).catch(() => setFailed(true)).finally(() => setLoading(false));
   }, [month]);
-  useEffect(load, [load]);
+  useFocusEffect(load);
   const monthLabel = month.toLocaleDateString(i18n.language === 'te' ? 'te-IN' : 'en-IN', { month: 'long', year: 'numeric' });
   const days = overview?.daily ?? [];
   return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -30,7 +31,7 @@ export function CaptainEarningsScreen({ onHome, onBookings, onSettings }: { onHo
         <Text style={styles.sectionTitle}>{t('captain.activityTitle')}</Text>
         <View style={styles.activityRow}><Metric label={t('captain.onlineTime')} value={formatDuration(overview?.onlineMinutes ?? null)} /><Metric label={t('captain.rideTime')} value={formatDuration(overview?.rideMinutes ?? 0)} /></View>
         <Text style={styles.sectionTitle}>{t('captain.earningsBreakdown')}</Text>
-        <View style={[styles.breakdown, shadows.card]}><BreakdownRow label={t('captain.rideEarnings')} value={formatFare(overview?.rideEarnings ?? 0)} /><BreakdownRow label={t('captain.tips')} value={formatFare(overview?.tips ?? 0)} /><BreakdownRow label={t('captain.bonuses')} value={formatFare(overview?.bonuses ?? 0)} /><View style={styles.divider} /><BreakdownRow label={t('captain.totalEarnings')} value={formatFare(overview?.totalEarnings ?? 0)} total /></View>
+        <View style={[styles.breakdown, shadows.card]}><BreakdownRow label={t('captain.rideEarnings')} value={formatFare(overview?.rideEarnings ?? 0)} /><BreakdownRow label={t('captain.tips')} value={overview?.tips == null ? '—' : formatFare(overview.tips)} /><BreakdownRow label={t('captain.bonuses')} value={overview?.bonuses == null ? '—' : formatFare(overview.bonuses)} /><View style={styles.divider} /><BreakdownRow label={t('captain.totalEarnings')} value={formatFare(overview?.totalEarnings ?? 0)} total /></View>
       </>}
     </ScrollView>
     <View style={styles.tabBar}><Tab icon="⌂" label={t('captain.tabHome')} onPress={onHome} /><Tab icon="▤" label={t('captain.tabBookings')} onPress={onBookings} /><Tab icon="₹" label={t('captain.tabEarnings')} active /><Tab icon="♙" label={t('captain.tabProfile')} onPress={onSettings} /></View>
