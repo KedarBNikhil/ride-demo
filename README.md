@@ -9,6 +9,29 @@ npm install
 npm run start
 ```
 
+## Separate Customer and Captain apps
+
+The project has one shared source tree and three Expo build variants. Customer
+and Captain use distinct Android package names and iOS bundle identifiers, so
+they can be installed side by side and do not share device storage or a
+Supabase session.
+
+```bash
+# Customer app — com.nandyalride.customer
+npm run start:customer
+
+# Captain app — com.nandyalride.captain
+npm run start:captain
+
+# Optional local launcher that still lets you choose either flow
+npm run start:demo
+```
+
+Use matching `APP_VARIANT` and `EXPO_PUBLIC_APP_MODE` values when creating
+native builds (for example, both set to `customer`) so each build receives its
+own app identity and opens its matching flow. Both variants continue to share
+the same Supabase project and database.
+
 ## Supabase Phase 1: demo authentication
 
 Customer and captain sign-in is intentionally local-only for this demo: no SMS
@@ -21,6 +44,28 @@ Captain onboarding is gated separately: its documents belong in the private
 verify all required documents and approve the onboarding application.
 
 The launcher provides separate Customer and Captain experiences. Language choices persist independently at `nandyal-ride-demo.customer.language` and `nandyal-ride-demo.captain.language`.
+
+## Captain ride-notification handoff
+
+Captain ride notifications carry a `rideId` and `offerId`. Tapping one from the
+background or after the Captain app was terminated opens the app and displays
+that exact offer only when it is still pending and belongs to the signed-in
+captain. Foreground dispatch remains on the existing Supabase Realtime flow.
+
+This cannot be tested in Expo Go. Build and install the Captain development
+client after configuring FCM credentials for `com.nandyalride.captain` in the
+Captain EAS project, then run:
+
+```bash
+eas build --platform android --profile development-captain
+npm run start:captain
+```
+
+On a physical device, send a `ride_offer` notification with the real pending
+`rideId` and `offerId`, background or terminate the Captain app, tap it, and
+confirm the matching request sheet appears. The included `firebase/nandyalride-captain.json`
+is native build input, so any Firebase credential/configuration change requires
+a new development build before it can be tested.
 
 ## Supabase Phase 2: ride creation
 

@@ -3,7 +3,6 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { ScreenShell } from '../../components/ScreenShell';
-import { mockTripService } from '../../services/mockTripService';
 import type { TripSummary } from './TripInProgressScreen';
 import { formatFare, formatNumber } from '../../utils/format';
 import { colors, fontFamily, fontSize, radii, shadows } from '../../theme';
@@ -12,15 +11,15 @@ export function EndRideScreen({ summary, onBack, onConfirmed }: { summary: TripS
   const { t } = useTranslation();
   const [saving, setSaving] = useState(false);
   const duration = `${formatNumber(Math.floor(summary.durationSeconds / 60))}:${formatNumber(summary.durationSeconds % 60).padStart(2, '0')}`;
-  const confirm = async () => { setSaving(true); await mockTripService.confirmCashReceived(); setSaving(false); onConfirmed(); };
+  const confirm = async () => { setSaving(true); onConfirmed(); };
   return <ScreenShell back={onBack} title={t('captain.endRideTitle')}>
     <View style={styles.hero}><Text style={styles.title}>{t('captain.rideSummary')}</Text></View>
     <View style={[styles.card, shadows.card]}>
       <View style={styles.stats}><Stat label={t('captain.totalDuration')} value={duration} /><Stat label={t('captain.totalDistance')} value={`${formatNumber(summary.distanceKm, { maximumFractionDigits: 1 })} km`} /></View>
       <View style={styles.divider} /><Row label={t('captain.baseFare')} value={formatFare(baseFare)} /><Row label={t('captain.adjustment')} value={formatFare(adjustment)} /><View style={styles.divider} /><Row label={t('captain.totalDue')} value={formatFare(total)} total />
     </View>
-    <View style={styles.cash}><Text style={styles.cashIcon}>💵</Text><View><Text style={styles.cashTitle}>{t('captain.cash')}</Text><Text style={styles.cashDetail}>{t('captain.cashOnly')}</Text></View></View>
-    <PrimaryButton label={saving ? t('login.pleaseWait') : t('captain.confirmCash')} onPress={() => { void confirm(); }} disabled={saving} />
+    <View style={styles.cash}><Text style={styles.cashIcon}>📲</Text><View><Text style={styles.cashTitle}>{t('captain.paymentOnCustomer')}</Text><Text style={styles.cashDetail}>{t('captain.paymentOnCustomerHint')}</Text></View></View>
+    <PrimaryButton label={saving ? t('login.pleaseWait') : t('actions.continue')} onPress={() => { void confirm(); }} disabled={saving} />
   </ScreenShell>;
 }
 function Row({ label, value, total = false }: { label: string; value: string; total?: boolean }) { return <View style={styles.row}><Text style={[styles.rowLabel, total && styles.totalLabel]}>{label}</Text><Text style={[styles.rowValue, total && styles.totalValue]}>{value}</Text></View>; }

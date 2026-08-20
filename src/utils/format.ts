@@ -7,7 +7,7 @@ export function formatNumber(value: number, options: Intl.NumberFormatOptions = 
 }
 
 export function formatFare(rupees: number): string {
-  return `₹${formatNumber(rupees, { maximumFractionDigits: 0 })}`;
+  return `₹${formatNumber(rupees, { maximumFractionDigits: 2 })}`;
 }
 
 export function formatOtp(otp: string | number): string {

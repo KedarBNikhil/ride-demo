@@ -5,6 +5,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { useRef } from 'react';
 import { useState } from 'react';
 import { AppNavigator, type AppMode } from './src/navigation/AppNavigator';
+import { appVariant, isSeparateApp } from './src/config/appVariant';
 import { colors, radii, shadows, fontFamily, fontSize } from './src/theme';
 import { NandyalBackdrop } from './src/components/NandyalBackdrop';
 
@@ -14,13 +15,15 @@ export default function App() {
     'NotoSansTelugu-Bold': NotoSansTelugu_700Bold,
     'NotoSansTelugu-ExtraBold': NotoSansTelugu_800ExtraBold,
   });
-  const [mode, setMode] = useState<AppMode | null>(null);
+  const initialMode: AppMode | null = isSeparateApp ? (appVariant === 'captain' ? 'captain' : appVariant === 'operator' ? 'operator' : 'customer') : null;
+  const [mode, setMode] = useState<AppMode | null>(initialMode);
+  const [flowVersion, setFlowVersion] = useState(0);
   if (!fontsLoaded) return null;
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
       {mode ? (
-        <AppNavigator key={mode} mode={mode} onExit={() => setMode(null)} />
+        <AppNavigator key={`${mode}-${flowVersion}`} mode={mode} onExit={() => { if (isSeparateApp) setFlowVersion((value) => value + 1); else setMode(null); }} />
       ) : (
         <ModeLauncher onChoose={setMode} />
       )}
