@@ -29,13 +29,20 @@ export type DispatchRide = {
   fare_approval_status?: 'estimated' | 'pending' | 'approved' | 'declined';
   captain_latitude?: number | null;
   captain_longitude?: number | null;
-  payment_status?: 'pending' | 'declared';
+  payment_status?: 'pending' | 'declared' | 'confirmed' | 'not_required';
   payment_method?: 'cash' | 'upi' | null;
+  customer_charge_amount?: number | null;
+  customer_charge_type?: 'free' | 'standard';
+  customer_charge_status?: 'pending' | 'declared' | 'not_required';
+  pricing_policy_code?: string | null;
+  free_ride_sequence?: number | null;
+  pricing_distance_meters?: number | null;
   customer_rating?: number | null;
   cancellation_reason_code?: string | null;
   cancellation_reason_detail?: string | null;
   cancellation_charge?: number | null;
   travelled_distance_km?: number | null;
+  requested_at?: string | null;
   accepted_at?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
@@ -44,7 +51,10 @@ export type DispatchRide = {
 export type AssignedCaptainDetails = {
   fullName: string;
   vehicleType: RideKind | null;
+  phone: string | null;
 };
+
+export type RideMessage = { id: string; sender_id: string; body: string; created_at: string };
 
 export type ReceivedRating = {
   average: number | null;
@@ -64,6 +74,28 @@ export type SettlementQueueItem = {
   drop_address: string;
   customer_name: string;
   captain_name: string;
+};
+
+export type CaptainRidePayout = {
+  captain_earning_amount: number;
+  payout_status: 'not_started' | 'initiated' | 'processing' | 'paid' | 'failed' | 'reversed' | 'held';
+  is_held: boolean;
+};
+
+export type CaptainRideDetails = {
+  ride: DispatchRide;
+  customerName: string | null;
+  payout: CaptainRidePayout | null;
+};
+
+export type CustomerPromotionStatus = {
+  promotion_enabled: boolean;
+  policy_code: string;
+  maximum_free_rides: number;
+  maximum_free_distance_meters: number;
+  completed_free_rides: number;
+  reserved_free_rides: number;
+  remaining_free_rides: number;
 };
 
 export type CaptainRideRequest = {
@@ -96,6 +128,13 @@ const requireClient = () => {
   if (!supabase) throw new Error('SUPABASE_NOT_CONFIGURED');
   return supabase;
 };
+
+async function edgeFunctionError(error: unknown) {
+  const context = (error as { context?: { json?: () => Promise<unknown> } } | null)?.context;
+  const payload = await context?.json?.().catch(() => null);
+  const message = (payload as { error?: unknown } | null)?.error;
+  return new Error(typeof message === 'string' ? message : error instanceof Error ? error.message : 'Ride offer could not be updated');
+}
 
 async function currentUserId() {
   const client = requireClient();
@@ -190,6 +229,18 @@ export const rideDispatchService = {
     return rides.find((ride) => ['requested', 'searching', 'accepted', 'arrived', 'in_progress'].includes(ride.status)) ?? null;
   },
 
+  async getCustomerPromotionStatus(): Promise<CustomerPromotionStatus | null> {
+    const { data, error } = await requireClient().rpc('customer_promotion_status').maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const status = data as Record<string, unknown>;
+    return {
+      promotion_enabled: Boolean(status.promotion_enabled), policy_code: String(status.policy_code ?? ''),
+      maximum_free_rides: asNumber(status.maximum_free_rides), maximum_free_distance_meters: asNumber(status.maximum_free_distance_meters),
+      completed_free_rides: asNumber(status.completed_free_rides), reserved_free_rides: asNumber(status.reserved_free_rides), remaining_free_rides: asNumber(status.remaining_free_rides),
+    };
+  },
+
   subscribeToCustomerRideHistory(onRides: (rides: DispatchRide[]) => void, onError?: (error: Error) => void) {
     if (!supabase) return () => {};
     const client = supabase;
@@ -210,12 +261,32 @@ export const rideDispatchService = {
 
   async getAssignedCaptain(rideId: string): Promise<AssignedCaptainDetails | null> {
     const { data, error } = await requireClient()
-      .rpc('customer_assigned_captain', { p_ride_id: rideId })
+      .rpc('customer_assigned_captain_contact', { p_ride_id: rideId })
       .maybeSingle();
     if (error) throw error;
     if (!data) return null;
-    const assignedCaptain = data as { full_name: string; vehicle_type: RideKind | null };
-    return { fullName: assignedCaptain.full_name, vehicleType: assignedCaptain.vehicle_type };
+    const assignedCaptain = data as { full_name: string; vehicle_type: RideKind | null; phone: string | null };
+    return { fullName: assignedCaptain.full_name, vehicleType: assignedCaptain.vehicle_type, phone: assignedCaptain.phone };
+  },
+
+  async getRideMessages(rideId: string): Promise<RideMessage[]> {
+    const { data, error } = await requireClient().rpc('ride_messages_for_ride', { p_ride_id: rideId });
+    if (error) throw error;
+    return (data ?? []) as RideMessage[];
+  },
+
+  async sendRideMessage(rideId: string, body: string) {
+    const { error } = await requireClient().rpc('send_ride_message', { p_ride_id: rideId, p_body: body.trim() });
+    if (error) throw error;
+  },
+
+  subscribeToRideMessages(rideId: string, onMessages: (messages: RideMessage[]) => void, onError?: (error: Error) => void) {
+    if (!supabase) return () => {};
+    const client = supabase;
+    const refresh = () => { void this.getRideMessages(rideId).then(onMessages).catch((error) => onError?.(error)); };
+    refresh();
+    const channel = client.channel(`ride-messages:${rideId}:${++rideSubscriptionSequence}`).on('postgres_changes', { event: '*', schema: 'public', table: 'ride_messages', filter: `ride_id=eq.${rideId}` }, refresh).subscribe();
+    return () => { void client.removeChannel(channel); };
   },
 
   async issueCustomerPickupOtp(rideId: string) {
@@ -255,6 +326,16 @@ export const rideDispatchService = {
     const { data, error } = await requireClient().rpc('captain_ride_history', { p_before: before ?? null, p_limit: limit });
     if (error) throw error;
     return (data ?? []) as DispatchRide[];
+  },
+
+  async getCaptainRideDetails(rideId: string): Promise<CaptainRideDetails> {
+    const [ride, detail, payout] = await Promise.all([
+      this.getRide(rideId),
+      requireClient().rpc('captain_ride_detail', { p_ride_id: rideId }).maybeSingle(),
+      this.getCaptainRidePayout(rideId).catch(() => null),
+    ]);
+    if (detail.error || !detail.data) throw detail.error ?? new Error('Captain ride detail is unavailable');
+    return { ride, customerName: typeof (detail.data as { customer_name?: unknown }).customer_name === 'string' ? (detail.data as { customer_name: string }).customer_name : null, payout };
   },
 
   async getCaptainPendingOffer(rideId: string, offerId: string): Promise<CaptainRideRequest | null> {
@@ -333,7 +414,8 @@ export const rideDispatchService = {
     if (accept) {
       const { data, error } = await requireClient().functions.invoke('ride-maps', { body: { action: 'accept_offer', offerId } });
       const ride = (data as { data?: { ride?: DispatchRide }; error?: string } | null)?.data?.ride;
-      if (error || !ride) throw error ?? new Error((data as { error?: string } | null)?.error ?? 'Ride offer could not be updated');
+      if (error) throw await edgeFunctionError(error);
+      if (!ride) throw new Error((data as { error?: string } | null)?.error ?? 'Ride offer could not be updated');
       return ride;
     }
     const { data, error } = await requireClient().rpc('respond_to_ride_offer', { p_offer_id: offerId, p_accept: accept });
@@ -374,10 +456,24 @@ export const rideDispatchService = {
     return data as DispatchRide;
   },
 
+  async confirmCaptainPaymentReceived(rideId: string) {
+    const { data, error } = await requireClient().rpc('captain_confirm_payment_received', { p_ride_id: rideId });
+    if (error || !data) throw error ?? new Error('Payment could not be confirmed');
+    return data as DispatchRide;
+  },
+
   async getSettlementQueue(status: SettlementQueueItem['settlement_status'] | null = 'awaiting_review') {
     const { data, error } = await requireClient().rpc('operator_settlement_queue', { p_status: status });
     if (error) throw error;
     return (data ?? []).map((item: SettlementQueueItem) => ({ ...item, amount_due: asNumber(item.amount_due) })) as SettlementQueueItem[];
+  },
+
+  async getCaptainRidePayout(rideId: string): Promise<CaptainRidePayout | null> {
+    const { data, error } = await requireClient().rpc('captain_ride_payout', { p_ride_id: rideId }).maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const payout = data as Omit<CaptainRidePayout, 'captain_earning_amount' | 'is_held'> & { captain_earning_amount: unknown; is_held: unknown };
+    return { ...payout, captain_earning_amount: asNumber(payout.captain_earning_amount), is_held: Boolean(payout.is_held) } as CaptainRidePayout;
   },
 
   async reviewSettlement(settlementId: string, action: 'confirmed' | 'flagged', note?: string) {
@@ -392,6 +488,16 @@ export const rideDispatchService = {
   async rateCaptain(rideId: string, rating: number, note?: string) {
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new Error('INVALID_RATING');
     const { error } = await requireClient().rpc('customer_rate_captain', { p_ride_id: rideId, p_rating: rating, p_note: note?.trim() || null });
+    if (error) throw error;
+  },
+
+  async raiseCaptainPaymentIssue(rideId: string, reason: string) {
+    const { error } = await requireClient().rpc('captain_raise_payment_issue', { p_ride_id: rideId, p_reason: reason });
+    if (error) throw error;
+  },
+
+  async raiseCustomerPaymentIssue(rideId: string, reason: string) {
+    const { error } = await requireClient().rpc('customer_raise_payment_issue', { p_ride_id: rideId, p_reason: reason });
     if (error) throw error;
   },
 

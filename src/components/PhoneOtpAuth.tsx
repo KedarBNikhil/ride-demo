@@ -11,7 +11,7 @@ type Props = {
   title: string;
   subtitle: string;
   emoji: string;
-  onBack: () => void;
+  onBack?: () => void;
   onSendOtp: (phone: string) => Promise<unknown>;
   onVerifyOtp: (phone: string, otp: string) => Promise<unknown>;
   children?: React.ReactNode;

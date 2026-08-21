@@ -19,21 +19,24 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, { clamp, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenShell } from '../components/ScreenShell';
 import { PhoneOtpAuth } from '../components/PhoneOtpAuth';
 import { customerAuthService } from '../services/customerAuth';
 import { rideCreationService, type CancellationReason } from '../services/rideCreation';
-import { rideDispatchService, type AssignedCaptainDetails, type DispatchRide, type RideStatus } from '../services/rideDispatch';
+import { rideDispatchService, type AssignedCaptainDetails, type CustomerPromotionStatus, type DispatchRide, type RideStatus } from '../services/rideDispatch';
 import { googleMapsService } from '../services/googleMaps';
 import { offlineLocationCatalogue, type OfflineLocation } from '../services/offlineLocationCatalogue';
 import { decodeGooglePolyline } from '../utils/polyline';
 import { calculateFare } from '../services/fareEngine';
 import { straightLineDistanceMeters } from '../services/distanceProvider';
-import { LiveLocationMap } from '../components/LiveLocationMap';
+import { LiveLocationMap, LiveLocationMarker } from '../components/LiveLocationMap';
 import { CustomerRideSettlement } from './CustomerRideSettlement';
 import { formatFare, formatNumber, formatOtp } from '../utils/format';
+import { filterAndSortRideHistory, type RideHistoryFilter } from '../utils/rideHistory';
+import { RideHistoryFilterControl } from '../components/RideHistoryFilter';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 
 export type RideKind = 'bike' | 'auto';
@@ -41,6 +44,7 @@ export type Coordinate = { latitude: number; longitude: number };
 export type RouteQuote = { id: string; distanceMeters: number; durationSeconds: number; encodedPolyline: string };
 export type CustomerRide = { id?: string; pickup: string; drop: string; kind: RideKind; passengerCount: number; pickupCoordinate?: Coordinate; dropCoordinate?: Coordinate; routeQuote?: RouteQuote };
 type LocationTarget = 'pickup' | 'drop';
+type CustomerFareDisplay = { originalEstimatedFare: number | null; customerCharge: number | null; finalFare: number | null; routeDistanceMeters: number | null; isFree: boolean; promotionAvailable: boolean };
 const NANDYAL: Region = { latitude: 15.4889, longitude: 78.4836, latitudeDelta: 0.035, longitudeDelta: 0.035 };
 const estimateCoordinateDistanceKm = (a: Coordinate, b: Coordinate) => Math.sqrt((a.latitude - b.latitude) ** 2 + (a.longitude - b.longitude) ** 2) * 111;
 
@@ -67,6 +71,18 @@ function hasUsableRouteQuote(quote: RouteQuote | undefined): quote is RouteQuote
   );
 }
 
+function getCustomerFareDisplay({ kind, passengerCount, routeQuote, promotion, backendRide }: { kind: RideKind; passengerCount: number; routeQuote?: RouteQuote; promotion?: CustomerPromotionStatus | null; backendRide?: DispatchRide | null }): CustomerFareDisplay {
+  const routeDistanceMeters = backendRide?.pricing_distance_meters ?? backendRide?.trip_distance_meters ?? routeQuote?.distanceMeters ?? null;
+  const calculatedEstimate = routeQuote && hasUsableRouteQuote(routeQuote)
+    ? calculateFare({ rideType: kind, passengerCount: kind === 'bike' ? 1 : passengerCount, tripDistanceMeters: routeQuote.distanceMeters }).total
+    : null;
+  const originalEstimatedFare = backendRide ? Number(backendRide.estimated_fare ?? calculatedEstimate ?? 0) : calculatedEstimate;
+  const promotionAvailable = Boolean(promotion?.promotion_enabled && promotion.remaining_free_rides > 0 && routeDistanceMeters != null && routeDistanceMeters <= promotion.maximum_free_distance_meters);
+  const isFree = backendRide ? backendRide.customer_charge_type === 'free' && Number(backendRide.customer_charge_amount ?? 0) === 0 : promotionAvailable;
+  const finalFare = backendRide?.final_fare == null ? null : Number(backendRide.final_fare);
+  return { originalEstimatedFare, customerCharge: backendRide ? Number(backendRide.customer_charge_amount ?? finalFare ?? originalEstimatedFare ?? 0) : isFree ? 0 : originalEstimatedFare, finalFare, routeDistanceMeters, isFree, promotionAvailable };
+}
+
 /* ─────────────────────────── LOGIN ─────────────────────────── */
 
 export function CustomerLoginScreen({
@@ -74,7 +90,7 @@ export function CustomerLoginScreen({
   onBack,
 }: {
   onComplete: () => void;
-  onBack: () => void;
+  onBack?: () => void;
 }) {
   const { t } = useTranslation();
   return <PhoneOtpAuth title={t('screens.customerLogin')} subtitle={t('login.subtitle')} emoji="📱" onBack={onBack} onSendOtp={customerAuthService.sendOtp} onVerifyOtp={async (phone, otp) => { await customerAuthService.verifyOtp(phone, otp); onComplete(); }} />;
@@ -113,6 +129,7 @@ export function CustomerHomeScreen({
   const [locationUnavailable, setLocationUnavailable] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [pickupMarkerReset, setPickupMarkerReset] = useState(0);
+  const [promotion, setPromotion] = useState<CustomerPromotionStatus | null>(null);
   const freshLocationRequest = useRef<Promise<Location.LocationObject> | null>(null);
   const requestFreshLocation = () => {
     if (!freshLocationRequest.current) freshLocationRequest.current = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).finally(() => { freshLocationRequest.current = null; });
@@ -155,6 +172,8 @@ export function CustomerHomeScreen({
     void start();
     return () => { active = false; subscription?.remove(); };
   }, [t]);
+  const refreshPromotion = useCallback(() => { void rideDispatchService.getCustomerPromotionStatus().then(setPromotion).catch(() => setPromotion(null)); }, []);
+  useFocusEffect(refreshPromotion);
 
   const setSheet = (expanded: boolean) => {
     setSheetExpanded(expanded);
@@ -220,6 +239,7 @@ export function CustomerHomeScreen({
             <View style={styles.sheetHandle} />
           </Pressable>
           <View style={styles.homeSheetContent}>
+            <PromotionOfferCard promotion={promotion} t={t} />
             <Pressable onPress={startBooking} accessibilityRole="button" style={styles.destinationAction}>
               <Text style={styles.destinationPin}>⌖</Text><View style={styles.destinationTextWrap}><Text style={styles.destinationLabel}>{t('home.whereTo')}</Text><Text style={styles.destinationSub}>{t('home.whereToHint')}</Text></View><Text style={styles.destinationArrow}>→</Text>
             </Pressable>
@@ -450,6 +470,8 @@ function PinDropPicker({ target, initialCoordinate, initialAddress, requiresManu
   const lastResolvedCoordinate = useRef<Coordinate | null>(null);
   const skipInitialRegionResolution = useRef(Boolean(initialAddress) || requiresManualPin);
   const [hasPlacedPin, setHasPlacedPin] = useState(!requiresManualPin);
+  const [userLocation, setUserLocation] = useState<Coordinate | null>(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
 
   const resolveAddress = (next: Coordinate) => {
     if (timer.current) clearTimeout(timer.current);
@@ -469,6 +491,23 @@ function PinDropPicker({ target, initialCoordinate, initialAddress, requiresManu
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, []);
 
+  const centerOnCurrentLocation = async () => {
+    if (gpsLoading) return;
+    setGpsLoading(true);
+    try {
+      const next = coordinateFromPosition(await getCustomerGpsPosition());
+      setUserLocation(next);
+      setSelectedCoordinate(next);
+      setHasPlacedPin(true);
+      mapRef.current?.animateToRegion({ ...next, latitudeDelta: 0.012, longitudeDelta: 0.012 }, 350);
+      resolveAddress(next);
+    } catch {
+      // The shared GPS helper has already requested permission; leave the pin in place if it is unavailable.
+    } finally {
+      setGpsLoading(false);
+    }
+  };
+
   return <SafeAreaView style={styles.pinPickerSafe} edges={['top', 'left', 'right']}>
     <MapView
       ref={mapRef}
@@ -485,9 +524,12 @@ function PinDropPicker({ target, initialCoordinate, initialAddress, requiresManu
         resolveAddress(next);
       }}
       style={StyleSheet.absoluteFill}
-    />
+    >
+      {userLocation && <LiveLocationMarker coordinate={userLocation} />}
+    </MapView>
     <View pointerEvents="none" style={styles.fixedPinWrap}><View style={styles.fixedPin}><Text style={styles.fixedPinText}>●</Text></View><View style={styles.fixedPinStem} /></View>
     <Pressable accessibilityRole="button" accessibilityLabel={t('actions.back')} onPress={onBack} style={[styles.pinPickerBack, shadows.card]}><Text style={styles.pinPickerBackText}>‹</Text></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel={t('home.recenter')} disabled={gpsLoading} onPress={() => { void centerOnCurrentLocation(); }} style={[styles.pinPickerGps, shadows.card]}><Text style={styles.recenterIcon}>⌖</Text></Pressable>
     <View style={[styles.pinPickerSheet, shadows.card]}>
       <View style={styles.sheetHandle} />
       <Text style={styles.pinPickerTitle}>{t(target === 'pickup' ? 'location.selectPickup' : 'location.selectDrop')}</Text>
@@ -508,7 +550,9 @@ async function reverseGeocodeAddress(coordinate: Coordinate, fallback: string) {
   try {
     const [place] = await Location.reverseGeocodeAsync(coordinate);
     if (!place) return fallback;
-    const lineOne = [place.name, place.street, place.streetNumber].filter(Boolean).join(', ');
+    // `name` is often the nearest POI rather than the address at the GPS
+    // coordinate, so do not let it replace a customer's street/home label.
+    const lineOne = [place.streetNumber, place.street].filter(Boolean).join(', ');
     const lineTwo = [place.district, place.city, place.region].filter(Boolean).join(', ');
     return [lineOne, lineTwo].filter(Boolean).join(', ') || fallback;
   } catch { return fallback; }
@@ -542,6 +586,7 @@ export function RideTypeScreen({
   const [routeQuote, setRouteQuote] = useState<RouteQuote | undefined>(ride.routeQuote);
   const [routeLoading, setRouteLoading] = useState(!hasUsableRouteQuote(ride.routeQuote));
   const [routeError, setRouteError] = useState<string | null>(null);
+  const [promotion, setPromotion] = useState<CustomerPromotionStatus | null>(null);
   const routeId = typeof routeQuote?.id === 'string' ? routeQuote.id : null;
   const encodedPolyline = typeof routeQuote?.encodedPolyline === 'string' ? routeQuote.encodedPolyline : '';
   const routeCoordinates = decodeGooglePolyline(encodedPolyline);
@@ -572,9 +617,12 @@ export function RideTypeScreen({
     const timer = setTimeout(() => mapRef.current?.fitToCoordinates(routeCoordinates, { animated: true, edgePadding: { top: 34, right: 34, bottom: 34, left: 34 } }), 100);
     return () => clearTimeout(timer);
   }, [routeQuote?.id]);
-  const options: Array<{ kind: RideKind; icon: string; fare?: number; eta: number }> = [
-    { kind: 'bike', icon: '🏍️', fare: hasValidRouteQuote ? calculateFare({ rideType: 'bike', passengerCount: 1, tripDistanceMeters: routeQuote.distanceMeters }).total : undefined, eta: 3 },
-    { kind: 'auto', icon: '🛺', fare: hasValidRouteQuote ? calculateFare({ rideType: 'auto', passengerCount: ride.passengerCount, tripDistanceMeters: routeQuote.distanceMeters }).total : undefined, eta: 5 },
+  useEffect(() => { void rideDispatchService.getCustomerPromotionStatus().then(setPromotion).catch(() => setPromotion(null)); }, []);
+  const selectedFareDisplay = getCustomerFareDisplay({ kind: selected, passengerCount: ride.passengerCount, routeQuote, promotion });
+  const promotionUnavailable = Boolean(promotion?.promotion_enabled && promotion.remaining_free_rides > 0 && hasValidRouteQuote && !selectedFareDisplay.promotionAvailable);
+  const options: Array<{ kind: RideKind; icon: string; fareDisplay: CustomerFareDisplay; eta: number }> = [
+    { kind: 'bike', icon: '🏍️', fareDisplay: getCustomerFareDisplay({ kind: 'bike', passengerCount: 1, routeQuote, promotion }), eta: 3 },
+    { kind: 'auto', icon: '🛺', fareDisplay: getCustomerFareDisplay({ kind: 'auto', passengerCount: ride.passengerCount, routeQuote, promotion }), eta: 5 },
   ];
 
   return <SafeAreaView style={styles.rideOptionsSafe} edges={['top', 'left', 'right']}>
@@ -588,9 +636,10 @@ export function RideTypeScreen({
       <View style={[styles.routeSummary, shadows.soft]}><Pressable onPress={() => onEditLocation('pickup')} accessibilityRole="button" style={styles.routeSummaryPlace}><Text style={styles.routeSummaryDot}>●</Text><Text style={styles.routeSummaryText} numberOfLines={1}>{ride.pickup}</Text></Pressable><Text style={styles.routeSummaryArrow}>→</Text><Pressable onPress={() => onEditLocation('drop')} accessibilityRole="button" style={styles.routeSummaryPlace}><Text style={[styles.routeSummaryDot, styles.routeSummaryDropDot]}>●</Text><Text style={styles.routeSummaryText} numberOfLines={1}>{ride.drop}</Text></Pressable></View>
     </View>
     <Text style={styles.routeDiagnostic}>{routeDiagnostic}</Text>
-    <View style={[styles.rideOptionsSheet, shadows.card]}>
-      <View style={styles.sheetHandle} />
-      <View style={styles.rideOptionsHeader}><Text style={styles.rideOptionsHeading}>{t('rides.selectRide')}</Text><Text style={[styles.rideFareHeading, routeError && styles.rideFareHeadingError]}>{routeLoading ? 'Finding road route…' : routeError ? t('rides.routeUnavailable') : t('rides.estimate')}</Text></View>
+      <View style={[styles.rideOptionsSheet, shadows.card]}>
+        <View style={styles.sheetHandle} />
+        <PromotionOfferCard promotion={promotion} t={t} compact />
+        <View style={styles.rideOptionsHeader}><Text style={styles.rideOptionsHeading}>{t('rides.selectRide')}</Text><Text style={[styles.rideFareHeading, routeError && styles.rideFareHeadingError]}>{routeLoading ? 'Finding road route…' : routeError ? t('rides.routeUnavailable') : t('rides.estimate')}</Text></View>
       <View style={styles.rideOptionList}>{options.map((option) => (
         <RideCard
           key={option.kind}
@@ -600,6 +649,7 @@ export function RideTypeScreen({
           t={t}
         />
       ))}</View>
+      {promotionUnavailable && <Text style={styles.promotionUnavailable}>{selectedFareDisplay.routeDistanceMeters != null && selectedFareDisplay.routeDistanceMeters > promotion!.maximum_free_distance_meters ? t('rides.freeOfferDistanceUnavailable', { distance: promotion!.maximum_free_distance_meters / 1000 }) : t('rides.freeOfferUsedUnavailable')}</Text>}
       {selected === 'auto' && <View style={styles.passengerPicker}><Text style={styles.passengerPickerLabel}>{t('rides.autoPassengers')}</Text><View style={styles.passengerChoices}>{[1, 2, 3].map((count) => <Pressable key={count} onPress={() => onPassengerCountChange(count)} accessibilityRole="button" accessibilityState={{ selected: ride.passengerCount === count }} style={[styles.passengerChoice, ride.passengerCount === count && styles.passengerChoiceSelected]}><Text style={[styles.passengerChoiceText, ride.passengerCount === count && styles.passengerChoiceTextSelected]}>{formatNumber(count)}</Text></Pressable>)}</View></View>}
       <View style={styles.rideOptionsExtras}><Text style={styles.rideOptionsExtra}>₹ {t('rides.cash')}</Text><View style={styles.rideOptionsDivider} /><Text style={styles.rideOptionsExtra}>{t('rides.offers')}</Text></View>
       <PrimaryButton label={t('rides.bookSelected', { ride: t(`rides.${selected}`) })} onPress={onNext} disabled={!hasValidRouteQuote || routeLoading} />
@@ -621,7 +671,7 @@ function RideCard({
   onSelect,
   t,
 }: {
-  option: { kind: RideKind; icon: string; fare?: number; eta: number };
+  option: { kind: RideKind; icon: string; fareDisplay: CustomerFareDisplay; eta: number };
   selected: boolean;
   onSelect: () => void;
   t: (k: string) => string;
@@ -657,7 +707,7 @@ function RideCard({
           <Text style={styles.rideName}>{t(`rides.${option.kind}`)}</Text>
           <Text style={styles.rideDetail}>{t(`rides.${option.kind}Detail`)} · {(t as any)('rides.eta', { minutes: formatNumber(option.eta) })}</Text>
         </View>
-        <Text style={styles.rideFare}>{option.fare === undefined ? '—' : formatFare(option.fare)}</Text>
+        <CustomerFareValue display={option.fareDisplay} t={t} />
         {selected && (
           <View style={styles.rideCheck}>
             <Text style={styles.rideCheckText}>✓</Text>
@@ -676,6 +726,15 @@ function Chip({ label }: { label: string }) {
   );
 }
 
+function PromotionOfferCard({ promotion, t, compact = false }: { promotion: CustomerPromotionStatus | null; t: (key: string, options?: Record<string, unknown>) => string; compact?: boolean }) {
+  if (!promotion?.promotion_enabled || promotion.remaining_free_rides <= 0) return null;
+  return <View style={[styles.promotionCard, compact && styles.promotionCardCompact]}><Text style={styles.promotionTitle}>{t('rides.freeOfferActive')}</Text><Text style={styles.promotionDetail}>{t('rides.freeOfferSummary', { remaining: promotion.remaining_free_rides, maximum: promotion.maximum_free_rides, distance: promotion.maximum_free_distance_meters / 1000 })}</Text></View>;
+}
+
+function CustomerFareValue({ display, t, alignStart = false }: { display: CustomerFareDisplay; t: (key: string) => string; alignStart?: boolean }) {
+  return <View style={[styles.rideFareWrap, alignStart && styles.rideFareWrapStart]}>{display.isFree && display.originalEstimatedFare != null ? <><Text style={[styles.rideFare, styles.rideFareStruck]}>{formatFare(display.originalEstimatedFare)}</Text><Text style={styles.rideFareFree}>{t('rides.freeRideAmount')}</Text><Text style={styles.rideOfferApplied}>{t('rides.freeOfferApplied')}</Text></> : <Text style={styles.rideFare}>{display.customerCharge == null ? '—' : formatFare(display.customerCharge)}</Text>}</View>;
+}
+
 /* ─────────────────────────── BOOKING CONFIRM ─────────────────────────── */
 
 export function BookingConfirmScreen({
@@ -689,8 +748,10 @@ export function BookingConfirmScreen({
 }) {
   const { t } = useTranslation();
   const routeQuote = hasUsableRouteQuote(ride.routeQuote) ? ride.routeQuote : undefined;
-  const fare = routeQuote ? calculateFare({ rideType: ride.kind, passengerCount: ride.kind === 'bike' ? 1 : ride.passengerCount, tripDistanceMeters: routeQuote.distanceMeters }) : null;
   const [booking, setBooking] = useState(false);
+  const [promotion, setPromotion] = useState<CustomerPromotionStatus | null>(null);
+  useEffect(() => { void rideDispatchService.getCustomerPromotionStatus().then(setPromotion).catch(() => setPromotion(null)); }, []);
+  const fareDisplay = getCustomerFareDisplay({ kind: ride.kind, passengerCount: ride.passengerCount, routeQuote, promotion });
   const book = async () => {
     if (!routeQuote) {
       Alert.alert(t('rides.routeUnavailable'));
@@ -699,6 +760,13 @@ export function BookingConfirmScreen({
     setBooking(true);
     try {
       const createdRide = await rideCreationService.create(ride);
+      const confirmedRide = await rideDispatchService.getRide(createdRide.id);
+      const confirmedFareDisplay = getCustomerFareDisplay({ kind: ride.kind, passengerCount: ride.passengerCount, routeQuote, promotion, backendRide: confirmedRide });
+      const previewWasFree = fareDisplay.isFree;
+      if (previewWasFree && confirmedRide.customer_charge_type !== 'free') {
+        Alert.alert(t('rides.freeOfferNoLongerAvailable', { fare: formatFare(confirmedFareDisplay.customerCharge ?? 0) }));
+      }
+      void rideDispatchService.getCustomerPromotionStatus().then(setPromotion).catch(() => setPromotion(null));
       await onBook(createdRide.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
@@ -714,7 +782,7 @@ export function BookingConfirmScreen({
         <SummaryRow label={t('rides.drop')} value={ride.drop} icon="●" locationTone="drop" />
         <SummaryRow label={t('rides.ride')} value={t(`rides.${ride.kind}`)} icon={ride.kind === 'bike' ? '🏍️' : '🛺'} />
         {ride.kind === 'auto' && <SummaryRow label={t('rides.passengers')} value={formatNumber(ride.passengerCount)} icon="👤" />}
-        <SummaryRow label={t('rides.estimate')} value={fare ? formatFare(fare.total) : '—'} icon="💰" last />
+        <View style={[styles.summaryRow, styles.summaryRowDivider]}><Text style={styles.summaryIcon}>💰</Text><View style={styles.summaryText}><Text style={styles.summaryLabel}>{t('rides.estimate')}</Text><CustomerFareValue display={fareDisplay} t={t} alignStart /></View></View>
       </View>
       <PrimaryButton label={booking ? t('login.pleaseWait') : t('rides.book')} onPress={() => { void book(); }} disabled={booking} />
     </ScreenShell>
@@ -817,7 +885,7 @@ const cancellationReasons: Array<{ code: CancellationReason; labelKey: string }>
   { code: 'other', labelKey: 'Other' },
 ];
 
-export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCancelled, onBookings, onProfile }: { ride: CustomerRide; onHome: () => void; onCancelled: () => void; onFareQuoteCancelled: () => void; onBookings: () => void; onProfile: () => void }) {
+export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCancelled, onBookings, onProfile, onOpenChat }: { ride: CustomerRide; onHome: () => void; onCancelled: () => void; onFareQuoteCancelled: () => void; onBookings: () => void; onProfile: () => void; onOpenChat: (rideId: string, captainName: string) => void }) {
   const { t } = useTranslation();
   const mapRef = useRef<MapView>(null);
   const [cancelStep, setCancelStep] = useState<'none' | 'confirm' | 'reason'>('none');
@@ -832,16 +900,25 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
   const fareQuoteWasPending = useRef(false);
   const [liveStatus, setLiveStatus] = useState<RideStatus>('accepted');
   const [liveRide, setLiveRide] = useState<DispatchRide | null>(null);
-  const [captainDetails, setCaptainDetails] = useState<{ fullName: string; vehicleType: RideKind | null } | null>(null);
+  const [captainDetails, setCaptainDetails] = useState<AssignedCaptainDetails | null>(null);
   const [pickupPin, setPickupPin] = useState<string | null>(null);
   const pickupOtpIssuedForRide = useRef<string | null>(null);
   const [captainRoute, setCaptainRoute] = useState<Coordinate[]>([]);
   const pickup = ride.pickupCoordinate ?? locationCoordinate(ride.pickup, 0);
   const arrived = liveStatus === 'arrived' || liveStatus === 'in_progress' || liveStatus === 'completed';
-  const canCancel = liveStatus === 'searching' || liveStatus === 'accepted' || liveStatus === 'arrived' || liveStatus === 'in_progress';
+  const canCancel = liveStatus === 'searching' || liveStatus === 'accepted' || liveStatus === 'in_progress';
   const cancellationMayIncurCharge = liveStatus === 'in_progress';
   const captainName = captainDetails?.fullName || t('rides.captain');
   const vehicleType = captainDetails?.vehicleType;
+  const callCaptain = async () => {
+    const phone = captainDetails?.phone?.replace(/[^+\d]/g, '');
+    if (!phone) return;
+    try {
+      if (await Linking.canOpenURL(`tel:${phone}`)) await Linking.openURL(`tel:${phone}`);
+    } catch {
+      Alert.alert(t('login.tryAgain'));
+    }
+  };
 
   useEffect(() => {
     mapRef.current?.fitToCoordinates([pickup], { animated: true, edgePadding: { top: 120, right: 50, bottom: 300, left: 50 } });
@@ -922,14 +999,6 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
       setUpdatingFareQuote(false);
     }
   }, [onFareQuoteCancelled, ride.id, t]);
-  if (liveStatus === 'completed' && ride.id) {
-    return <CustomerRideSettlement rideId={ride.id} fare={Number(liveRide?.final_fare ?? liveRide?.estimated_fare ?? 0)} captainName={captainName} paymentStatus={liveRide?.payment_status ?? 'pending'} onHome={onHome} />;
-  }
-  const displayedCaptainCoordinate = liveRide?.captain_latitude != null && liveRide?.captain_longitude != null
-    ? { latitude: Number(liveRide.captain_latitude), longitude: Number(liveRide.captain_longitude) }
-    : null;
-  const displayedApproachRoute = captainRoute.length > 1 ? captainRoute : [];
-  const inProgress = liveStatus === 'in_progress';
   const awaitingFareApproval = liveRide?.fare_approval_status === 'pending';
 
   useEffect(() => {
@@ -957,6 +1026,17 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
     return () => { active = false; clearInterval(timer); };
   }, [awaitingFareApproval, liveRide?.accepted_at, respondToFareQuote, updatingFareQuote]);
 
+  const liveFareDisplay = getCustomerFareDisplay({ kind: ride.kind, passengerCount: ride.passengerCount, routeQuote: ride.routeQuote, backendRide: liveRide });
+
+  if (liveStatus === 'completed' && ride.id) {
+    return <CustomerRideSettlement rideId={ride.id} fare={liveFareDisplay.customerCharge ?? 0} captainName={captainName} paymentStatus={liveRide?.payment_status ?? 'pending'} freeRide={liveFareDisplay.isFree} onHome={onHome} />;
+  }
+  const displayedCaptainCoordinate = liveRide?.captain_latitude != null && liveRide?.captain_longitude != null
+    ? { latitude: Number(liveRide.captain_latitude), longitude: Number(liveRide.captain_longitude) }
+    : null;
+  const displayedApproachRoute = captainRoute.length > 1 ? captainRoute : [];
+  const inProgress = liveStatus === 'in_progress';
+
   return <SafeAreaView style={styles.assignedSafe} edges={['top', 'left', 'right']}>
     <MapView ref={mapRef} provider={PROVIDER_GOOGLE} initialRegion={NANDYAL} style={StyleSheet.absoluteFill}>
       <Marker coordinate={pickup} pinColor={colors.success} title={t('rides.pickup')} />
@@ -968,14 +1048,14 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
       <View style={styles.sheetHandle} />
       {!arrived && <Text style={styles.bookingStatus}>{awaitingFareApproval ? t('rides.fareQuoteWaiting') : liveStatus === 'accepted' ? t('rides.bookedMessage') : t('rides.searchingSubtitle')}</Text>}
       <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(inProgress ? 'rides.startedTitle' : arrived ? 'rides.hereTitle' : awaitingFareApproval ? 'rides.fareQuoteTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{inProgress ? t('rides.startedSubtitle') : arrived ? t('rides.hereSubtitle') : awaitingFareApproval ? t('rides.fareQuoteWaiting') : t('rides.arriving')}</Text></View></View>
-      <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{captainName}</Text><Text style={styles.assignedVehicle}>{vehicleType ? t(`rides.${vehicleType}`) : t('rides.captain')}</Text></View></View>
+      <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{captainName}</Text><Text style={styles.assignedVehicle}>{vehicleType ? t(`rides.${vehicleType}`) : t('rides.captain')}</Text></View><View style={styles.assignedContact}><Pressable onPress={() => { if (ride.id) onOpenChat(ride.id, captainName); }} accessibilityRole="button" accessibilityLabel="Message captain" accessibilityState={{ disabled: !ride.id }} disabled={!ride.id} style={[styles.assignedCall, !ride.id && styles.assignedCallDisabled]}><Text style={styles.assignedCallText}>✉</Text></Pressable><Pressable onPress={() => { void callCaptain(); }} accessibilityRole="button" accessibilityLabel="Call captain" accessibilityState={{ disabled: !captainDetails?.phone }} disabled={!captainDetails?.phone} style={[styles.assignedCall, !captainDetails?.phone && styles.assignedCallDisabled]}><Text style={styles.assignedCallText}>☎</Text></Pressable></View></View>
       {liveRide?.fare_approval_status === 'pending' && <View style={styles.fareQuoteCard}>
         <Text style={styles.fareQuoteTitle}>{t('rides.fareQuoteTitle')}</Text>
         <Text style={styles.fareQuoteCountdown}>{fareQuoteSecondsRemaining ?? 60}s</Text>
         <Text style={styles.fareQuoteMessage}>{t('rides.fareQuoteMessage', { distance: formatNumber(Number(liveRide.pickup_distance_meters ?? 0) / 1000, { maximumFractionDigits: 1 }) })}</Text>
         <SummaryRow label={t('rides.fareQuoteRide')} value={formatFare(Number(liveRide.base_fare ?? 0) + Number(liveRide.distance_surcharge ?? 0))} icon="🛺" />
         <SummaryRow label={t('rides.fareQuotePickup')} value={formatFare(Number(liveRide.pickup_surcharge ?? 0))} icon="⌖" />
-        <SummaryRow label={t('rides.fareQuoteTotal')} value={formatFare(Number(liveRide.final_fare ?? 0))} icon="₹" last />
+        <SummaryRow label={t('rides.customerCharge')} value={liveFareDisplay.isFree ? t('rides.freeRideAmount') : formatFare(liveFareDisplay.customerCharge ?? 0)} icon="₹" last />
         <PrimaryButton label={updatingFareQuote ? t('login.pleaseWait') : t('rides.acceptFareQuote')} onPress={() => { void respondToFareQuote(true); }} disabled={updatingFareQuote} />
         <PrimaryButton label={t('rides.declineFareQuote')} onPress={startCancellation} danger disabled={updatingFareQuote} />
       </View>}
@@ -1023,7 +1103,7 @@ function BookingDetailsSheet({ ride, captain, onClose }: { ride: DispatchRide; c
   const { t } = useTranslation();
   const progress = useRef(new Animated.Value(0)).current;
   const [closing, setClosing] = useState(false);
-  const finalFare = ride.final_fare == null ? null : Number(ride.final_fare);
+  const fareDisplay = getCustomerFareDisplay({ kind: ride.ride_type, passengerCount: Number(ride.passenger_count ?? 1), backendRide: ride });
   const rating = Number(ride.customer_rating ?? 0);
   useEffect(() => { Animated.timing(progress, { toValue: 1, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(); }, [progress]);
   const dismiss = () => { if (closing) return; setClosing(true); Animated.timing(progress, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => { if (finished) onClose(); }); };
@@ -1034,7 +1114,7 @@ function BookingDetailsSheet({ ride, captain, onClose }: { ride: DispatchRide; c
       <View style={styles.bookingDetailsHero}><View style={styles.bookingDetailsHeroIcon}><Text style={styles.bookingDetailsHeroIconText}>{ride.ride_type === 'bike' ? '🏍️' : '🛺'}</Text></View><View style={styles.bookingDetailsHeroText}><Text style={styles.bookingDetailsTitle}>{t('rides.rideDetailsTitle')}</Text><Text style={styles.bookingDetailsStatus}>{t(`rides.status${ride.status}`)}</Text></View><Pressable onPress={dismiss} accessibilityRole="button" style={styles.bookingDetailsClose}><Text style={styles.bookingDetailsCloseText}>×</Text></Pressable></View>
       <ScrollView contentContainerStyle={styles.bookingDetailsContent} showsVerticalScrollIndicator={false}>
         <View style={styles.bookingDetailsSection}><Text style={styles.bookingDetailsSectionTitle}>{t('rides.routeDetails')}</Text><View style={styles.bookingDetailRow}><View style={styles.assignedPickupDot} /><View style={styles.bookingDetailText}><Text style={styles.bookingDetailLabel}>{t('rides.pickup')}</Text><Text style={styles.bookingDetailValue}>{ride.pickup_address}</Text></View></View><View style={styles.bookingDetailDivider} /><View style={styles.bookingDetailRow}><View style={[styles.assignedPickupDot, styles.assignedDropDot]} /><View style={styles.bookingDetailText}><Text style={styles.bookingDetailLabel}>{t('rides.drop')}</Text><Text style={styles.bookingDetailValue}>{ride.drop_address}</Text></View></View></View>
-        <View style={styles.bookingDetailsSection}><Text style={styles.bookingDetailsSectionTitle}>{t('rides.fareDetails')}</Text><View style={styles.bookingFareGrid}><View style={styles.bookingFareTile}><Text style={styles.bookingDetailLabel}>{t('rides.estimatedFare')}</Text><Text style={styles.bookingDetailAmountValue}>{formatFare(Number(ride.estimated_fare ?? 0))}</Text></View>{finalFare != null && <View style={styles.bookingFareTile}><Text style={styles.bookingDetailLabel}>{t('rides.finalFare')}</Text><Text style={styles.bookingDetailAmountValue}>{formatFare(finalFare)}</Text></View>}</View>{Number(ride.cancellation_charge ?? 0) > 0 && <View style={styles.bookingDetailAmount}><Text style={styles.bookingDetailLabel}>{t('rides.cancellationCharge')}</Text><Text style={styles.bookingDetailAmountValue}>{formatFare(Number(ride.cancellation_charge))}</Text></View>}</View>
+        <View style={styles.bookingDetailsSection}><Text style={styles.bookingDetailsSectionTitle}>{t('rides.fareDetails')}</Text><View style={styles.bookingFareGrid}><View style={styles.bookingFareTile}><Text style={styles.bookingDetailLabel}>{t('rides.customerCharge')}</Text><Text style={styles.bookingDetailAmountValue}>{fareDisplay.isFree ? t('rides.freeRideAmount') : formatFare(fareDisplay.customerCharge ?? 0)}</Text></View>{fareDisplay.finalFare != null && <View style={styles.bookingFareTile}><Text style={styles.bookingDetailLabel}>{t('rides.finalFare')}</Text><Text style={styles.bookingDetailAmountValue}>{formatFare(fareDisplay.finalFare)}</Text></View>}</View>{Number(ride.cancellation_charge ?? 0) > 0 && <View style={styles.bookingDetailAmount}><Text style={styles.bookingDetailLabel}>{t('rides.cancellationCharge')}</Text><Text style={styles.bookingDetailAmountValue}>{formatFare(Number(ride.cancellation_charge))}</Text></View>}</View>
         <View style={styles.bookingDetailsSection}><Text style={styles.bookingDetailsSectionTitle}>{t('rides.captainDetails')}</Text><View style={styles.bookingCaptainRow}><View style={styles.bookingCaptainAvatar}><Text style={styles.bookingCaptainAvatarText}>👤</Text></View><View style={styles.bookingDetailText}>{captain === undefined ? <Text style={styles.bookingDetailLoading}>{t('login.pleaseWait')}</Text> : captain ? <><Text style={styles.bookingDetailValue}>{captain.fullName}</Text><Text style={styles.bookingDetailLabel}>{captain.vehicleType ? t(`rides.${captain.vehicleType}`) : t('rides.captain')}</Text></> : <Text style={styles.bookingDetailLabel}>{t('rides.noCaptainAssigned')}</Text>}</View></View></View>
         <View style={styles.bookingDetailsSection}><Text style={styles.bookingDetailsSectionTitle}>{t('rides.ratingGiven')}</Text><View style={styles.bookingRatingRow}>{rating > 0 ? <><Text style={styles.bookingRating}>{'★'.repeat(Math.min(5, rating))}{'☆'.repeat(Math.max(0, 5 - rating))}</Text><Text style={styles.bookingRatingNumber}>{rating}/5</Text></> : <Text style={styles.bookingDetailLabel}>{t('rides.notRatedYet')}</Text>}</View></View>
       </ScrollView>
@@ -1045,20 +1125,20 @@ function BookingDetailsSheet({ ride, captain, onClose }: { ride: DispatchRide; c
 
 export function CustomerBookingsScreen({ ride, onHome, onProfile, onCancelled, onOpenRide }: { ride: CustomerRide; onHome: () => void; onProfile: () => void; onCancelled: () => void; onOpenRide: (ride: CustomerRide, status: RideStatus) => void }) {
   const { t } = useTranslation();
-  const [history, setHistory] = useState<DispatchRide[]>([]); const [loaded, setLoaded] = useState(!rideDispatchService.isEnabled); const [cancellingRideId, setCancellingRideId] = useState<string | null>(null); const [detailsRide, setDetailsRide] = useState<DispatchRide | null>(null); const [detailsCaptain, setDetailsCaptain] = useState<AssignedCaptainDetails | null | undefined>(null);
+  const [history, setHistory] = useState<DispatchRide[]>([]); const [loaded, setLoaded] = useState(!rideDispatchService.isEnabled); const [filter, setFilter] = useState<RideHistoryFilter>('all'); const [cancellingRideId, setCancellingRideId] = useState<string | null>(null); const [detailsRide, setDetailsRide] = useState<DispatchRide | null>(null); const [detailsCaptain, setDetailsCaptain] = useState<AssignedCaptainDetails | null | undefined>(null);
   useEffect(() => {
     if (!rideDispatchService.isEnabled) return;
     return rideDispatchService.subscribeToCustomerRideHistory((rides) => { setHistory(rides); setLoaded(true); }, () => setLoaded(true));
   }, []);
   const localHistory = ride.id ? [{ id: ride.id, status: 'searching' as RideStatus, ride_type: ride.kind, pickup_address: ride.pickup, drop_address: ride.drop, pickup_latitude: ride.pickupCoordinate?.latitude ?? null, pickup_longitude: ride.pickupCoordinate?.longitude ?? null, drop_latitude: ride.dropCoordinate?.latitude ?? null, drop_longitude: ride.dropCoordinate?.longitude ?? null }] as DispatchRide[] : [];
-  const rides = rideDispatchService.isEnabled ? history : localHistory;
+  const rides = useMemo(() => filterAndSortRideHistory(rideDispatchService.isEnabled ? history : localHistory, filter), [filter, history, localHistory]);
   const cancel = (rideId: string) => Alert.alert(t('rides.cancelTitle'), t('rides.searchingCancelMessage'), [
     { text: t('rides.stay'), style: 'cancel' },
     { text: t('rides.confirmCancel'), style: 'destructive', onPress: () => { setCancellingRideId(rideId); void rideCreationService.cancel(rideId, 'change_plans').then(onCancelled).catch(() => Alert.alert(t('login.tryAgain'))).finally(() => setCancellingRideId(null)); } },
   ]);
   const customerRide = (record: DispatchRide): CustomerRide => ({ id: record.id, kind: record.ride_type, passengerCount: record.ride_type === 'auto' ? Number(record.passenger_count ?? 1) : 1, pickup: record.pickup_address, drop: record.drop_address, ...(record.pickup_latitude != null && record.pickup_longitude != null ? { pickupCoordinate: { latitude: Number(record.pickup_latitude), longitude: Number(record.pickup_longitude) } } : {}), ...(record.drop_latitude != null && record.drop_longitude != null ? { dropCoordinate: { latitude: Number(record.drop_latitude), longitude: Number(record.drop_longitude) } } : {}) });
   const openDetails = (record: DispatchRide) => { setDetailsRide(record); setDetailsCaptain(record.captain_id ? undefined : null); if (record.captain_id && rideDispatchService.isEnabled) void rideDispatchService.getAssignedCaptain(record.id).then(setDetailsCaptain).catch(() => setDetailsCaptain(null)); };
-  return <SafeAreaView style={styles.bookingsSafe} edges={['top', 'left', 'right']}><ScrollView contentContainerStyle={styles.bookingsContent} showsVerticalScrollIndicator={false}><Text style={styles.bookingsTitle}>{t('home.bookingsTitle')}</Text>{!loaded && <Text style={styles.bookingsEmpty}>{t('login.pleaseWait')}</Text>}{loaded && !rides.length && <Text style={styles.bookingsEmpty}>{t('home.bookingsMessage')}</Text>}{rides.map((record) => { const canCancel = record.status === 'searching' || record.status === 'accepted'; const actionLabel = record.status === 'cancelled' || record.status === 'completed' ? t('rides.bookThisRoute') : t('rides.viewRideStatus'); const isCancelling = cancellingRideId === record.id; return <View key={record.id} style={[styles.bookingCard, shadows.card]}><Text style={styles.bookingCardStatus}>{t(`rides.status${record.status}`)}</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.pickup_address}</Text><Text style={styles.bookingCardArrow}>→</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.drop_address}</Text><View style={styles.bookingCardActions}><Pressable onPress={() => openDetails(record)} accessibilityRole="button" style={styles.bookingDetailsButton}><Text style={styles.bookingDetailsButtonText}>{t('rides.rideDetails')}</Text></Pressable><Pressable onPress={() => onOpenRide(customerRide(record), record.status)} accessibilityRole="button" style={styles.bookingRouteButton}><Text style={styles.bookingRouteButtonText}>{actionLabel}</Text></Pressable></View>{canCancel && <PrimaryButton label={isCancelling ? t('login.pleaseWait') : t('rides.cancelRide')} onPress={() => cancel(record.id)} disabled={isCancelling} danger />}</View>; })}</ScrollView><CustomerTabBar active="bookings" onHome={onHome} onBookings={() => undefined} onProfile={onProfile} />{detailsRide && <BookingDetailsSheet ride={detailsRide} captain={detailsCaptain} onClose={() => setDetailsRide(null)} />}</SafeAreaView>;
+  return <SafeAreaView style={styles.bookingsSafe} edges={['top', 'left', 'right']}><ScrollView contentContainerStyle={styles.bookingsContent} showsVerticalScrollIndicator={false}><Text style={styles.bookingsTitle}>{t('home.bookingsTitle')}</Text><RideHistoryFilterControl value={filter} onChange={setFilter} />{!loaded && <Text style={styles.bookingsEmpty}>{t('login.pleaseWait')}</Text>}{loaded && !rides.length && <Text style={styles.bookingsEmpty}>{filter === 'all' ? t('home.bookingsMessage') : t('history.empty')}</Text>}{rides.map((record) => { const canCancel = record.status === 'searching' || record.status === 'accepted'; const actionLabel = record.status === 'cancelled' || record.status === 'completed' ? t('rides.bookThisRoute') : t('rides.viewRideStatus'); const isCancelling = cancellingRideId === record.id; return <View key={record.id} style={[styles.bookingCard, shadows.card]}><Text style={styles.bookingCardStatus}>{t(`rides.status${record.status}`)}</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.pickup_address}</Text><Text style={styles.bookingCardArrow}>→</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.drop_address}</Text><View style={styles.bookingCardActions}><Pressable onPress={() => openDetails(record)} accessibilityRole="button" style={styles.bookingDetailsButton}><Text style={styles.bookingDetailsButtonText}>{t('rides.rideDetails')}</Text></Pressable><Pressable onPress={() => onOpenRide(customerRide(record), record.status)} accessibilityRole="button" style={styles.bookingRouteButton}><Text style={styles.bookingRouteButtonText}>{actionLabel}</Text></Pressable></View>{canCancel && <PrimaryButton label={isCancelling ? t('login.pleaseWait') : t('rides.cancelRide')} onPress={() => cancel(record.id)} disabled={isCancelling} danger />}</View>; })}</ScrollView><CustomerTabBar active="bookings" onHome={onHome} onBookings={() => undefined} onProfile={onProfile} />{detailsRide && <BookingDetailsSheet ride={detailsRide} captain={detailsCaptain} onClose={() => setDetailsRide(null)} />}</SafeAreaView>;
 }
 
 function CustomerTabBar({ active, onHome, onBookings, onProfile }: { active: 'home' | 'bookings'; onHome: () => void; onBookings: () => void; onProfile: () => void }) {
@@ -1093,6 +1173,10 @@ const styles = StyleSheet.create({
   sheetHandleArea: { alignItems: 'center', minHeight: 52, paddingBottom: 14, paddingTop: 15 },
   sheetHandle: { backgroundColor: '#CBC5BB', borderRadius: radii.pill, height: 5, width: 46 },
   homeSheetContent: { flex: 1, gap: 14, paddingBottom: 18, paddingHorizontal: 16 },
+  promotionCard: { backgroundColor: colors.successLight, borderColor: colors.success, borderRadius: radii.md, borderWidth: 1, gap: 3, padding: 12 },
+  promotionCardCompact: { padding: 10 },
+  promotionTitle: { color: colors.success, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
+  promotionDetail: { color: colors.textPrimary, fontFamily, fontSize: fontSize.xs, lineHeight: 18 },
   destinationAction: { alignItems: 'center', backgroundColor: colors.primaryDark, borderRadius: radii.lg, flexDirection: 'row', minHeight: 74, paddingHorizontal: 16, ...shadows.button },
   destinationPin: { color: colors.bgAlt, fontSize: 28, marginRight: 12 },
   destinationTextWrap: { flex: 1 },
@@ -1156,6 +1240,7 @@ const styles = StyleSheet.create({
   fixedPinText: { color: colors.textOnAccent, fontSize: 16 },
   fixedPinStem: { backgroundColor: colors.accent, height: 18, width: 4 },
   pinPickerBack: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 48, justifyContent: 'center', left: 18, position: 'absolute', top: 14, width: 48 },
+  pinPickerGps: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 48, justifyContent: 'center', position: 'absolute', right: 18, top: 14, width: 48 },
   pinPickerBackText: { color: colors.textPrimary, fontSize: 35, lineHeight: 37, marginTop: -4 },
   pinPickerSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 0, gap: 15, left: 0, padding: 18, paddingBottom: 24, position: 'absolute', right: 0 },
   pinPickerTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '800' },
@@ -1190,6 +1275,7 @@ const styles = StyleSheet.create({
   rideOptionsExtras: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', height: 48, justifyContent: 'space-around' },
   rideOptionsExtra: { color: colors.textPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '700' },
   rideFareHeadingError: { color: '#B42318' },
+  promotionUnavailable: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, lineHeight: 18 },
   routeDiagnostic: { backgroundColor: 'rgba(255,255,255,0.92)', color: colors.textPrimary, fontFamily, fontSize: 11, left: 18, padding: 8, position: 'absolute', right: 18, top: 112 },
   rideOptionsDivider: { backgroundColor: colors.divider, height: 24, width: 1 },
 
@@ -1426,6 +1512,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
   },
   rideFare: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '800' },
+  rideFareWrap: { alignItems: 'flex-end', gap: 1 },
+  rideFareWrapStart: { alignItems: 'flex-start' },
+  rideFareStruck: { color: colors.textMuted, fontSize: fontSize.sm, textDecorationLine: 'line-through' },
+  rideFareFree: { color: colors.primaryDark, fontFamily, fontSize: fontSize.lg, fontWeight: '900' },
+  rideOfferApplied: { color: colors.success, fontFamily, fontSize: 10, fontWeight: '800' },
   passengerPicker: { backgroundColor: colors.bgAlt, borderRadius: radii.md, gap: 8, padding: 10 },
   passengerPickerLabel: { color: colors.textPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   passengerChoices: { flexDirection: 'row', gap: 8 },
@@ -1476,7 +1567,7 @@ const styles = StyleSheet.create({
   fareQuoteMessage: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 20 },
   declineFareQuote: { alignItems: 'center', minHeight: 38, justifyContent: 'center' },
   declineFareQuoteText: { color: colors.error, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
-  assignedCall: { alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: radii.pill, height: 38, justifyContent: 'center', width: 38 },
+  assignedContact: { flexDirection: 'row', gap: 7 }, assignedCall: { alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: radii.pill, height: 38, justifyContent: 'center', width: 38 }, assignedCallDisabled: { opacity: 0.45 },
   assignedCallText: { color: colors.primary, fontSize: 20 },
   assignedPickupRow: { alignItems: 'flex-start', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', gap: 9, paddingHorizontal: 12, paddingVertical: 11 },
   pickupPinCard: { alignItems: 'center', backgroundColor: colors.primaryLight, borderColor: colors.primary, borderRadius: radii.lg, borderWidth: 1, gap: 5, padding: 14 },

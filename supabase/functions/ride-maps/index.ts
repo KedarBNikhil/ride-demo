@@ -140,7 +140,13 @@ Deno.serve(async (request) => {
       if ((isReverse && !point) || (!isReverse && (address.length < 3 || address.length > 280))) return fail('Invalid location');
       const params = new URLSearchParams(isReverse ? { latlng: `${point!.latitude},${point!.longitude}`, key: googleKey ?? '' } : { address, components: 'country:IN', region: 'in', key: googleKey ?? '' });
       const payload = await placeCall(isReverse ? 'reverse_geocode' : 'geocode', async () => await googleJson(`https://maps.googleapis.com/maps/api/geocode/json?${params}`, { method: 'GET' }));
-      const result = (payload.results as Array<Record<string, unknown>> | undefined)?.[0];
+      const results = (payload.results as Array<Record<string, unknown>> | undefined) ?? [];
+      // Never fall back to a landmark for a reverse lookup. A nearby hospital
+      // is not a valid substitute for the customer's current street address.
+      const result = isReverse ? results.find((candidate) => {
+        const types = Array.isArray(candidate.types) ? candidate.types.filter((type): type is string => typeof type === 'string') : [];
+        return types.some((type) => ['street_address', 'route', 'neighborhood', 'sublocality', 'sublocality_level_1'].includes(type));
+      }) : results[0];
       const resolvedAddress = typeof result?.formatted_address === 'string' ? result.formatted_address : '';
       const resolvedPoint = coordinate((result?.geometry as Record<string, unknown> | undefined)?.location);
       if (!resolvedAddress || (!isReverse && !resolvedPoint)) throw new Error('No address was found');
@@ -184,25 +190,30 @@ Deno.serve(async (request) => {
     if (action === 'accept_offer') {
       const offerId = String(body?.offerId ?? '');
       if (!/^[0-9a-f-]{36}$/i.test(offerId)) return fail('Invalid offer');
-      const { data: pendingOffer, error: pendingOfferError } = await admin.from('ride_offers')
-        .select('ride_id, rides!inner(pickup_latitude, pickup_longitude)')
-        .eq('id', offerId).eq('captain_id', userData.user.id).eq('status', 'offered').maybeSingle();
-      const pendingRide = pendingOffer?.rides as Record<string, unknown> | null | undefined;
-      const pickup = coordinate({ latitude: pendingRide?.pickup_latitude, longitude: pendingRide?.pickup_longitude });
-      const { data: availability, error: availabilityError } = await admin.from('captain_availability').select('latitude, longitude').eq('captain_id', userData.user.id).single();
-      const captain = coordinate({ latitude: availability?.latitude, longitude: availability?.longitude });
-      if (pendingOfferError || availabilityError || !pendingOffer || !pickup || !captain) throw new Error('Captain location is unavailable; route was not recalculated');
-      const { route, callId } = await computeRoute(captain, pickup, 'captain_to_pickup');
       const key = publicKey();
       if (!key) throw new Error('Supabase publishable key is unavailable');
       const caller = createClient(url, key, { auth: { persistSession: false }, global: { headers: { Authorization: authorization! } } });
       const { data: ride, error: acceptanceError } = await caller.rpc('respond_to_ride_offer', { p_offer_id: offerId, p_accept: true });
       if (acceptanceError || !ride) throw acceptanceError ?? new Error('Ride offer could not be accepted');
       const acceptedRide = ride as Record<string, unknown>;
-      const { error: applyError } = await admin.rpc('apply_captain_road_distance', { p_ride_id: acceptedRide.id, p_pickup_distance_meters: route.distanceMeters, p_duration_seconds: route.durationSeconds, p_encoded_polyline: route.encodedPolyline });
-      if (applyError) throw applyError;
-      await admin.from('google_routes_call_log').update({ ride_id: acceptedRide.id }).eq('id', callId);
-      return response({ ride, route });
+
+      // The database claim is authoritative and must not be reported as failed
+      // because optional Maps enrichment is capped or temporarily unavailable.
+      // Running it after the claim also avoids spending a route request for a
+      // Captain who loses the atomic race.
+      try {
+        const pickup = coordinate({ latitude: acceptedRide.pickup_latitude, longitude: acceptedRide.pickup_longitude });
+        const { data: availability, error: availabilityError } = await admin.from('captain_availability').select('latitude, longitude').eq('captain_id', userData.user.id).single();
+        const captain = coordinate({ latitude: availability?.latitude, longitude: availability?.longitude });
+        if (availabilityError || !pickup || !captain) throw new Error('Captain location is unavailable; route was not recalculated');
+        const { route, callId } = await computeRoute(captain, pickup, 'captain_to_pickup');
+        const { error: applyError } = await admin.rpc('apply_captain_road_distance', { p_ride_id: acceptedRide.id, p_pickup_distance_meters: route.distanceMeters, p_duration_seconds: route.durationSeconds, p_encoded_polyline: route.encodedPolyline });
+        if (applyError) throw applyError;
+        await admin.from('google_routes_call_log').update({ ride_id: acceptedRide.id }).eq('id', callId);
+        return response({ ride, route });
+      } catch {
+        return response({ ride });
+      }
     }
 
     return fail('Unsupported action');

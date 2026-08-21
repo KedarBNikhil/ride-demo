@@ -32,7 +32,6 @@ export function ScreenShell({ children, back, title, noHeader = false }: Props) 
               style={styles.backBtn}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
-              <Text style={styles.backChevron}>‹</Text>
               <Text style={styles.backText}>{t('actions.back')}</Text>
             </Pressable>
           ) : (
@@ -77,12 +76,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 2,
     minWidth: 64,
-  },
-  backChevron: {
-    color: colors.textOnPrimary,
-    fontSize: 28,
-    lineHeight: 32,
-    marginTop: -2,
   },
   backText: {
     color: colors.textOnPrimary,
