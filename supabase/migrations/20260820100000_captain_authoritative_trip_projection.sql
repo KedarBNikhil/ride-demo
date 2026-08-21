@@ -8,7 +8,10 @@ returns table (
   estimated_fare numeric, pickup_distance_meters numeric, pickup_eta_seconds integer, expires_at timestamptz,
   customer_name text, customer_phone text
 )
-language sql security definer set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
+begin
+  perform public.require_production_user();
+  return query
   select offer.id, ride.id, ride.pickup_address, ride.drop_address,
     ride.pickup_latitude, ride.pickup_longitude, ride.drop_latitude, ride.drop_longitude,
     ride.estimated_fare, offer.pickup_distance_meters, offer.estimated_pickup_eta_seconds, offer.expires_at,
@@ -19,6 +22,7 @@ language sql security definer set search_path = '' as $$
   where offer.captain_id = auth.uid() and offer.status = 'offered'
     and offer.expires_at > now() and ride.status = 'searching'
   order by offer.offered_at limit 1;
+end;
 $$;
 
 create or replace function public.captain_ride_detail(p_ride_id uuid)
