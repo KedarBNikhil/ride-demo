@@ -1,6 +1,6 @@
 import * as Location from 'expo-location';
 import MapView from 'react-native-maps';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,7 +14,7 @@ import { captainEarningsService } from '../../services/captainEarnings';
 import { formatFare } from '../../utils/format';
 import { filterAndSortRideHistory, type RideHistoryFilter } from '../../utils/rideHistory';
 import { RideHistoryFilterControl } from '../../components/RideHistoryFilter';
-export function CaptainDashboardScreen({ online, onToggle, onSettings, onBookings, onEarnings, onRequest, request, onAccept, onReject, requestCycle, onResumeRide }: { online: boolean; onToggle: () => void; onSettings: () => void; onBookings?: () => void; onEarnings?: () => void; onRequest: (request: CaptainRideRequest | null) => void; request: CaptainRideRequest | null; onAccept: () => Promise<void>; onReject: () => void; requestCycle: number; onResumeRide?: (ride: CaptainActiveRide) => void }) {
+export function CaptainDashboardScreen({ online, timeoutNotice, onToggle, onSettings, onBookings, onEarnings, onRequest, request, onAccept, onReject, requestCycle, onResumeRide }: { online: boolean; timeoutNotice?: string | null; onToggle: () => void; onSettings: () => void; onBookings?: () => void; onEarnings?: () => void; onRequest: (request: CaptainRideRequest | null) => void; request: CaptainRideRequest | null; onAccept: () => Promise<void>; onReject: () => void; requestCycle: number; onResumeRide?: (ride: CaptainActiveRide) => void }) {
   const { t } = useTranslation(); const mapRef = useRef<MapView>(null); const [location, setLocation] = useState<LiveCoordinate | null>(null); const [locationUnavailable, setLocationUnavailable] = useState(false); const [availabilitySaving, setAvailabilitySaving] = useState(false); const [availabilityError, setAvailabilityError] = useState(false); const [today, setToday] = useState({ earnings: 0, trips: 0 });
   const freshLocationRequest = useRef<Promise<Location.LocationObject> | null>(null);
   const requestFreshLocation = () => {
@@ -52,7 +52,9 @@ export function CaptainDashboardScreen({ online, onToggle, onSettings, onBooking
     return () => { active = false; subscription?.remove(); };
   }, [online]);
   useEffect(() => { void registerPushNotifications('captain').catch(() => undefined); }, []);
-  useFocusEffect(React.useCallback(() => { void captainEarningsService.getToday().then((overview) => setToday({ earnings: overview.totalEarnings, trips: overview.tripCount })).catch(() => undefined); }, []));
+  const refreshToday = useCallback(() => { void captainEarningsService.getToday().then((overview) => setToday({ earnings: overview.totalEarnings, trips: overview.tripCount })).catch(() => undefined); }, []);
+  useFocusEffect(refreshToday);
+  useEffect(() => rideDispatchService.subscribeToCaptainRides(refreshToday), [refreshToday]);
   useEffect(() => { void rideDispatchService.getCaptainActiveRide().then((ride) => { if (ride) onResumeRide?.(ride); }).catch(() => undefined); }, [onResumeRide]);
   useEffect(() => { if (!online) return; return rideDispatchService.subscribeToCaptainOffers(onRequest); }, [online, onRequest, requestCycle]);
   useEffect(() => {
@@ -94,6 +96,7 @@ export function CaptainDashboardScreen({ online, onToggle, onSettings, onBooking
     <View style={styles.header}>
       <View style={[styles.badge, online ? styles.onlineBadge : styles.offlineBadge]}><Text style={styles.badgeText}>{online ? t('captain.onlineWaiting') : t('captain.offlineStatus')}</Text></View>
     </View>
+    {!!timeoutNotice && <View style={[styles.locationNotice, shadows.card]}><Text style={styles.locationText}>{timeoutNotice}</Text></View>}
     <Pressable accessibilityRole="button" accessibilityLabel={t('home.recenter')} disabled={!location} onPress={recenterOnLocation} style={[styles.recenterButton, shadows.card, !location && { opacity: 0.5 }]}><Text style={styles.recenterIcon}>⌖</Text></Pressable>
     {locationUnavailable && <View style={[styles.locationNotice, shadows.card]}><Text style={styles.locationText}>{t('home.locationUnavailable')}</Text></View>}
     {request ? <IncomingRideRequestSheet request={request} onAccept={onAccept} onReject={onReject} bottomOffset={76} /> : <View style={[styles.sheet, shadows.card]}>

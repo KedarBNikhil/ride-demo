@@ -6,6 +6,7 @@ import {
   BackHandler,
   Dimensions,
   Easing,
+  Image,
   LayoutAnimation,
   Linking,
   Pressable,
@@ -38,6 +39,8 @@ import { formatFare, formatNumber, formatOtp } from '../utils/format';
 import { filterAndSortRideHistory, type RideHistoryFilter } from '../utils/rideHistory';
 import { RideHistoryFilterControl } from '../components/RideHistoryFilter';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
+
+const sawaariHomeFooter = require('../../assets/images/sawaari-home-footer.png');
 
 export type RideKind = 'bike' | 'auto';
 export type Coordinate = { latitude: number; longitude: number };
@@ -234,11 +237,12 @@ export function CustomerHomeScreen({
       {locationUnavailable && <View style={styles.locationNotice}><Text style={styles.locationNoticeText}>{t('home.locationUnavailable')}</Text></View>}
 
       <GestureDetector gesture={sheetPanGesture}>
-        <Reanimated.View style={[styles.homeSheet, { height: sheetHeight }, sheetAnimatedStyle, shadows.card]}>
+        <Reanimated.View style={[styles.homeSheet, { height: sheetHeight }, sheetAnimatedStyle, shadows.card, styles.homeSheetLayer]}>
+          <Image accessibilityIgnoresInvertColors resizeMode="cover" source={sawaariHomeFooter} style={styles.homeSheetBackdrop} />
           <Pressable onPress={() => setSheet(!sheetExpanded)} style={styles.sheetHandleArea} accessibilityRole="button" accessibilityLabel={t('home.toggleSheet')}>
             <View style={styles.sheetHandle} />
           </Pressable>
-          <View style={styles.homeSheetContent}>
+          <ScrollView contentContainerStyle={styles.homeSheetContent} showsVerticalScrollIndicator={false} style={styles.homeSheetScroll}>
             <PromotionOfferCard promotion={promotion} t={t} />
             <Pressable onPress={startBooking} accessibilityRole="button" style={styles.destinationAction}>
               <Text style={styles.destinationPin}>⌖</Text><View style={styles.destinationTextWrap}><Text style={styles.destinationLabel}>{t('home.whereTo')}</Text><Text style={styles.destinationSub}>{t('home.whereToHint')}</Text></View><Text style={styles.destinationArrow}>→</Text>
@@ -252,7 +256,7 @@ export function CustomerHomeScreen({
               <View style={styles.landmarkRow}>{landmarks.map((landmark) => <Pressable key={landmark.label} accessibilityRole="button" onPress={() => handlePickLocation(landmark.target)} style={styles.landmarkCard}><Text style={styles.landmarkIcon}>{landmark.icon}</Text><Text style={styles.landmarkText} numberOfLines={2}>{landmark.label}</Text></Pressable>)}</View>
               <Pressable onPress={onProfile} accessibilityRole="button" style={styles.safetyCard}><Text style={styles.safetyIcon}>✓</Text><View style={styles.safetyTextWrap}><Text style={styles.safetyTitle}>{t('home.safetyTitle')}</Text><Text style={styles.safetySubtitle}>{t('home.safetySubtitle')}</Text></View><Text style={styles.safetyArrow}>›</Text></Pressable>
             </View>
-          </View>
+          </ScrollView>
         </Reanimated.View>
       </GestureDetector>
       <View style={styles.homeTabBar}>
@@ -894,6 +898,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
   const [cancellationError, setCancellationError] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [updatingFareQuote, setUpdatingFareQuote] = useState(false);
+  const [fareQuoteExpiring, setFareQuoteExpiring] = useState(false);
   const [fareQuoteSecondsRemaining, setFareQuoteSecondsRemaining] = useState<number | null>(null);
   const fareQuoteDecisionInFlight = useRef(false);
   const fareQuoteTimeoutHandledForAcceptance = useRef<string | null>(null);
@@ -905,6 +910,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
   const pickupOtpIssuedForRide = useRef<string | null>(null);
   const [captainRoute, setCaptainRoute] = useState<Coordinate[]>([]);
   const pickup = ride.pickupCoordinate ?? locationCoordinate(ride.pickup, 0);
+  const hasCurrentRide = liveRide?.id === ride.id && liveRide?.status !== 'cancelled';
   const arrived = liveStatus === 'arrived' || liveStatus === 'in_progress' || liveStatus === 'completed';
   const canCancel = liveStatus === 'searching' || liveStatus === 'accepted' || liveStatus === 'in_progress';
   const cancellationMayIncurCharge = liveStatus === 'in_progress';
@@ -924,6 +930,12 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
     mapRef.current?.fitToCoordinates([pickup], { animated: true, edgePadding: { top: 120, right: 50, bottom: 300, left: 50 } });
     return undefined;
   }, []);
+  useEffect(() => {
+    setLiveRide(null);
+    setCaptainDetails(null);
+    setPickupPin(null);
+    setCaptainRoute([]);
+  }, [ride.id]);
   useEffect(() => {
     if (!ride.id || ride.id.startsWith('local-')) return;
     return rideDispatchService.subscribeToRide(ride.id, (updatedRide) => {
@@ -999,6 +1011,22 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
       setUpdatingFareQuote(false);
     }
   }, [onFareQuoteCancelled, ride.id, t]);
+  const expireFareQuote = useCallback(async () => {
+    if (!ride.id || fareQuoteDecisionInFlight.current) return;
+    fareQuoteDecisionInFlight.current = true;
+    setFareQuoteExpiring(true);
+    try {
+      const updatedRide = await rideDispatchService.approveFareQuote(ride.id, false);
+      if (updatedRide.status === 'cancelled') onFareQuoteCancelled();
+    } catch {
+      const currentRide = await rideDispatchService.getRide(ride.id).catch(() => null);
+      if (currentRide?.status === 'cancelled') onFareQuoteCancelled();
+      // Otherwise wait for the existing authoritative timeout subscription/poll.
+    } finally {
+      fareQuoteDecisionInFlight.current = false;
+      setUpdatingFareQuote(false);
+    }
+  }, [onFareQuoteCancelled, ride.id]);
   const awaitingFareApproval = liveRide?.fare_approval_status === 'pending';
 
   useEffect(() => {
@@ -1007,10 +1035,11 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
       if (!awaitingFareApproval) {
         fareQuoteDecisionInFlight.current = false;
         fareQuoteTimeoutHandledForAcceptance.current = null;
+        setFareQuoteExpiring(false);
       }
       return;
     }
-    const expiresAt = new Date(liveRide.accepted_at).getTime() + 60_000;
+    const expiresAt = new Date(liveRide.accepted_at).getTime() + 30_000;
     let active = true;
     const tick = () => {
       const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
@@ -1018,13 +1047,13 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
       setFareQuoteSecondsRemaining(remaining);
       if (remaining === 0 && fareQuoteTimeoutHandledForAcceptance.current !== liveRide.accepted_at) {
         fareQuoteTimeoutHandledForAcceptance.current = liveRide.accepted_at ?? null;
-        void respondToFareQuote(false);
+        void expireFareQuote();
       }
     };
     tick();
     const timer = setInterval(tick, 1_000);
     return () => { active = false; clearInterval(timer); };
-  }, [awaitingFareApproval, liveRide?.accepted_at, respondToFareQuote, updatingFareQuote]);
+  }, [awaitingFareApproval, expireFareQuote, liveRide?.accepted_at, updatingFareQuote]);
 
   const liveFareDisplay = getCustomerFareDisplay({ kind: ride.kind, passengerCount: ride.passengerCount, routeQuote: ride.routeQuote, backendRide: liveRide });
 
@@ -1048,21 +1077,21 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
       <View style={styles.sheetHandle} />
       {!arrived && <Text style={styles.bookingStatus}>{awaitingFareApproval ? t('rides.fareQuoteWaiting') : liveStatus === 'accepted' ? t('rides.bookedMessage') : t('rides.searchingSubtitle')}</Text>}
       <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(inProgress ? 'rides.startedTitle' : arrived ? 'rides.hereTitle' : awaitingFareApproval ? 'rides.fareQuoteTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{inProgress ? t('rides.startedSubtitle') : arrived ? t('rides.hereSubtitle') : awaitingFareApproval ? t('rides.fareQuoteWaiting') : t('rides.arriving')}</Text></View></View>
-      <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{captainName}</Text><Text style={styles.assignedVehicle}>{vehicleType ? t(`rides.${vehicleType}`) : t('rides.captain')}</Text></View><View style={styles.assignedContact}><Pressable onPress={() => { if (ride.id) onOpenChat(ride.id, captainName); }} accessibilityRole="button" accessibilityLabel="Message captain" accessibilityState={{ disabled: !ride.id }} disabled={!ride.id} style={[styles.assignedCall, !ride.id && styles.assignedCallDisabled]}><Text style={styles.assignedCallText}>✉</Text></Pressable><Pressable onPress={() => { void callCaptain(); }} accessibilityRole="button" accessibilityLabel="Call captain" accessibilityState={{ disabled: !captainDetails?.phone }} disabled={!captainDetails?.phone} style={[styles.assignedCall, !captainDetails?.phone && styles.assignedCallDisabled]}><Text style={styles.assignedCallText}>☎</Text></Pressable></View></View>
+      {hasCurrentRide && <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{captainName}</Text><Text style={styles.assignedVehicle}>{vehicleType ? t(`rides.${vehicleType}`) : t('rides.captain')}</Text></View><View style={styles.assignedContact}><Pressable onPress={() => { if (ride.id) onOpenChat(ride.id, captainName); }} accessibilityRole="button" accessibilityLabel="Message captain" accessibilityState={{ disabled: !ride.id }} disabled={!ride.id} style={[styles.assignedCall, !ride.id && styles.assignedCallDisabled]}><Text style={styles.assignedCallText}>✉</Text></Pressable><Pressable onPress={() => { void callCaptain(); }} accessibilityRole="button" accessibilityLabel="Call captain" accessibilityState={{ disabled: !captainDetails?.phone }} disabled={!captainDetails?.phone} style={[styles.assignedCall, !captainDetails?.phone && styles.assignedCallDisabled]}><Text style={styles.assignedCallText}>☎</Text></Pressable></View></View>}
       {liveRide?.fare_approval_status === 'pending' && <View style={styles.fareQuoteCard}>
         <Text style={styles.fareQuoteTitle}>{t('rides.fareQuoteTitle')}</Text>
-        <Text style={styles.fareQuoteCountdown}>{fareQuoteSecondsRemaining ?? 60}s</Text>
+        <Text style={styles.fareQuoteCountdown}>{fareQuoteSecondsRemaining ?? 30}s</Text>
         <Text style={styles.fareQuoteMessage}>{t('rides.fareQuoteMessage', { distance: formatNumber(Number(liveRide.pickup_distance_meters ?? 0) / 1000, { maximumFractionDigits: 1 }) })}</Text>
         <SummaryRow label={t('rides.fareQuoteRide')} value={formatFare(Number(liveRide.base_fare ?? 0) + Number(liveRide.distance_surcharge ?? 0))} icon="🛺" />
-        <SummaryRow label={t('rides.fareQuotePickup')} value={formatFare(Number(liveRide.pickup_surcharge ?? 0))} icon="⌖" />
-        <SummaryRow label={t('rides.customerCharge')} value={liveFareDisplay.isFree ? t('rides.freeRideAmount') : formatFare(liveFareDisplay.customerCharge ?? 0)} icon="₹" last />
-        <PrimaryButton label={updatingFareQuote ? t('login.pleaseWait') : t('rides.acceptFareQuote')} onPress={() => { void respondToFareQuote(true); }} disabled={updatingFareQuote} />
-        <PrimaryButton label={t('rides.declineFareQuote')} onPress={startCancellation} danger disabled={updatingFareQuote} />
+        <SummaryRow label={t('rides.fareQuotePickup')} value={formatFare(Number(liveRide.pickup_surcharge ?? 0))} icon="+" />
+        <SummaryRow label={t('rides.fareQuoteTotal')} value={liveFareDisplay.isFree ? t('rides.freeRideAmount') : formatFare(liveFareDisplay.customerCharge ?? 0)} icon="₹" last />
+        <PrimaryButton label={updatingFareQuote || fareQuoteExpiring ? t('login.pleaseWait') : t('rides.acceptFareQuote')} onPress={() => { void respondToFareQuote(true); }} disabled={updatingFareQuote || fareQuoteExpiring} />
+        <PrimaryButton label={t('rides.declineFareQuote')} onPress={startCancellation} danger disabled={updatingFareQuote || fareQuoteExpiring} />
       </View>}
       <View style={styles.assignedPickupRow}><View style={styles.assignedPickupDot} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.pickup')} · {ride.pickup}</Text></View>
       <View style={styles.assignedPickupRow}><View style={[styles.assignedPickupDot, styles.assignedDropDot]} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.drop')} · {ride.drop}</Text></View>
       {!!pickupPin && !inProgress && <View style={styles.pickupPinCard}><Text style={styles.pickupPinLabel}>{t('rides.pickupPinLabel')}</Text><Text style={styles.pickupPin}>{pickupPin}</Text><Text style={styles.pickupPinHint}>{t('rides.pickupPinHint')}</Text></View>}
-      {inProgress && <><View style={styles.tripStatRow}><Text style={styles.tripStatLabel}>{t('rides.destinationDistance')}</Text><Text style={styles.tripStatValue}>—</Text></View><Pressable onPress={() => { void Linking.openURL('tel:112'); }} accessibilityRole="button" style={styles.sosButton}><Text style={styles.sosText}>{t('rides.sos')}</Text></Pressable></>}
+      {inProgress && <><View style={styles.tripStatRow}><Text style={styles.tripStatLabel}>{t('rides.destinationDistance')}</Text><Text style={styles.tripStatValue}>{liveRide?.trip_distance_meters == null ? '—' : `${formatNumber(Number(liveRide.trip_distance_meters) / 1000, { maximumFractionDigits: 1 })} km`}</Text></View><Pressable onPress={() => { void Linking.openURL('tel:112'); }} accessibilityRole="button" style={styles.sosButton}><Text style={styles.sosText}>{t('rides.sos')}</Text></Pressable></>}
       {canCancel && !awaitingFareApproval && <PrimaryButton label={t('rides.cancelRide')} onPress={startCancellation} danger />}
     </ScrollView>
     <CustomerTabBar active="bookings" onHome={onHome} onBookings={onBookings} onProfile={onProfile} />
@@ -1169,10 +1198,13 @@ const styles = StyleSheet.create({
   mapFallbackText: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, textAlign: 'center' },
   locationNotice: { backgroundColor: colors.accentLight, borderColor: '#F6C7B4', borderRadius: radii.md, borderWidth: 1, left: 20, paddingHorizontal: 12, paddingVertical: 9, position: 'absolute', right: 20, top: 92 },
   locationNoticeText: { color: colors.accent, fontFamily, fontSize: fontSize.xs, fontWeight: '700', textAlign: 'center' },
-  homeSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 76, left: 0, overflow: 'hidden', position: 'absolute', right: 0 },
+  homeSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 76, left: 0, overflow: 'hidden', position: 'absolute', right: 0, zIndex: 6 },
+  homeSheetLayer: { elevation: 6 },
+  homeSheetBackdrop: { ...StyleSheet.absoluteFillObject, height: '100%', opacity: 0.22, width: '100%' },
   sheetHandleArea: { alignItems: 'center', minHeight: 52, paddingBottom: 14, paddingTop: 15 },
   sheetHandle: { backgroundColor: '#CBC5BB', borderRadius: radii.pill, height: 5, width: 46 },
-  homeSheetContent: { flex: 1, gap: 14, paddingBottom: 18, paddingHorizontal: 16 },
+  homeSheetScroll: { flex: 1 },
+  homeSheetContent: { gap: 14, paddingBottom: 24, paddingHorizontal: 16 },
   promotionCard: { backgroundColor: colors.successLight, borderColor: colors.success, borderRadius: radii.md, borderWidth: 1, gap: 3, padding: 12 },
   promotionCardCompact: { padding: 10 },
   promotionTitle: { color: colors.success, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
@@ -1203,7 +1235,7 @@ const styles = StyleSheet.create({
   safetyTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   safetySubtitle: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, marginTop: 2 },
   safetyArrow: { color: colors.accent, fontSize: 26 },
-  homeTabBar: { backgroundColor: colors.surface, borderColor: colors.border, borderTopWidth: 1, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', left: 0, minHeight: 76, paddingBottom: 11, paddingTop: 9, position: 'absolute', right: 0, zIndex: 3 },
+  homeTabBar: { backgroundColor: colors.surface, borderColor: colors.border, borderTopWidth: 1, bottom: 0, elevation: 7, flexDirection: 'row', justifyContent: 'space-around', left: 0, minHeight: 76, paddingBottom: 11, paddingTop: 9, position: 'absolute', right: 0, zIndex: 7 },
   homeTab: { alignItems: 'center', flex: 1, gap: 2, minWidth: 0 },
   homeTabIcon: { color: colors.textMuted, fontSize: 23, lineHeight: 25 },
   homeTabIconActive: { color: colors.primary },
@@ -1239,8 +1271,8 @@ const styles = StyleSheet.create({
   fixedPin: { alignItems: 'center', backgroundColor: colors.accent, borderColor: colors.surface, borderRadius: radii.pill, borderWidth: 4, height: 40, justifyContent: 'center', width: 40, ...shadows.card },
   fixedPinText: { color: colors.textOnAccent, fontSize: 16 },
   fixedPinStem: { backgroundColor: colors.accent, height: 18, width: 4 },
-  pinPickerBack: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 48, justifyContent: 'center', left: 18, position: 'absolute', top: 14, width: 48 },
-  pinPickerGps: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 48, justifyContent: 'center', position: 'absolute', right: 18, top: 14, width: 48 },
+  pinPickerBack: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 48, justifyContent: 'center', left: 18, position: 'absolute', top: 28, width: 48 },
+  pinPickerGps: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 48, justifyContent: 'center', position: 'absolute', right: 18, top: 28, width: 48 },
   pinPickerBackText: { color: colors.textPrimary, fontSize: 35, lineHeight: 37, marginTop: -4 },
   pinPickerSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 0, gap: 15, left: 0, padding: 18, paddingBottom: 24, position: 'absolute', right: 0 },
   pinPickerTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '800' },

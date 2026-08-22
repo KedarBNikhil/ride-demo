@@ -259,6 +259,22 @@ export const rideDispatchService = {
     return () => { if (channel) void client.removeChannel(channel); };
   },
 
+  subscribeToCaptainRides(onChange: () => void, onError?: (error: Error) => void) {
+    if (!supabase) return () => {};
+    const client = supabase;
+    let channel: RealtimeChannel | null = null;
+    const start = async () => {
+      try {
+        const captainId = await currentUserId();
+        channel = client.channel(`captain-rides:${captainId}:${++rideSubscriptionSequence}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'rides', filter: `captain_id=eq.${captainId}` }, onChange)
+          .subscribe();
+      } catch (error) { onError?.(error as Error); }
+    };
+    void start();
+    return () => { if (channel) void client.removeChannel(channel); };
+  },
+
   async getAssignedCaptain(rideId: string): Promise<AssignedCaptainDetails | null> {
     const { data, error } = await requireClient()
       .rpc('customer_assigned_captain_contact', { p_ride_id: rideId })

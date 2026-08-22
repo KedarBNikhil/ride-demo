@@ -1,7 +1,7 @@
 import { createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -44,6 +44,10 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
     ...(ride.pickup_latitude != null && ride.pickup_longitude != null ? { pickupCoordinate: { latitude: Number(ride.pickup_latitude), longitude: Number(ride.pickup_longitude) } } : {}),
     ...(ride.drop_latitude != null && ride.drop_longitude != null ? { dropCoordinate: { latitude: Number(ride.drop_latitude), longitude: Number(ride.drop_longitude) } } : {}),
   });
+  const clearCustomerRide = useCallback(() => {
+    setCustomerRideStatus('cancelled');
+    setCustomerRide(({ id: _id, routeQuote: _routeQuote, ...currentRide }) => currentRide);
+  }, []);
 
   useEffect(() => {
     AsyncStorage.getItem(storageKey).then((saved) => {
@@ -75,6 +79,11 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
     if (mode !== 'customer') return;
     return subscribeToCustomerRideNotificationResponses(({ rideId }) => {
       void rideDispatchService.getRide(rideId).then((ride) => {
+        if (ride.status === 'cancelled' && ride.fare_approval_status === 'declined' && ride.cancellation_reason_detail === 'Customer did not confirm updated captain-distance fare within 30 seconds') {
+          clearCustomerRide();
+          if (navigationRef.isReady()) navigationRef.reset({ index: 0, routes: [{ name: 'RideType' as never }] });
+          return;
+        }
         setCustomerRide(customerRideFromDispatch(ride));
         setCustomerRideStatus(ride.status);
         if (!navigationRef.isReady()) return;
@@ -83,13 +92,19 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
         else navigationRef.reset({ index: 0, routes: [{ name: 'RideConfirmed' as never }] });
       }).catch(() => undefined);
     });
-  }, [mode]);
+  }, [clearCustomerRide, mode]);
 
   useEffect(() => {
     if (mode !== 'customer') return;
     const reconcileActiveRide = () => {
       void rideDispatchService.getCustomerActiveRide().then((ride) => {
-        if (!ride) return;
+        if (!ride) {
+          if (customerRide.id) {
+            clearCustomerRide();
+            if (navigationRef.isReady()) navigationRef.reset({ index: 0, routes: [{ name: 'RideType' as never }] });
+          }
+          return;
+        }
         setCustomerRide(customerRideFromDispatch(ride));
         setCustomerRideStatus(ride.status);
         if (!navigationRef.isReady()) return;
@@ -102,12 +117,19 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
       if (nextState === 'active') reconcileActiveRide();
     });
     return () => subscription.remove();
-  }, [mode]);
+  }, [clearCustomerRide, customerRide.id, mode]);
 
   useEffect(() => {
     if (mode !== 'customer' || !customerRide.id || customerRide.id.startsWith('local-')) return;
-    return rideDispatchService.subscribeToRide(customerRide.id, (ride) => setCustomerRideStatus(ride.status));
-  }, [customerRide.id, mode]);
+    return rideDispatchService.subscribeToRide(customerRide.id, (ride) => {
+      if (ride.status === 'cancelled' && ride.fare_approval_status === 'declined' && ride.cancellation_reason_detail === 'Customer did not confirm updated captain-distance fare within 30 seconds') {
+        clearCustomerRide();
+        if (navigationRef.isReady()) navigationRef.reset({ index: 0, routes: [{ name: 'RideType' as never }] });
+        return;
+      }
+      setCustomerRideStatus(ride.status);
+    });
+  }, [clearCustomerRide, customerRide.id, mode]);
 
   const chooseLanguage = async (next: AppLanguage) => {
     setLanguage(next);
@@ -131,7 +153,7 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
           <Stack.Screen name="RideType">{({ navigation }) => <RideTypeScreen ride={customerRide} selected={customerRide.kind} onBack={() => { if (navigation.canGoBack()) navigation.goBack(); else navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onEditLocation={(target) => { setLocationTarget(target); navigation.navigate('LocationPicker'); }} onSelect={(kind) => setCustomerRide((ride) => ({ ...ride, kind, passengerCount: kind === 'bike' ? 1 : ride.passengerCount }))} onPassengerCountChange={(passengerCount) => setCustomerRide((ride) => ({ ...ride, passengerCount }))} onRouteQuote={(routeQuote) => setCustomerRide((ride) => ({ ...ride, routeQuote }))} onNext={() => navigation.navigate('BookingConfirm')} />}</Stack.Screen>
           <Stack.Screen name="BookingConfirm">{({ navigation }) => <BookingConfirmScreen ride={customerRide} onBack={() => navigation.goBack()} onBook={async (rideId) => { setCustomerRide((ride) => ({ ...ride, id: rideId })); setCustomerRideStatus('searching'); navigation.navigate('Searching'); }} />}</Stack.Screen>
           <Stack.Screen name="Searching" options={{ animation: 'fade' }}>{({ navigation }) => <SearchingScreen rideId={customerRide.id} onBack={() => navigation.goBack()} onFound={() => navigation.replace('RideConfirmed')} onUnavailable={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined })); navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onCancel={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined })); navigation.reset({ index: 0, routes: [{ name: 'RideType' }] }); }} onHome={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} onBookings={() => navigation.navigate('CustomerBookings')} onProfile={() => navigation.navigate('Settings', { profile: true })} />}</Stack.Screen>
-          <Stack.Screen name="RideConfirmed" options={{ animation: 'fade' }}>{({ navigation }) => <RideConfirmedScreen ride={customerRide} onHome={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} onCancelled={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined })); navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onFareQuoteCancelled={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined })); navigation.reset({ index: 0, routes: [{ name: 'RideType' }] }); }} onBookings={() => navigation.navigate('CustomerBookings')} onProfile={() => navigation.navigate('Settings', { profile: true })} onOpenChat={(rideId, captainName) => navigation.navigate('CustomerRideChat', { rideId, captainName })} />}</Stack.Screen>
+          <Stack.Screen name="RideConfirmed" options={{ animation: 'fade' }}>{({ navigation }) => <RideConfirmedScreen ride={customerRide} onHome={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} onCancelled={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined })); navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onFareQuoteCancelled={() => { clearCustomerRide(); navigation.reset({ index: 0, routes: [{ name: 'RideType' }] }); }} onBookings={() => navigation.navigate('CustomerBookings')} onProfile={() => navigation.navigate('Settings', { profile: true })} onOpenChat={(rideId, captainName) => navigation.navigate('CustomerRideChat', { rideId, captainName })} />}</Stack.Screen>
           <Stack.Screen name="CustomerRideChat">{({ navigation, route }) => { const { rideId, captainName } = route.params as { rideId: string; captainName: string }; return <CustomerRideChat rideId={rideId} captainName={captainName} onBack={() => navigation.goBack()} />; }}</Stack.Screen>
           <Stack.Screen name="CustomerBookings">{({ navigation }) => <CustomerBookingsScreen ride={customerRide} onHome={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} onProfile={() => navigation.navigate('Settings', { profile: true })} onCancelled={() => { setCustomerRideStatus('cancelled'); navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onOpenRide={(selectedRide, status) => { setCustomerRide(selectedRide); setCustomerRideStatus(status); if (status === 'cancelled' || status === 'completed') { setLocationTarget('pickup'); navigation.navigate('LocationPicker'); } else if (status === 'requested' || status === 'searching') navigation.navigate('Searching'); else navigation.navigate('RideConfirmed'); }} />}</Stack.Screen>
         </> : mode === 'captain' ? <>

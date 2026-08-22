@@ -1,9 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { captainEarningsService, formatDuration, type CaptainEarningsOverview } from '../../services/captainEarnings';
+import { rideDispatchService } from '../../services/rideDispatch';
 import { formatFare } from '../../utils/format';
 import { colors, fontFamily, fontSize, radii, shadows } from '../../theme';
 
@@ -18,6 +19,7 @@ export function CaptainEarningsScreen({ onHome, onBookings, onSettings }: { onHo
     void captainEarningsService.getMonth(month).then(setOverview).catch(() => setFailed(true)).finally(() => setLoading(false));
   }, [month]);
   useFocusEffect(load);
+  useEffect(() => rideDispatchService.subscribeToCaptainRides(load), [load]);
   const monthLabel = month.toLocaleDateString(i18n.language === 'te' ? 'te-IN' : 'en-IN', { month: 'long', year: 'numeric' });
   const days = overview?.daily ?? [];
   return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>

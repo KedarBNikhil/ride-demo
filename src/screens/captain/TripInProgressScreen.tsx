@@ -23,10 +23,17 @@ export function TripInProgressScreen({ request, onBack, onEndRide, onOpenChat }:
   const lastPublishedLocation = useRef<LiveCoordinate | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [tripRoute, setTripRoute] = useState<LiveCoordinate[]>([]);
-  const [tripState, setTripState] = useState({ startedAt: request.startedAt ?? null, travelledDistanceKm: request.travelledDistanceKm ?? null });
+  const [tripState, setTripState] = useState({ startedAt: request.startedAt ?? null, travelledDistanceKm: request.travelledDistanceKm ?? null, status: 'in_progress' });
+  const [now, setNow] = useState(Date.now);
   const routeStart = location ?? request.pickup ?? routeFallback;
 
-  useEffect(() => rideDispatchService.subscribeToRide(request.rideId, (ride) => setTripState({ startedAt: ride.started_at ?? null, travelledDistanceKm: ride.travelled_distance_km == null ? null : Number(ride.travelled_distance_km) })), [request.rideId]);
+  useEffect(() => rideDispatchService.subscribeToRide(request.rideId, (ride) => setTripState({ startedAt: ride.started_at ?? null, travelledDistanceKm: ride.travelled_distance_km == null ? null : Number(ride.travelled_distance_km), status: ride.status })), [request.rideId]);
+  useEffect(() => {
+    if (!tripState.startedAt || tripState.status !== 'in_progress') return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [tripState.startedAt, tripState.status]);
   useEffect(() => {
     let active = true;
     let subscription: Location.LocationSubscription | null = null;
@@ -64,9 +71,9 @@ export function TripInProgressScreen({ request, onBack, onEndRide, onOpenChat }:
 
   const elapsed = useMemo(() => {
     if (!tripState.startedAt) return '—';
-    const seconds = Math.max(0, Math.floor((Date.now() - new Date(tripState.startedAt).getTime()) / 1000));
+    const seconds = Math.max(0, Math.floor((now - new Date(tripState.startedAt).getTime()) / 1000));
     return `${formatNumber(Math.floor(seconds / 60))}:${formatNumber(seconds % 60).padStart(2, '0')}`;
-  }, [tripState.startedAt]);
+  }, [now, tripState.startedAt]);
   return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
     <LiveLocationMap mapRef={mapRef} location={location} onMapReady={() => setMapReady(true)}>
       <Marker coordinate={request.drop} pinColor={colors.accent} title={t('captain.destination')} description={request.destinationArea} />
