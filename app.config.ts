@@ -28,7 +28,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: iosBundleIdentifier,
     infoPlist: {
-      NSLocationWhenInUseUsageDescription: 'Nandyal Ride uses your location to set your pickup point on the map.',
+      NSLocationWhenInUseUsageDescription: 'Nandyal Ride uses your location to set your pickup point and show ride progress.',
       ...(isCaptain ? {
         NSCameraUsageDescription: 'Nandyal Ride Captain uses your camera to capture captain documents.',
         NSPhotoLibraryUsageDescription: 'Nandyal Ride Captain lets you select document photos from your library.',
@@ -37,6 +37,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     'expo-notifications',
+    'expo-location',
     ...(isCaptain ? [['expo-image-picker', { cameraPermission: 'Allow Nandyal Ride Captain to use your camera for documents.', photosPermission: 'Allow Nandyal Ride Captain to access document photos.' }]] : []),
   ],
   extra: {
