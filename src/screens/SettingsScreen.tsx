@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import type { AppLanguage } from '../i18n/createI18n';
@@ -100,6 +100,25 @@ export function SettingsScreen({
         </View>
       </View>
 
+      {profile && ratingRole === 'customer' && <Pressable
+        onPress={() => Alert.alert(t('home.safetyTitle'), t('home.safetySubtitle'), [
+          { text: t('home.safetyShareAction'), onPress: () => Alert.alert(t('home.safetyTitle'), t('home.safetyShared')) },
+          { text: t('home.safetyHelpAction'), onPress: () => Alert.alert(t('home.helpTitle'), t('home.helpMessage')) },
+          { text: t('actions.done'), style: 'cancel' },
+        ])}
+        style={[styles.chip, shadows.soft]}
+        accessibilityRole="button"
+      >
+        <View style={styles.safetyMark}>
+          <Text style={styles.safetyMarkText}>✓</Text>
+        </View>
+        <View style={styles.chipText}>
+          <Text style={styles.chipName}>{t('home.safetyTitle')}</Text>
+          <Text style={styles.chipSub}>{t('home.safetySubtitle')}</Text>
+        </View>
+        <Text style={styles.rowChevron}>›</Text>
+      </Pressable>}
+
       {ratingRole && <View style={styles.ratingCard}>
         <Text style={styles.ratingLabel}>{t('profile.rating', { defaultValue: profileText.rating })}</Text>
         <Text style={styles.ratingValue}>{receivedRating?.average == null ? '—' : `★ ${receivedRating.average.toFixed(2)}`}</Text>
@@ -168,6 +187,16 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
   },
+  safetyMark: {
+    alignItems: 'center',
+    backgroundColor: colors.accent,
+    borderRadius: radii.pill,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  safetyMarkText: { color: colors.textOnAccent, fontSize: 19, fontWeight: '900' },
+  rowChevron: { alignSelf: 'center', color: colors.textMuted, fontSize: 26 },
 
   infoCard: {
     alignItems: 'center',

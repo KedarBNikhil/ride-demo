@@ -77,11 +77,17 @@
     "home": "Home",
     "work": "Work",
     "savedPlaceHint": "Saved place",
-    "nearby": "Nearby landmarks",
+    "nearby": "Landmarks",
+    "landmarkBusStand": "Bus Stand",
+    "landmarkRailway": "Railway Station",
+    "landmarkHospital": "Government General Hospital",
     "seeAll": "See all",
     "fort": "Nandyal Fort",
     "safetyTitle": "Set up safety",
     "safetySubtitle": "Share your trip and get help quickly",
+    "safetyShareAction": "Share trip",
+    "safetyHelpAction": "Get help",
+    "safetyShared": "Trip details were shared with your trusted contacts.",
     "tabHome": "Home",
     "tabBookings": "Bookings",
     "tabHelp": "Help",
@@ -505,6 +511,7 @@
     "date": "Date",
     "month": "Month",
     "year": "Year",
-    "empty": "No rides match this filter."
+    "empty": "No rides match this filter.",
+    "showing": "Showing rides from"
   }
 }

@@ -21,3 +21,13 @@ export function filterAndSortRideHistory(rides: DispatchRide[], filter: RideHist
       return date.getFullYear() === now.getFullYear();
     });
 }
+
+export function rideHistoryPeriodLabel(filter: RideHistoryFilter, now = new Date(), language = 'en'): string {
+  if (filter === 'all') return '';
+  const options: Intl.DateTimeFormatOptions = filter === 'date'
+    ? { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
+    : filter === 'month'
+      ? { month: 'long', year: 'numeric' }
+      : { year: 'numeric' };
+  return now.toLocaleDateString(language === 'te' ? 'te-IN' : 'en-IN', options);
+}
