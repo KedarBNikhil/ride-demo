@@ -106,6 +106,7 @@
     "pickupField": "పికప్ లొకేషన్",
     "destinationField": "గమ్యస్థానం",
     "addressMatches": "సూచించిన చిరునామాలు",
+    "searchingAddresses": "చిరునామాలు వెతుకుతోంది…",
     "showRideOptions": "🛺 రైడ్ ఎంపికలను చూడండి",
     "pinFallbackHint": "మళ్లీ వెతకండి లేదా మ్యాప్‌లో ఖచ్చితమైన ప్రదేశాన్ని ఎంచుకోండి.",
     "resolvingAddress": "ఈ చిరునామా కనుగొంటోంది…",

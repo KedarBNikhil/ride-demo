@@ -21,7 +21,18 @@
     "preview": {
       "distribution": "internal"
     },
-    "production": {}
+    "production-customer": {
+      "env": {
+        "APP_VARIANT": "customer",
+        "EXPO_PUBLIC_APP_MODE": "customer"
+      }
+    },
+    "production-captain": {
+      "env": {
+        "APP_VARIANT": "captain",
+        "EXPO_PUBLIC_APP_MODE": "captain"
+      }
+    }
   },
   "submit": {
     "production": {}

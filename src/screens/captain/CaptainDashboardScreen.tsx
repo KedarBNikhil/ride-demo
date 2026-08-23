@@ -34,7 +34,6 @@ export function CaptainDashboardScreen({ online, timeoutNotice, onToggle, onSett
     let subscription: Location.LocationSubscription | null = null;
     const start = async () => {
       try {
-        if (!await Location.hasServicesEnabledAsync()) throw new Error('LOCATION_SERVICES_DISABLED');
         const existing = await Location.getForegroundPermissionsAsync();
         const permission = existing.status === 'granted' ? existing : await Location.requestForegroundPermissionsAsync();
         if (!active || permission.status !== 'granted') throw new Error('LOCATION_PERMISSION_DENIED');
@@ -71,7 +70,6 @@ export function CaptainDashboardScreen({ online, timeoutNotice, onToggle, onSett
       if (online) {
         await rideDispatchService.setCaptainAvailability(false);
       } else {
-        if (!await Location.hasServicesEnabledAsync()) throw new Error('LOCATION_SERVICES_DISABLED');
         const existing = await Location.getForegroundPermissionsAsync();
         const permission = existing.status === 'granted' ? existing : await Location.requestForegroundPermissionsAsync();
         if (permission.status !== 'granted') throw new Error('LOCATION_PERMISSION_DENIED');

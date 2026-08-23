@@ -106,6 +106,7 @@
     "pickupField": "Pickup location",
     "destinationField": "Destination",
     "addressMatches": "Suggested addresses",
+    "searchingAddresses": "Searching addresses…",
     "showRideOptions": "🛺 Show ride options",
     "pinFallbackHint": "Search again or choose the exact place yourself on the map.",
     "resolvingAddress": "Finding this address…",

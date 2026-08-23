@@ -12,12 +12,13 @@ const isCaptain = variant === 'captain';
 const isChooser = variant === 'chooser';
 const name = isCaptain ? 'Nandyal Ride Captain' : isChooser ? 'Nandyal Ride Demo' : 'Nandyal Ride';
 const slug = isCaptain ? 'nandyal-ride-captain' : isChooser ? 'nandyal-ride-demo' : 'nandyal-ride-customer';
+const scheme = isCaptain ? 'exp+nandyal-ride-captain' : isChooser ? 'exp+nandyal-ride-demo' : 'exp+nandyal-ride-customer';
 const androidPackage = isCaptain ? 'com.nandyalride.captain' : isChooser ? 'com.nandyalride.demo' : 'com.nandyalride.customer';
 const iosBundleIdentifier = isCaptain ? 'com.nandyalride.captain' : isChooser ? 'com.nandyalride.demo' : 'com.nandyalride.customer';
 const googleServicesFile = isCaptain ? './firebase/nandyalride-captain.json' : './firebase/nandyalride-customer.json';
 
 const config: ExpoConfig = {
-  name, slug, version: '1.0.0', orientation: 'portrait', userInterfaceStyle: 'light',
+  name, slug, scheme, version: '1.0.0', orientation: 'portrait', userInterfaceStyle: 'light',
   splash: { resizeMode: 'contain', backgroundColor: '#FFFFFF' }, assetBundlePatterns: ['**/*'],
   android: {
     package: androidPackage,

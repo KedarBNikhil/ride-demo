@@ -28,7 +28,7 @@ import { PhoneOtpAuth } from '../components/PhoneOtpAuth';
 import { customerAuthService } from '../services/customerAuth';
 import { rideCreationService, type CancellationReason } from '../services/rideCreation';
 import { rideDispatchService, type AssignedCaptainDetails, type CustomerPromotionStatus, type DispatchRide, type RideStatus } from '../services/rideDispatch';
-import { googleMapsService } from '../services/googleMaps';
+import { googleMapsService, type PlaceSuggestion } from '../services/googleMaps';
 import { offlineLocationCatalogue, type OfflineLocation } from '../services/offlineLocationCatalogue';
 import { decodeGooglePolyline } from '../utils/polyline';
 import { calculateFare } from '../services/fareEngine';
@@ -52,12 +52,15 @@ const NANDYAL: Region = { latitude: 15.4889, longitude: 78.4836, latitudeDelta: 
 const estimateCoordinateDistanceKm = (a: Coordinate, b: Coordinate) => Math.sqrt((a.latitude - b.latitude) ** 2 + (a.longitude - b.longitude) ** 2) * 111;
 
 async function getCustomerGpsPosition() {
-  if (!await Location.hasServicesEnabledAsync()) throw new Error('LOCATION_SERVICES_DISABLED');
   const existing = await Location.getForegroundPermissionsAsync();
   const permission = existing.status === 'granted' ? existing : await Location.requestForegroundPermissionsAsync();
   if (permission.status !== 'granted') throw new Error('LOCATION_PERMISSION_DENIED');
   const cached = await Location.getLastKnownPositionAsync({ maxAge: 60_000, requiredAccuracy: 500 });
   return cached ?? await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+}
+
+function newPlacesSessionToken() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 function coordinateFromPosition(position: Location.LocationObject): Coordinate {
@@ -158,7 +161,6 @@ export function CustomerHomeScreen({
     };
     const start = async () => {
       try {
-        if (!await Location.hasServicesEnabledAsync()) throw new Error('LOCATION_SERVICES_DISABLED');
         const existing = await Location.getForegroundPermissionsAsync();
         const permission = existing.status === 'granted' ? existing : await Location.requestForegroundPermissionsAsync();
         if (!active || permission.status !== 'granted') throw new Error('LOCATION_PERMISSION_DENIED');
@@ -314,7 +316,7 @@ export function LocationPickerScreen({
   onContinue: () => void;
   onBack: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [drafts, setDrafts] = useState<Record<LocationTarget, string>>({ pickup: ride.pickup, drop: ride.drop });
   const [target, setTarget] = useState<LocationTarget>(initialTarget);
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -325,6 +327,10 @@ export function LocationPickerScreen({
     drop: ride.dropCoordinate ? 'located' : 'unresolved',
   });
   const [focused, setFocused] = useState(false);
+  const [liveSuggestions, setLiveSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [liveStatus, setLiveStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle');
+  const placesSessionToken = useRef(newPlacesSessionToken());
+  const autocompleteSeq = useRef(0);
   const pickupInput = useRef<TextInput>(null);
   const dropInput = useRef<TextInput>(null);
   const query = drafts[target];
@@ -334,6 +340,7 @@ export function LocationPickerScreen({
   // Start suggesting after three characters, not three complete words. Every
   // typed term still has to match the catalogue label, in any order.
   const hasCatalogueQuery = normalizedQuery.length >= 3;
+  const showLiveResults = hasCatalogueQuery && liveSuggestions.length > 0;
   const shown = hasCatalogueQuery
     ? offlineLocationCatalogue.filter((place) => {
       const label = (place.labelKey ? t(`location.${place.labelKey}`) : place.label).toLocaleLowerCase();
@@ -369,12 +376,56 @@ export function LocationPickerScreen({
   };
 
   const resolveTypedAddress = () => {
-    // Typed text only filters the offline catalogue. It never triggers an
-    // address lookup, so the customer must select a verified suggestion.
+    if (liveSuggestions.length > 0) {
+      void selectSuggestion(liveSuggestions[0]);
+      return;
+    }
     if (!hasCatalogueQuery || shown.length === 0) {
       setResolution((current) => ({ ...current, [target]: 'failed' }));
     }
   };
+
+  const selectSuggestion = async (suggestion: PlaceSuggestion) => {
+    const selectedTarget = target;
+    setLiveSuggestions([]);
+    setLiveStatus('idle');
+    const sessionToken = placesSessionToken.current;
+    placesSessionToken.current = newPlacesSessionToken();
+    try {
+      const details = await googleMapsService.placeDetails(suggestion.placeId, sessionToken);
+      choosePlace(details.address || suggestion.text, details.coordinate, selectedTarget);
+    } catch (error) {
+      console.warn('[place-details] lookup failed', error);
+      setResolution((current) => ({ ...current, [selectedTarget]: 'failed' }));
+    }
+  };
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 3) {
+      autocompleteSeq.current += 1;
+      setLiveSuggestions([]);
+      setLiveStatus('idle');
+      return;
+    }
+    const seq = ++autocompleteSeq.current;
+    const timer = setTimeout(() => {
+      setLiveStatus('loading');
+      googleMapsService.autocomplete(trimmed, placesSessionToken.current, i18n.language)
+        .then((results) => {
+          if (autocompleteSeq.current !== seq) return;
+          setLiveSuggestions(results);
+          setLiveStatus('ready');
+        })
+        .catch((error) => {
+          console.warn('[places-autocomplete] request failed', error);
+          if (autocompleteSeq.current !== seq) return;
+          setLiveSuggestions([]);
+          setLiveStatus('unavailable');
+        });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, target]);
 
   const useGps = async () => {
     if (gpsLoading) return;
@@ -444,13 +495,20 @@ export function LocationPickerScreen({
           <Pressable onPress={useGps} disabled={gpsLoading} accessibilityRole="button" style={styles.locationQuickAction}><Text style={styles.locationQuickActionText} numberOfLines={1}>{gpsLoading ? t('location.gpsLoading') : t('location.gps')}</Text></Pressable>
           <Pressable onPress={() => setPinMode(true)} accessibilityRole="button" style={styles.locationQuickAction}><Text style={styles.locationQuickActionText} numberOfLines={1}>{t('location.dropPin')}</Text></Pressable>
         </View>
-        <Text style={styles.sectionLabel}>{hasCatalogueQuery ? t('location.addressMatches') : t('location.nearby')}</Text>
-        {shown.length > 0 && <View style={[styles.resultsCard, shadows.soft]}>{shown.map((place, i) => {
+        <Text style={styles.sectionLabel}>{hasCatalogueQuery && (liveSuggestions.length > 0 || shown.length > 0) ? t('location.addressMatches') : t('location.nearby')}</Text>
+        {showLiveResults && liveStatus === 'loading' && <Text style={styles.locationResolution}>{t('location.searchingAddresses')}</Text>}
+        {showLiveResults && <View style={[styles.resultsCard, shadows.soft]}>{liveSuggestions.map((suggestion, i) => (
+          <Pressable key={suggestion.placeId} onPress={() => void selectSuggestion(suggestion)} style={[styles.resultRow, i < liveSuggestions.length - 1 && styles.resultRowDivider]}>
+            <Text style={styles.resultPin}>📍</Text><Text style={styles.resultText} numberOfLines={2}>{suggestion.text}</Text>
+          </Pressable>
+        ))}</View>}
+        {!showLiveResults && shown.length > 0 && <View style={[styles.resultsCard, shadows.soft]}>{shown.map((place, i) => {
           const label = place.labelKey ? t(`location.${place.labelKey}`) : place.label;
           return <Pressable key={place.id} onPress={() => { setCataloguePin(place); setPinMode(true); }} style={[styles.resultRow, i < shown.length - 1 && styles.resultRowDivider]}>
             <Text style={styles.resultPin}>📍</Text><Text style={styles.resultText} numberOfLines={2}>{label}</Text>
           </Pressable>
         })}</View>}
+        {liveStatus === 'unavailable' && hasCatalogueQuery && <Text style={styles.locationResolution}>{t('location.placesUnavailable')}</Text>}
         {resolution[target] === 'failed' && <Text style={[styles.locationResolution, styles.locationResolutionFailed]}>{t('location.addressNotLocated')}</Text>}
         <PrimaryButton label={t('location.showRideOptions')} onPress={onContinue} disabled={!ready} />
       </>
