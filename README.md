@@ -91,3 +91,41 @@ The customer location picker works with bundled Nandyal suggestions and an inter
 - All customer-facing strings live in `src/locales/en.json` and `src/locales/te.json`.
 - Use `formatNumber`, `formatFare`, and `formatOtp` from `src/utils/format.ts`; numeric output is always Western digits.
 - Add subsequent UI within the existing stack routes rather than changing the flow structure.
+
+## Operator dashboard (web analytics)
+
+`dashboard/` is an npm workspace containing the operator web dashboard: Vite +
+React + TypeScript + Tailwind, reading the same Supabase project as the mobile
+apps. It provides an overview of platform KPIs, per-customer and per-captain
+activity drill-downs, payment reconciliation queues with operator actions, and
+heuristic fraud signals.
+
+```bash
+npm run dashboard:dev        # http://localhost:5173
+npm run dashboard:build      # typecheck + production build to dashboard/dist
+npm run dashboard:typecheck
+```
+
+Setup:
+
+1. Copy `dashboard/.env.example` to `dashboard/.env.local` and fill in
+   `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` with the same values
+   the mobile apps use in the root `.env.local`.
+2. Apply `supabase/migrations/20260823130000_dashboard_analytics_access.sql`
+   to the Supabase project (`supabase db push`). It grants read-only analytics
+   access to settlement operators, adds aggregate views for charts, and adds
+   the `operator_resolve_captain_payment_issue` RPC.
+3. Seed yourself as an operator with the service role (SQL editor):
+
+   ```sql
+   insert into public.settlement_operators (user_id)
+   values ('<your-auth-user-uuid>');
+   ```
+
+4. Run `npm run dashboard:dev` and sign in via phone OTP (or email OTP) with
+   that account. Non-operators see an "not authorized" screen; every query is
+   additionally protected by RLS on the server.
+
+Operator actions available: confirm/flag settlements, update or hold captain
+payouts, resolve payout disputes, resolve captain-reported payment issues.
+

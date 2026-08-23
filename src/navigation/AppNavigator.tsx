@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { createAppI18n, type AppLanguage } from '../i18n/createI18n';
 import { LanguageSelectScreen } from '../screens/LanguageSelectScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { EmergencyContactsScreen } from '../screens/EmergencyContactsScreen';
 import { BookingConfirmScreen, CustomerBookingsScreen, CustomerHomeScreen, CustomerLoginScreen, type CustomerRide, LocationPickerScreen, RideConfirmedScreen, RideTypeScreen, SearchingScreen } from '../screens/CustomerScreens';
 import { CustomerRideChat } from '../components/CustomerRideChat';
 import { CaptainOnboardingStack } from './CaptainOnboardingStack';
@@ -162,7 +163,8 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
           <Stack.Screen name="OperatorLogin">{({ navigation }) => <CustomerLoginScreen onComplete={() => navigation.replace('OperatorReconciliation')} onBack={onExit} />}</Stack.Screen>
           <Stack.Screen name="OperatorReconciliation">{() => <OperatorReconciliationScreen onExit={onExit} />}</Stack.Screen>
         </> : null}
-        <Stack.Screen name="Settings">{({ navigation, route }) => <SettingsScreen profile={Boolean((route.params as { profile?: boolean } | undefined)?.profile)} ratingRole={mode === 'customer' ? 'customer' : undefined} onBack={() => navigation.goBack()} onLanguageChange={(next) => { chooseLanguage(next).then(() => navigation.goBack()); }} />}</Stack.Screen>
+        <Stack.Screen name="Settings">{({ navigation, route }) => <SettingsScreen profile={Boolean((route.params as { profile?: boolean } | undefined)?.profile)} ratingRole={mode === 'customer' ? 'customer' : undefined} onBack={() => navigation.goBack()} onLanguageChange={(next) => { chooseLanguage(next).then(() => navigation.goBack()); }} onSafety={mode === 'customer' ? () => navigation.navigate('EmergencyContacts') : undefined} />}</Stack.Screen>
+        <Stack.Screen name="EmergencyContacts">{({ navigation }) => <EmergencyContactsScreen onBack={() => navigation.goBack()} />}</Stack.Screen>
       </Stack.Navigator>
     </NavigationContainer>
     </GestureHandlerRootView>

@@ -24,7 +24,7 @@ const config: ExpoConfig = {
     package: androidPackage,
     googleServicesFile,
     config: { googleMaps: { apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '' } },
-    permissions: isCaptain ? ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'CAMERA', 'POST_NOTIFICATIONS'] : ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'POST_NOTIFICATIONS'],
+    permissions: isCaptain ? ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'CAMERA', 'POST_NOTIFICATIONS'] : ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'POST_NOTIFICATIONS', 'READ_CONTACTS'],
   },
   ios: {
     bundleIdentifier: iosBundleIdentifier,
@@ -33,12 +33,15 @@ const config: ExpoConfig = {
       ...(isCaptain ? {
         NSCameraUsageDescription: 'Nandyal Ride Captain uses your camera to capture captain documents.',
         NSPhotoLibraryUsageDescription: 'Nandyal Ride Captain lets you select document photos from your library.',
-      } : {}),
+      } : {
+        NSContactsUsageDescription: 'Nandyal Ride uses your contacts to let you add emergency contacts.',
+      }),
     },
   },
   plugins: [
     'expo-notifications',
     'expo-location',
+    ...(isCaptain ? [] : [['expo-contacts', { contactsPermission: 'Allow Nandyal Ride to access your contacts so you can add emergency contacts.' }]]),
     ...(isCaptain ? [['expo-image-picker', { cameraPermission: 'Allow Nandyal Ride Captain to use your camera for documents.', photosPermission: 'Allow Nandyal Ride Captain to access document photos.' }]] : []),
   ],
   extra: {

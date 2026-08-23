@@ -3,7 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
+  "workspaces": [
+    "dashboard"
+  ],
   "scripts": {
+    "dashboard:dev": "npm run dev --workspace dashboard",
+    "dashboard:build": "npm run build --workspace dashboard",
+    "dashboard:typecheck": "npm run typecheck --workspace dashboard",
     "start": "expo start",
     "start:customer": "APP_VARIANT=customer EXPO_PUBLIC_APP_MODE=customer expo start --clear",
     "start:captain": "APP_VARIANT=captain EXPO_PUBLIC_APP_MODE=captain expo start --clear",
@@ -26,6 +32,7 @@
     "@supabase/supabase-js": "^2.112.3",
     "expo": "~54.0.0",
     "expo-constants": "~18.0.13",
+    "expo-contacts": "~15.0.11",
     "expo-dev-client": "~6.0.21",
     "expo-device": "~8.0.10",
     "expo-font": "~14.0.9",
@@ -49,5 +56,8 @@
     "@expo/ngrok": "^4.1.3",
     "@types/react": "~19.1.0",
     "typescript": "~5.9.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }

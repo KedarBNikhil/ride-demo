@@ -513,5 +513,32 @@
     "year": "Year",
     "empty": "No rides match this filter.",
     "showing": "Showing rides from"
+  },
+  "safety": {
+    "title": "Emergency contacts",
+    "introTitle": "Set up safety",
+    "intro": "Add trusted contacts who can be reached quickly in an emergency.",
+    "allow": "Allow contacts access",
+    "pickAction": "Choose contacts",
+    "pickTitle": "Pick emergency contacts",
+    "pickHint": "Tap + to add someone as an emergency contact.",
+    "manual": "Enter a contact manually",
+    "manualTitle": "Add a contact manually",
+    "deniedTitle": "Contacts access needed",
+    "denied": "Emergency contacts need access to your phone's contacts. Allow it in Settings, or add a contact manually below.",
+    "openSettings": "Open settings",
+    "namePlaceholder": "Contact name",
+    "phonePlaceholder": "Phone number",
+    "save": "Save contact",
+    "savedTitle": "Your emergency contacts",
+    "addContact": "+ Add contact",
+    "remove": "Remove",
+    "removeTitle": "Remove contact",
+    "removeMessage": "Remove {{name}} from emergency contacts?",
+    "emptyDevice": "No contacts found",
+    "emptyDeviceHint": "We could not find any contacts with phone numbers on this phone.",
+    "addFailed": "Could not save this contact. Please try again.",
+    "loadFailed": "Could not load your emergency contacts.",
+    "invalidEntry": "Enter a valid name and phone number."
   }
 }

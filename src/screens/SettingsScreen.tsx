@@ -59,11 +59,13 @@ export function SettingsScreen({
   onBack,
   profile = false,
   ratingRole,
+  onSafety,
 }: {
   onLanguageChange: (language: AppLanguage) => void;
   onBack: () => void;
   profile?: boolean;
   ratingRole?: 'customer' | 'captain';
+  onSafety?: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const [receivedRating, setReceivedRating] = useState<ReceivedRating | null>(null);
@@ -101,16 +103,22 @@ export function SettingsScreen({
       </View>
 
       {profile && ratingRole === 'customer' && <Pressable
-        onPress={() => Alert.alert(t('home.safetyTitle'), t('home.safetySubtitle'), [
-          { text: t('home.safetyShareAction'), onPress: () => Alert.alert(t('home.safetyTitle'), t('home.safetyShared')) },
-          { text: t('home.safetyHelpAction'), onPress: () => Alert.alert(t('home.helpTitle'), t('home.helpMessage')) },
-          { text: t('actions.done'), style: 'cancel' },
-        ])}
+        onPress={() => {
+          if (onSafety) {
+            onSafety();
+            return;
+          }
+          Alert.alert(t('home.safetyTitle'), t('home.safetySubtitle'), [
+            { text: t('home.safetyShareAction'), onPress: () => Alert.alert(t('home.safetyTitle'), t('home.safetyShared')) },
+            { text: t('home.safetyHelpAction'), onPress: () => Alert.alert(t('home.helpTitle'), t('home.helpMessage')) },
+            { text: t('actions.done'), style: 'cancel' },
+          ]);
+        }}
         style={[styles.chip, shadows.soft]}
         accessibilityRole="button"
       >
         <View style={styles.safetyMark}>
-          <Text style={styles.safetyMarkText}>✓</Text>
+          <View style={styles.safetyShield} />
         </View>
         <View style={styles.chipText}>
           <Text style={styles.chipName}>{t('home.safetyTitle')}</Text>
@@ -195,7 +203,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 42,
   },
-  safetyMarkText: { color: colors.textOnAccent, fontSize: 19, fontWeight: '900' },
+  safetyShield: {
+    backgroundColor: colors.textOnAccent,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+    height: 20,
+    width: 16,
+  },
   rowChevron: { alignSelf: 'center', color: colors.textMuted, fontSize: 26 },
 
   infoCard: {
