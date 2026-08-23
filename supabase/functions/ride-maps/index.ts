@@ -113,7 +113,7 @@ Deno.serve(async (request) => {
         body: JSON.stringify({ input, sessionToken: String(body?.sessionToken ?? '').slice(0, 128), includedRegionCodes: ['in'], locationBias: { circle: { center: { latitude: 15.4889, longitude: 78.4836 }, radius: 25000 } }, ...(languageCode ? { languageCode } : {}) }),
       }));
       const suggestions = (payload.suggestions as Array<Record<string, unknown>> | undefined) ?? [];
-      return response(suggestions.slice(0, 5).flatMap((item) => {
+      return response(suggestions.flatMap((item) => {
         const prediction = item.placePrediction as Record<string, unknown> | undefined;
         const placeId = prediction?.placeId;
         const text = (prediction?.text as Record<string, unknown> | undefined)?.text;

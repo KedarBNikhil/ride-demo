@@ -40,7 +40,7 @@ import { filterAndSortRideHistory, type RideHistoryFilter } from '../utils/rideH
 import { RideHistoryFilterControl } from '../components/RideHistoryFilter';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 
-const sawaariHomeFooter = require('../../assets/images/sawaari-home-footer.png');
+const sawaariHomeFooter = require('../../assets/images/sawaari-brand-nandyal.png');
 
 export type RideKind = 'bike' | 'auto';
 export type Coordinate = { latitude: number; longitude: number };
@@ -427,6 +427,36 @@ export function LocationPickerScreen({
     return () => clearTimeout(timer);
   }, [query, target]);
 
+  const renderSuggestions = () => {
+    if (!focused || !hasCatalogueQuery) return null;
+    if (liveSuggestions.length === 0 && shown.length === 0 && liveStatus !== 'loading') return null;
+    const liveRows = liveSuggestions.map((suggestion, i) => (
+      <Pressable key={suggestion.placeId} onPress={() => void selectSuggestion(suggestion)} style={[styles.resultRow, i < liveSuggestions.length - 1 && styles.resultRowDivider]}>
+        <Text style={styles.resultPin}>📍</Text><Text style={styles.resultText} numberOfLines={2}>{suggestion.text}</Text>
+      </Pressable>
+    ));
+    const catalogueRows = shown.map((place, i) => {
+      const label = place.labelKey ? t(`location.${place.labelKey}`) : place.label;
+      return (
+        <Pressable key={place.id} onPress={() => { setCataloguePin(place); setPinMode(true); }} style={[styles.resultRow, i < shown.length - 1 && styles.resultRowDivider]}>
+          <Text style={styles.resultPin}>📍</Text><Text style={styles.resultText} numberOfLines={2}>{label}</Text>
+        </Pressable>
+      );
+    });
+    return (
+      <View>
+        <Text style={styles.sectionLabel}>{t('location.addressMatches')}</Text>
+        {liveStatus === 'loading' && <Text style={styles.locationResolution}>{t('location.searchingAddresses')}</Text>}
+        {(showLiveResults || shown.length > 0) && <View style={[styles.resultsCard, shadows.soft]}>
+          <ScrollView style={styles.resultsScroll} keyboardShouldPersistTaps="handled">
+            {showLiveResults ? liveRows : catalogueRows}
+          </ScrollView>
+        </View>}
+        {liveStatus === 'unavailable' && shown.length > 0 && <Text style={styles.locationResolution}>{t('location.placesUnavailable')}</Text>}
+      </View>
+    );
+  };
+
   const useGps = async () => {
     if (gpsLoading) return;
     setGpsLoading(true);
@@ -476,6 +506,7 @@ export function LocationPickerScreen({
             onChangeText={(value) => setDraft('pickup', value)}
             onSubmitEditing={() => void resolveTypedAddress()}
           />
+          {target === 'pickup' && renderSuggestions()}
           <View style={styles.locationFieldDivider} />
           <LocationField
             inputRef={dropInput}
@@ -490,25 +521,12 @@ export function LocationPickerScreen({
             onSubmitEditing={() => void resolveTypedAddress()}
             drop
           />
+          {target === 'drop' && renderSuggestions()}
         </View>
         <View style={styles.locationQuickActions}>
           <Pressable onPress={useGps} disabled={gpsLoading} accessibilityRole="button" style={styles.locationQuickAction}><Text style={styles.locationQuickActionText} numberOfLines={1}>{gpsLoading ? t('location.gpsLoading') : t('location.gps')}</Text></Pressable>
           <Pressable onPress={() => setPinMode(true)} accessibilityRole="button" style={styles.locationQuickAction}><Text style={styles.locationQuickActionText} numberOfLines={1}>{t('location.dropPin')}</Text></Pressable>
         </View>
-        <Text style={styles.sectionLabel}>{hasCatalogueQuery && (liveSuggestions.length > 0 || shown.length > 0) ? t('location.addressMatches') : t('location.nearby')}</Text>
-        {showLiveResults && liveStatus === 'loading' && <Text style={styles.locationResolution}>{t('location.searchingAddresses')}</Text>}
-        {showLiveResults && <View style={[styles.resultsCard, shadows.soft]}>{liveSuggestions.map((suggestion, i) => (
-          <Pressable key={suggestion.placeId} onPress={() => void selectSuggestion(suggestion)} style={[styles.resultRow, i < liveSuggestions.length - 1 && styles.resultRowDivider]}>
-            <Text style={styles.resultPin}>📍</Text><Text style={styles.resultText} numberOfLines={2}>{suggestion.text}</Text>
-          </Pressable>
-        ))}</View>}
-        {!showLiveResults && shown.length > 0 && <View style={[styles.resultsCard, shadows.soft]}>{shown.map((place, i) => {
-          const label = place.labelKey ? t(`location.${place.labelKey}`) : place.label;
-          return <Pressable key={place.id} onPress={() => { setCataloguePin(place); setPinMode(true); }} style={[styles.resultRow, i < shown.length - 1 && styles.resultRowDivider]}>
-            <Text style={styles.resultPin}>📍</Text><Text style={styles.resultText} numberOfLines={2}>{label}</Text>
-          </Pressable>
-        })}</View>}
-        {liveStatus === 'unavailable' && hasCatalogueQuery && <Text style={styles.locationResolution}>{t('location.placesUnavailable')}</Text>}
         {resolution[target] === 'failed' && <Text style={[styles.locationResolution, styles.locationResolutionFailed]}>{t('location.addressNotLocated')}</Text>}
         <PrimaryButton label={t('location.showRideOptions')} onPress={onContinue} disabled={!ready} />
       </>
@@ -1543,6 +1561,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     overflow: 'hidden',
+  },
+  resultsScroll: {
+    maxHeight: 240,
   },
   resultRow: {
     alignItems: 'center',

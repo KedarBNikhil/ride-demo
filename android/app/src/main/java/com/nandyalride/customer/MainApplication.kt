@@ -1,4 +1,4 @@
-package com.nandyalride.captain
+package com.nandyalride.customer
 
 import android.app.Application
 import android.content.res.Configuration
