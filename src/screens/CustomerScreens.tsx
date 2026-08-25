@@ -713,9 +713,10 @@ export function RideTypeScreen({
       <Pressable onPress={onBack} accessibilityRole="button" style={[styles.rideOptionsBack, styles.rideOptionsBackFloating, shadows.soft]}><Text style={styles.rideOptionsBackText}>‹</Text></Pressable>
       <View style={[styles.routeSummary, shadows.soft]}><Pressable onPress={() => onEditLocation('pickup')} accessibilityRole="button" style={styles.routeSummaryPlace}><Text style={styles.routeSummaryDot}>●</Text><Text style={styles.routeSummaryText} numberOfLines={1}>{ride.pickup}</Text></Pressable><Text style={styles.routeSummaryArrow}>→</Text><Pressable onPress={() => onEditLocation('drop')} accessibilityRole="button" style={styles.routeSummaryPlace}><Text style={[styles.routeSummaryDot, styles.routeSummaryDropDot]}>●</Text><Text style={styles.routeSummaryText} numberOfLines={1}>{ride.drop}</Text></Pressable></View>
     </View>
+    <View style={styles.rideOptionsBottom}>
+      {unavailableMessage && <View style={[styles.searchUnavailableBanner, shadows.soft]}><Text style={styles.searchUnavailableBannerText}>{unavailableMessage}</Text></View>}
       <View style={[styles.rideOptionsSheet, shadows.card]}>
         <View style={styles.sheetHandle} />
-        {unavailableMessage && <Text style={styles.promotionUnavailable}>{unavailableMessage}</Text>}
         <PromotionOfferCard promotion={promotion} t={t} compact />
         <View style={styles.rideOptionsHeader}><Text style={styles.rideOptionsHeading}>{t('rides.selectRide')}</Text><Text style={[styles.rideFareHeading, routeError && styles.rideFareHeadingError]}>{routeLoading ? 'Finding road route…' : routeError ? t('rides.routeUnavailable') : t('rides.estimate')}</Text></View>
       <View style={styles.rideOptionList}>{options.map((option) => (
@@ -731,6 +732,7 @@ export function RideTypeScreen({
       {selected === 'auto' && <View style={styles.passengerPicker}><Text style={styles.passengerPickerLabel}>{t('rides.autoPassengers')}</Text><View style={styles.passengerChoices}>{[1, 2, 3].map((count) => <Pressable key={count} onPress={() => onPassengerCountChange(count)} accessibilityRole="button" accessibilityState={{ selected: ride.passengerCount === count }} style={[styles.passengerChoice, ride.passengerCount === count && styles.passengerChoiceSelected]}><Text style={[styles.passengerChoiceText, ride.passengerCount === count && styles.passengerChoiceTextSelected]}>{formatNumber(count)}</Text></Pressable>)}</View></View>}
       <View style={styles.rideOptionsExtras}><Text style={styles.rideOptionsExtra}>₹ {t('rides.cash')}</Text><View style={styles.rideOptionsDivider} /><Text style={styles.rideOptionsExtra}>{t('rides.offers')}</Text></View>
       <PrimaryButton label={t('rides.bookSelected', { ride: t(`rides.${selected}`) })} onPress={onNext} disabled={!hasValidRouteQuote || routeLoading} />
+    </View>
     </View>
   </SafeAreaView>;
 }
@@ -1377,7 +1379,10 @@ const styles = StyleSheet.create({
   routeSummaryDot: { color: colors.success, fontSize: 15 },
   routeSummaryText: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.xs, fontWeight: '700' },
   routeSummaryArrow: { color: colors.accent, fontSize: 16, fontWeight: '800' },
-  rideOptionsSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 0, gap: 12, left: 0, padding: 16, paddingBottom: 22, position: 'absolute', right: 0 },
+  rideOptionsBottom: { bottom: 0, left: 0, position: 'absolute', right: 0 },
+  searchUnavailableBanner: { alignSelf: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, marginBottom: 8, maxWidth: '90%', paddingHorizontal: 14, paddingVertical: 9 },
+  searchUnavailableBannerText: { color: colors.textPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '700', textAlign: 'center' },
+  rideOptionsSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, gap: 12, padding: 16, paddingBottom: 22 },
   rideOptionsHeader: { alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between' },
   rideOptionsHeading: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '800' },
   rideFareHeading: { color: colors.textMuted, fontFamily, fontSize: fontSize.xs, fontWeight: '800', textTransform: 'uppercase' },
