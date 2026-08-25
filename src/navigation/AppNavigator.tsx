@@ -9,6 +9,7 @@ import { createAppI18n, type AppLanguage } from '../i18n/createI18n';
 import { LanguageSelectScreen } from '../screens/LanguageSelectScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { EmergencyContactsScreen } from '../screens/EmergencyContactsScreen';
+import { DialogProvider } from '../components/ThemedDialog';
 import { BookingConfirmScreen, CustomerBookingsScreen, CustomerHomeScreen, CustomerLoginScreen, type CustomerRide, LocationPickerScreen, RideConfirmedScreen, RideTypeScreen, SearchingScreen } from '../screens/CustomerScreens';
 import { CustomerRideChat } from '../components/CustomerRideChat';
 import { CaptainOnboardingStack } from './CaptainOnboardingStack';
@@ -143,6 +144,7 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
   const completeCaptainOnboarding = async () => { setCaptainOnboardingSubmitted(false); setCaptainOnboardingComplete(true); };
   if (hasLanguage === null || (mode === 'captain' && (captainOnboardingComplete === null || captainOnboardingSubmitted === null))) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
   return <I18nextProvider i18n={i18n}>
+    <DialogProvider>
     <GestureHandlerRootView style={{ flex: 1 }}>
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: Platform.OS === 'ios' ? 'slide_from_right' : 'slide_from_right', animationDuration: 260 }}>
@@ -168,5 +170,6 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
       </Stack.Navigator>
     </NavigationContainer>
     </GestureHandlerRootView>
+    </DialogProvider>
   </I18nextProvider>;
 }

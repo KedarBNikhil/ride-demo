@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import * as Contacts from 'expo-contacts';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenShell } from '../components/ScreenShell';
+import { useDialog } from '../components/ThemedDialog';
 import { emergencyContactsService, type EmergencyContact } from '../services/emergencyContacts';
 import { colors, fontFamily, fontSize, radii, shadows } from '../theme';
 
@@ -19,6 +20,7 @@ function toDeviceContact(contact: Contacts.ExistingContact): DeviceContact | nul
 
 export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation();
+  const dialog = useDialog();
   const [saved, setSaved] = useState<EmergencyContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -107,7 +109,7 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
       setManualName('');
       setManualPhone('');
     } catch {
-      Alert.alert(t('safety.title'), t('safety.addFailed'));
+      dialog({ title: t('safety.title'), message: t('safety.addFailed') });
     } finally {
       setSaving(false);
     }
@@ -117,23 +119,27 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
     const name = manualName.trim();
     const phone = manualPhone.trim();
     if (name.length < 2 || phone.replace(/\D/g, '').length < 6) {
-      Alert.alert(t('safety.title'), t('safety.invalidEntry'));
+      dialog({ title: t('safety.title'), message: t('safety.invalidEntry') });
       return;
     }
     void addContact(name, phone);
   };
 
   const confirmRemove = (contact: EmergencyContact) => {
-    Alert.alert(t('safety.removeTitle'), t('safety.removeMessage', { name: contact.contactName }), [
-      { text: t('rides.stay'), style: 'cancel' },
-      {
-        text: t('safety.remove'), style: 'destructive', onPress: () => {
-          emergencyContactsService.remove(contact.id)
-            .then(() => setSaved((current) => current.filter((item) => item.id !== contact.id)))
-            .catch(() => Alert.alert(t('safety.title'), t('safety.loadFailed')));
+    dialog({
+      title: t('safety.removeTitle'),
+      message: t('safety.removeMessage', { name: contact.contactName }),
+      buttons: [
+        { text: t('rides.stay'), style: 'cancel' },
+        {
+          text: t('safety.remove'), style: 'destructive', onPress: () => {
+            emergencyContactsService.remove(contact.id)
+              .then(() => setSaved((current) => current.filter((item) => item.id !== contact.id)))
+              .catch(() => dialog({ title: t('safety.title'), message: t('safety.loadFailed') }));
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   if (mode === 'picker') {

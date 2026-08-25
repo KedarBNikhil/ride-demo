@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { AppLanguage } from '../i18n/createI18n';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 import { ScreenShell } from '../components/ScreenShell';
+import { useDialog } from '../components/ThemedDialog';
 import { rideDispatchService, type ReceivedRating } from '../services/rideDispatch';
 
 function LangChip({
@@ -68,6 +69,7 @@ export function SettingsScreen({
   onSafety?: () => void;
 }) {
   const { t, i18n } = useTranslation();
+  const dialog = useDialog();
   const [receivedRating, setReceivedRating] = useState<ReceivedRating | null>(null);
   const profileText = i18n.language === 'te'
     ? { rating: 'రేటింగ్', noRatings: 'ఇంకా రేటింగ్‌లు లేవు', ratingCount: (count: number) => `${count} రేటింగ్‌లు` }
@@ -108,11 +110,15 @@ export function SettingsScreen({
             onSafety();
             return;
           }
-          Alert.alert(t('home.safetyTitle'), t('home.safetySubtitle'), [
-            { text: t('home.safetyShareAction'), onPress: () => Alert.alert(t('home.safetyTitle'), t('home.safetyShared')) },
-            { text: t('home.safetyHelpAction'), onPress: () => Alert.alert(t('home.helpTitle'), t('home.helpMessage')) },
-            { text: t('actions.done'), style: 'cancel' },
-          ]);
+          dialog({
+            title: t('home.safetyTitle'),
+            message: t('home.safetySubtitle'),
+            buttons: [
+              { text: t('home.safetyShareAction'), onPress: () => dialog({ title: t('home.safetyTitle'), message: t('home.safetyShared') }) },
+              { text: t('home.safetyHelpAction'), onPress: () => dialog({ title: t('home.helpTitle'), message: t('home.helpMessage') }) },
+              { text: t('actions.done'), style: 'cancel' },
+            ],
+          });
         }}
         style={[styles.chip, shadows.soft]}
         accessibilityRole="button"

@@ -1,9 +1,10 @@
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '../../../components/PrimaryButton';
 import { ScreenShell } from '../../../components/ScreenShell';
+import { useDialog } from '../../../components/ThemedDialog';
 import type { CaptainDocument, CaptainDocumentType } from '../../../services/captainOnboarding';
 import { captainOnboardingService } from '../../../services/captainOnboarding';
 import { colors, fontFamily, fontSize, radii, shadows } from '../../../theme';
@@ -16,13 +17,14 @@ const documentTypes: { type: CaptainDocumentType; icon: string; label: string }[
 
 export function DocumentUploadScreen({ onBack, onComplete }: { onBack: () => void; onComplete: () => void }) {
   const { t } = useTranslation();
+  const dialog = useDialog();
   const [documents, setDocuments] = useState<Partial<Record<CaptainDocumentType, CaptainDocument>>>({});
   const [saving, setSaving] = useState(false);
   const allAttached = documentTypes.every(({ type }) => documents[type]);
 
   const pick = async (type: CaptainDocumentType, source: 'camera' | 'library') => {
     const permission = source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) { Alert.alert(t('captain.permissionTitle'), t('captain.permissionMessage')); return; }
+    if (!permission.granted) { dialog({ title: t('captain.permissionTitle'), message: t('captain.permissionMessage') }); return; }
     const result = source === 'camera'
       ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7 })
       : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
@@ -30,11 +32,15 @@ export function DocumentUploadScreen({ onBack, onComplete }: { onBack: () => voi
     const asset = result.assets[0];
     setDocuments((current) => ({ ...current, [type]: { uri: asset.uri, name: asset.fileName ?? `${type}-document.jpg` } }));
   };
-  const choose = (type: CaptainDocumentType) => Alert.alert(t('captain.addDocument'), t('captain.addDocumentHint'), [
-    { text: t('captain.camera'), onPress: () => { void pick(type, 'camera'); } },
-    { text: t('captain.gallery'), onPress: () => { void pick(type, 'library'); } },
-    { text: t('actions.cancel'), style: 'cancel' },
-  ]);
+  const choose = (type: CaptainDocumentType) => dialog({
+    title: t('captain.addDocument'),
+    message: t('captain.addDocumentHint'),
+    buttons: [
+      { text: t('captain.camera'), onPress: () => { void pick(type, 'camera'); } },
+      { text: t('captain.gallery'), onPress: () => { void pick(type, 'library'); } },
+      { text: t('actions.cancel'), style: 'cancel' },
+    ],
+  });
   const continueFlow = async () => {
     if (!allAttached) return;
     setSaving(true);

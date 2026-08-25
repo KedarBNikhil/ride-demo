@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { AppLanguage } from '../i18n/createI18n';
 import { CaptainBookingsScreen, CaptainDashboardScreen } from '../screens/captain/CaptainDashboardScreen';
@@ -15,6 +15,7 @@ import type { CaptainRideRequest, DispatchRide } from '../services/rideDispatch'
 import { rideDispatchService } from '../services/rideDispatch';
 import { subscribeToCaptainOfferNotificationResponses } from '../services/pushNotifications';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { useDialog } from '../components/ThemedDialog';
 import { useTranslation } from 'react-i18next';
 import { colors, fontFamily, radii } from '../theme';
 
@@ -72,6 +73,7 @@ const cancellationStyles = StyleSheet.create({ overlay: { alignItems: 'center', 
 
 export function CaptainMainStack({ online, onToggle, onLanguageChange, onTripComplete }: { online: boolean; onToggle: () => void; onLanguageChange: (language: AppLanguage) => Promise<void>; onTripComplete: () => void }) {
   const { t } = useTranslation();
+  const dialog = useDialog();
   const [request, setRequest] = useState<CaptainRideRequest | null>(null);
   const [requestCycle, setRequestCycle] = useState(0);
   const [surchargeTimeoutNotice, setSurchargeTimeoutNotice] = useState<string | null>(null);
@@ -89,7 +91,7 @@ export function CaptainMainStack({ online, onToggle, onLanguageChange, onTripCom
     }).catch(() => undefined);
   }), []);
   return <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', animationDuration: 260 }}>
-    <Stack.Screen name="CaptainHome">{({ navigation }) => <CaptainDashboardScreen online={online} timeoutNotice={surchargeTimeoutNotice} onToggle={onToggle} onSettings={() => navigation.navigate('Settings')} onBookings={() => navigation.navigate('CaptainBookings')} onEarnings={() => navigation.navigate('CaptainEarnings')} onRequest={setRequest} request={request} requestCycle={requestCycle} onResumeRide={(ride) => { if (ride.status === 'accepted') navigation.navigate('ToPickup', { request: ride }); else if (ride.status === 'arrived') navigation.navigate('StartRide', { request: ride }); else navigation.navigate('TripInProgress', { request: ride }); }} onReject={() => { const active = request; dismissRequest(); if (active) void rideDispatchService.respondToOffer(active.offerId, false); }} onAccept={async () => { const active = request; if (!active || acceptingOfferId.current) return; acceptingOfferId.current = active.offerId; try { await rideDispatchService.respondToOffer(active.offerId, true); dismissRequest(); navigation.navigate('ToPickup', { request: active }); } catch (error) { const message = error instanceof Error ? error.message : ''; const unavailable = message.includes('Ride was already accepted') || message.includes('Offer is no longer available'); if (unavailable) { dismissRequest(); Alert.alert('Ride already accepted', 'Ride already accepted by another captain.', [{ text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'CaptainHome' }] }) }]); } else Alert.alert(t('login.tryAgain')); } finally { acceptingOfferId.current = null; } }} />}</Stack.Screen>
+    <Stack.Screen name="CaptainHome">{({ navigation }) => <CaptainDashboardScreen online={online} timeoutNotice={surchargeTimeoutNotice} onToggle={onToggle} onSettings={() => navigation.navigate('Settings')} onBookings={() => navigation.navigate('CaptainBookings')} onEarnings={() => navigation.navigate('CaptainEarnings')} onRequest={setRequest} request={request} requestCycle={requestCycle} onResumeRide={(ride) => { if (ride.status === 'accepted') navigation.navigate('ToPickup', { request: ride }); else if (ride.status === 'arrived') navigation.navigate('StartRide', { request: ride }); else navigation.navigate('TripInProgress', { request: ride }); }} onReject={() => { const active = request; dismissRequest(); if (active) void rideDispatchService.respondToOffer(active.offerId, false); }} onAccept={async () => { const active = request; if (!active || acceptingOfferId.current) return; acceptingOfferId.current = active.offerId; try { await rideDispatchService.respondToOffer(active.offerId, true); dismissRequest(); navigation.navigate('ToPickup', { request: active }); } catch (error) { const message = error instanceof Error ? error.message : ''; const unavailable = message.includes('Ride was already accepted') || message.includes('Offer is no longer available'); if (unavailable) { dismissRequest(); dialog({ title: 'Ride already accepted', message: 'Ride already accepted by another captain.', buttons: [{ text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'CaptainHome' }] }) }] }); } else dialog({ title: t('login.tryAgain') }); } finally { acceptingOfferId.current = null; } }} />}</Stack.Screen>
     <Stack.Screen name="CaptainBookings">{({ navigation }) => <CaptainBookingsScreen onHome={() => navigation.navigate('CaptainHome')} onSettings={() => navigation.navigate('Settings')} onEarnings={() => navigation.navigate('CaptainEarnings')} onOpenRideDetails={(rideId) => navigation.navigate('CaptainRideDetails', { rideId })} onResumeRide={(ride) => { if (ride.status === 'accepted') navigation.navigate('ToPickup', { request: ride }); else if (ride.status === 'arrived') navigation.navigate('StartRide', { request: ride }); else navigation.navigate('TripInProgress', { request: ride }); }} />}</Stack.Screen>
     <Stack.Screen name="CaptainRideDetails">{({ navigation, route }) => <CaptainRideDetailsScreen rideId={(route.params as { rideId: string }).rideId} onBack={() => navigation.goBack()} />}</Stack.Screen>
     <Stack.Screen name="CaptainEarnings">{({ navigation }) => <CaptainEarningsScreen onHome={() => navigation.navigate('CaptainHome')} onBookings={() => navigation.navigate('CaptainBookings')} onSettings={() => navigation.navigate('Settings')} />}</Stack.Screen>
