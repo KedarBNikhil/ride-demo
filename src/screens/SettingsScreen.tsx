@@ -1,10 +1,11 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import type { AppLanguage } from '../i18n/createI18n';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 import { ScreenShell } from '../components/ScreenShell';
+import { useDialog } from '../components/ThemedDialog';
 import { rideDispatchService, type ReceivedRating } from '../services/rideDispatch';
 
 function LangChip({
@@ -59,13 +60,16 @@ export function SettingsScreen({
   onBack,
   profile = false,
   ratingRole,
+  onSafety,
 }: {
   onLanguageChange: (language: AppLanguage) => void;
   onBack: () => void;
   profile?: boolean;
   ratingRole?: 'customer' | 'captain';
+  onSafety?: () => void;
 }) {
   const { t, i18n } = useTranslation();
+  const dialog = useDialog();
   const [receivedRating, setReceivedRating] = useState<ReceivedRating | null>(null);
   const profileText = i18n.language === 'te'
     ? { rating: 'రేటింగ్', noRatings: 'ఇంకా రేటింగ్‌లు లేవు', ratingCount: (count: number) => `${count} రేటింగ్‌లు` }
@@ -99,6 +103,35 @@ export function SettingsScreen({
           />
         </View>
       </View>
+
+      {profile && ratingRole === 'customer' && <Pressable
+        onPress={() => {
+          if (onSafety) {
+            onSafety();
+            return;
+          }
+          dialog({
+            title: t('home.safetyTitle'),
+            message: t('home.safetySubtitle'),
+            buttons: [
+              { text: t('home.safetyShareAction'), onPress: () => dialog({ title: t('home.safetyTitle'), message: t('home.safetyShared') }) },
+              { text: t('home.safetyHelpAction'), onPress: () => dialog({ title: t('home.helpTitle'), message: t('home.helpMessage') }) },
+              { text: t('actions.done'), style: 'cancel' },
+            ],
+          });
+        }}
+        style={[styles.chip, shadows.soft]}
+        accessibilityRole="button"
+      >
+        <View style={styles.safetyMark}>
+          <View style={styles.safetyShield} />
+        </View>
+        <View style={styles.chipText}>
+          <Text style={styles.chipName}>{t('home.safetyTitle')}</Text>
+          <Text style={styles.chipSub}>{t('home.safetySubtitle')}</Text>
+        </View>
+        <Text style={styles.rowChevron}>›</Text>
+      </Pressable>}
 
       {ratingRole && <View style={styles.ratingCard}>
         <Text style={styles.ratingLabel}>{t('profile.rating', { defaultValue: profileText.rating })}</Text>
@@ -168,6 +201,24 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
   },
+  safetyMark: {
+    alignItems: 'center',
+    backgroundColor: colors.accent,
+    borderRadius: radii.pill,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  safetyShield: {
+    backgroundColor: colors.textOnAccent,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+    height: 20,
+    width: 16,
+  },
+  rowChevron: { alignSelf: 'center', color: colors.textMuted, fontSize: 26 },
 
   infoCard: {
     alignItems: 'center',

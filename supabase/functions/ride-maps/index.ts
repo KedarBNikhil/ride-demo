@@ -48,7 +48,10 @@ async function googleJson(endpoint: string, init: RequestInit) {
   if (!googleKey) throw new Error('Google routing is not configured');
   const request = await fetch(endpoint, { ...init, headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': googleKey, ...(init.headers ?? {}) } });
   const body = await request.json().catch(() => ({}));
-  if (!request.ok) throw Object.assign(new Error((body as { error?: { message?: string } }).error?.message ?? 'Google Maps request failed'), { httpStatus: request.status });
+  if (!request.ok) {
+    console.error(`[ride-maps] Google request failed (${request.status}) ${endpoint}`, JSON.stringify(body));
+    throw Object.assign(new Error((body as { error?: { message?: string } }).error?.message ?? 'Google Maps request failed'), { httpStatus: request.status });
+  }
   return body as Record<string, unknown>;
 }
 
@@ -103,12 +106,14 @@ Deno.serve(async (request) => {
     if (action === 'autocomplete') {
       const input = String(body?.input ?? '').trim();
       if (input.length < 3 || input.length > 160) return response([]);
+      const requestedLanguage = String(body?.languageCode ?? '');
+      const languageCode = ['en', 'en-IN', 'te'].includes(requestedLanguage) ? requestedLanguage : undefined;
       const payload = await placeCall('autocomplete', async () => await googleJson('https://places.googleapis.com/v1/places:autocomplete', {
         method: 'POST', headers: { 'X-Goog-FieldMask': 'suggestions.placePrediction.placeId,suggestions.placePrediction.text.text' },
-        body: JSON.stringify({ input, sessionToken: String(body?.sessionToken ?? '').slice(0, 128), includedRegionCodes: ['in'], locationBias: { circle: { center: { latitude: 15.4889, longitude: 78.4836 }, radius: 25000 } } }),
+        body: JSON.stringify({ input, sessionToken: String(body?.sessionToken ?? '').slice(0, 128), includedRegionCodes: ['in'], locationBias: { circle: { center: { latitude: 15.4889, longitude: 78.4836 }, radius: 25000 } }, ...(languageCode ? { languageCode } : {}) }),
       }));
       const suggestions = (payload.suggestions as Array<Record<string, unknown>> | undefined) ?? [];
-      return response(suggestions.slice(0, 5).flatMap((item) => {
+      return response(suggestions.flatMap((item) => {
         const prediction = item.placePrediction as Record<string, unknown> | undefined;
         const placeId = prediction?.placeId;
         const text = (prediction?.text as Record<string, unknown> | undefined)?.text;

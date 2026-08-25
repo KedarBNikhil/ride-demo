@@ -5,17 +5,29 @@ export type PlaceSuggestion = { placeId: string; text: string };
 
 type MapsResponse<T> = { data?: T; error?: string };
 
+async function describeFunctionError(error: unknown): Promise<string> {
+  const context = (error as { context?: Response }).context;
+  if (context && typeof context.json === 'function') {
+    try {
+      const payload = (await context.json()) as MapsResponse<unknown> | null;
+      if (payload?.error) return String(payload.error);
+    } catch {}
+  }
+  return error instanceof Error ? error.message : 'Google Maps is unavailable';
+}
+
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   if (!supabase) throw new Error('SUPABASE_NOT_CONFIGURED');
   const { data, error } = await supabase.functions.invoke('ride-maps', { body });
+  if (error) throw new Error(await describeFunctionError(error));
   const payload = data as MapsResponse<T> | null;
-  if (error || !payload?.data) throw error ?? new Error(payload?.error ?? 'Google Maps is unavailable');
+  if (!payload?.data) throw new Error(payload?.error ?? 'Google Maps is unavailable');
   return payload.data;
 }
 
 export const googleMapsService = {
-  autocomplete(input: string, sessionToken: string) {
-    return invoke<PlaceSuggestion[]>({ action: 'autocomplete', input, sessionToken });
+  autocomplete(input: string, sessionToken: string, languageCode?: string) {
+    return invoke<PlaceSuggestion[]>({ action: 'autocomplete', input, sessionToken, languageCode });
   },
 
   placeDetails(placeId: string, sessionToken: string) {
