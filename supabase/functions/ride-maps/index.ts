@@ -18,13 +18,6 @@ function fail(message: string, status = 400) {
   return Response.json({ error: message }, { status, headers: jsonHeaders });
 }
 
-function publicKey() {
-  const direct = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY');
-  if (direct) return direct;
-  const values = Object.values(JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS') ?? '{}'));
-  return typeof values[0] === 'string' ? values[0] : undefined;
-}
-
 function coordinate(value: unknown): Coordinate | null {
   if (!value || typeof value !== 'object') return null;
   const point = value as Record<string, unknown>;
@@ -190,30 +183,33 @@ Deno.serve(async (request) => {
     if (action === 'accept_offer') {
       const offerId = String(body?.offerId ?? '');
       if (!/^[0-9a-f-]{36}$/i.test(offerId)) return fail('Invalid offer');
-      const key = publicKey();
-      if (!key) throw new Error('Supabase publishable key is unavailable');
-      const caller = createClient(url, key, { auth: { persistSession: false }, global: { headers: { Authorization: authorization! } } });
-      const { data: ride, error: acceptanceError } = await caller.rpc('respond_to_ride_offer', { p_offer_id: offerId, p_accept: true });
-      if (acceptanceError || !ride) throw acceptanceError ?? new Error('Ride offer could not be accepted');
-      const acceptedRide = ride as Record<string, unknown>;
+      const { data: offer, error: offerError } = await admin
+        .from('ride_offers')
+        .select('ride_id, rides!inner(pickup_latitude, pickup_longitude)')
+        .eq('id', offerId)
+        .eq('captain_id', userData.user.id)
+        .eq('status', 'offered')
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+      const pickup = coordinate({ latitude: offer?.rides?.pickup_latitude, longitude: offer?.rides?.pickup_longitude });
+      const { data: availability, error: availabilityError } = await admin.from('captain_availability').select('latitude, longitude').eq('captain_id', userData.user.id).single();
+      const captain = coordinate({ latitude: availability?.latitude, longitude: availability?.longitude });
+      if (offerError || !offer || !pickup || availabilityError || !captain) throw new Error('Offer or captain location is no longer available');
 
-      // The database claim is authoritative and must not be reported as failed
-      // because optional Maps enrichment is capped or temporarily unavailable.
-      // Running it after the claim also avoids spending a route request for a
-      // Captain who loses the atomic race.
-      try {
-        const pickup = coordinate({ latitude: acceptedRide.pickup_latitude, longitude: acceptedRide.pickup_longitude });
-        const { data: availability, error: availabilityError } = await admin.from('captain_availability').select('latitude, longitude').eq('captain_id', userData.user.id).single();
-        const captain = coordinate({ latitude: availability?.latitude, longitude: availability?.longitude });
-        if (availabilityError || !pickup || !captain) throw new Error('Captain location is unavailable; route was not recalculated');
-        const { route, callId } = await computeRoute(captain, pickup, 'captain_to_pickup');
-        const { error: applyError } = await admin.rpc('apply_captain_road_distance', { p_ride_id: acceptedRide.id, p_pickup_distance_meters: route.distanceMeters, p_duration_seconds: route.durationSeconds, p_encoded_polyline: route.encodedPolyline });
-        if (applyError) throw applyError;
-        await admin.from('google_routes_call_log').update({ ride_id: acceptedRide.id }).eq('id', callId);
-        return response({ ride, route });
-      } catch {
-        return response({ ride });
-      }
+      // Route computation is deliberately before the atomic claim. A Maps
+      // failure therefore leaves the ride searching rather than accepted with
+      // an unverified pickup surcharge.
+      const { route, callId } = await computeRoute(captain, pickup, 'captain_to_pickup');
+      const { data: ride, error: acceptanceError } = await admin.rpc('accept_ride_offer_with_pickup_route', {
+        p_offer_id: offerId,
+        p_captain_id: userData.user.id,
+        p_pickup_distance_meters: route.distanceMeters,
+        p_duration_seconds: route.durationSeconds,
+        p_encoded_polyline: route.encodedPolyline,
+      });
+      if (acceptanceError || !ride) throw acceptanceError ?? new Error('Ride offer could not be accepted');
+      await admin.from('google_routes_call_log').update({ ride_id: (ride as Record<string, unknown>).id }).eq('id', callId);
+      return response({ ride, route });
     }
 
     return fail('Unsupported action');

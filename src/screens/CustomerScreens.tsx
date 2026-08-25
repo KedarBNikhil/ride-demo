@@ -52,7 +52,6 @@ const NANDYAL: Region = { latitude: 15.4889, longitude: 78.4836, latitudeDelta: 
 const estimateCoordinateDistanceKm = (a: Coordinate, b: Coordinate) => Math.sqrt((a.latitude - b.latitude) ** 2 + (a.longitude - b.longitude) ** 2) * 111;
 
 async function getCustomerGpsPosition() {
-  if (!await Location.hasServicesEnabledAsync()) throw new Error('LOCATION_SERVICES_DISABLED');
   const existing = await Location.getForegroundPermissionsAsync();
   const permission = existing.status === 'granted' ? existing : await Location.requestForegroundPermissionsAsync();
   if (permission.status !== 'granted') throw new Error('LOCATION_PERMISSION_DENIED');
@@ -158,7 +157,6 @@ export function CustomerHomeScreen({
     };
     const start = async () => {
       try {
-        if (!await Location.hasServicesEnabledAsync()) throw new Error('LOCATION_SERVICES_DISABLED');
         const existing = await Location.getForegroundPermissionsAsync();
         const permission = existing.status === 'granted' ? existing : await Location.requestForegroundPermissionsAsync();
         if (!active || permission.status !== 'granted') throw new Error('LOCATION_PERMISSION_DENIED');
@@ -573,6 +571,8 @@ export function RideTypeScreen({
   onNext,
   onBack,
   onEditLocation,
+  unavailableMessage,
+  onUnavailableMessageHidden,
 }: {
   ride: CustomerRide;
   selected: RideKind;
@@ -582,6 +582,8 @@ export function RideTypeScreen({
   onNext: () => void;
   onBack: () => void;
   onEditLocation: (target: LocationTarget) => void;
+  unavailableMessage?: string;
+  onUnavailableMessageHidden: () => void;
 }) {
   const { t } = useTranslation();
   const mapRef = useRef<MapView>(null);
@@ -622,6 +624,11 @@ export function RideTypeScreen({
     return () => clearTimeout(timer);
   }, [routeQuote?.id]);
   useEffect(() => { void rideDispatchService.getCustomerPromotionStatus().then(setPromotion).catch(() => setPromotion(null)); }, []);
+  useEffect(() => {
+    if (!unavailableMessage) return;
+    const timer = setTimeout(onUnavailableMessageHidden, 5_000);
+    return () => clearTimeout(timer);
+  }, [onUnavailableMessageHidden, unavailableMessage]);
   const selectedFareDisplay = getCustomerFareDisplay({ kind: selected, passengerCount: ride.passengerCount, routeQuote, promotion });
   const promotionUnavailable = Boolean(promotion?.promotion_enabled && promotion.remaining_free_rides > 0 && hasValidRouteQuote && !selectedFareDisplay.promotionAvailable);
   const options: Array<{ kind: RideKind; icon: string; fareDisplay: CustomerFareDisplay; eta: number }> = [
@@ -642,6 +649,7 @@ export function RideTypeScreen({
     <Text style={styles.routeDiagnostic}>{routeDiagnostic}</Text>
       <View style={[styles.rideOptionsSheet, shadows.card]}>
         <View style={styles.sheetHandle} />
+        {unavailableMessage && <Text style={styles.promotionUnavailable}>{unavailableMessage}</Text>}
         <PromotionOfferCard promotion={promotion} t={t} compact />
         <View style={styles.rideOptionsHeader}><Text style={styles.rideOptionsHeading}>{t('rides.selectRide')}</Text><Text style={[styles.rideFareHeading, routeError && styles.rideFareHeadingError]}>{routeLoading ? 'Finding road route…' : routeError ? t('rides.routeUnavailable') : t('rides.estimate')}</Text></View>
       <View style={styles.rideOptionList}>{options.map((option) => (
