@@ -15,6 +15,8 @@ import type {
   RideOffer,
   RideSettlement,
   SettlementQueueRow,
+  CaptainRideVerificationRow,
+  CaptainSettlementRow,
 } from './types';
 
 type QueryResult<T> = PromiseLike<{ data: T | null; error: { message: string } | null }>;
@@ -258,6 +260,50 @@ export function resolvePayoutDispute(disputeId: string, status: 'resolved' | 're
 
 export function resolveCaptainIssue(issueId: string) {
   return unwrap(() => supabase!.rpc('operator_resolve_captain_payment_issue', { p_issue_id: issueId }));
+}
+
+// ---------------------------------------------------- Captain settlements
+
+export async function fetchCaptainRideVerificationQueue(status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'all' = 'PENDING') {
+  const rows = await unwrap(() =>
+    supabase!.rpc('operator_captain_ride_verification_queue', { p_status: status === 'all' ? null : status }),
+  );
+  return (rows ?? []) as CaptainRideVerificationRow[];
+}
+
+export function verifyCaptainRide(compensationId: string, status: 'APPROVED' | 'REJECTED', rejectionReason?: string) {
+  return unwrap(() =>
+    supabase!.rpc('operator_verify_captain_ride', {
+      p_compensation_id: compensationId,
+      p_status: status,
+      p_rejection_reason: rejectionReason ?? null,
+    }),
+  );
+}
+
+export async function generateCaptainSettlement(settlementDate: string) {
+  return unwrap(() => supabase!.rpc('operator_generate_captain_settlement', { p_settlement_date: settlementDate }));
+}
+
+export async function fetchCaptainSettlementQueue(settlementDate?: string) {
+  const rows = await unwrap(() =>
+    supabase!.rpc('operator_captain_settlement_queue', { p_settlement_date: settlementDate ?? null }),
+  );
+  return (rows ?? []) as CaptainSettlementRow[];
+}
+
+export function approveCaptainSettlementBatch(batchId: string) {
+  return unwrap(() => supabase!.rpc('operator_approve_captain_settlement_batch', { p_batch_id: batchId }));
+}
+
+export function recordManualCaptainPayment(settlementId: string, reference: string, notes?: string) {
+  return unwrap(() =>
+    supabase!.rpc('operator_record_manual_captain_payment', {
+      p_settlement_id: settlementId,
+      p_reference: reference,
+      p_notes: notes ?? null,
+    }),
+  );
 }
 
 export interface DisputeListRow {

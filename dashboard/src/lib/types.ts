@@ -172,6 +172,47 @@ export interface PayoutQueueRow {
   dispute_reason: string | null;
 }
 
+export interface CaptainRideVerificationRow {
+  compensation_id: string;
+  ride_id: string;
+  captain_id: string;
+  customer_name: string | null;
+  captain_name: string | null;
+  pickup_address: string;
+  drop_address: string;
+  normal_ride_fare: number;
+  customer_charge_amount: number;
+  customer_charge_type: ChargeType;
+  total_company_payable: number;
+  trip_distance_meters: number | null;
+  travelled_distance_km: number | null;
+  started_at: string | null;
+  completed_at: string;
+  pickup_otp_verified_at: string | null;
+  payment_status: PaymentStatus;
+  payment_method: PaymentMethod | null;
+  verification_status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  rejection_reason: string | null;
+}
+
+export interface CaptainSettlementRow {
+  batch_id: string;
+  settlement_date: string;
+  batch_status: 'DRAFT' | 'APPROVED' | 'COMPLETED';
+  settlement_id: string;
+  captain_id: string;
+  captain_name: string | null;
+  approved_rides: number;
+  gross_amount: number;
+  adjustments: number;
+  net_amount: number;
+  payout_provider: string;
+  payout_status: 'PENDING' | 'APPROVED' | 'PAID' | 'FAILED' | 'REVERSED';
+  external_reference: string | null;
+  paid_at: string | null;
+  notes: string | null;
+}
+
 export interface CaptainPayoutDispute {
   id: string;
   payout_id: string;

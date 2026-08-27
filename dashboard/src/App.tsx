@@ -9,6 +9,7 @@ import { CaptainsPage } from '@/pages/captains/CaptainsPage';
 import { CaptainDetailPage } from '@/pages/captains/CaptainDetailPage';
 import { PaymentsPage } from '@/pages/PaymentsPage';
 import { FraudPage } from '@/pages/FraudPage';
+import { CaptainSettlementsPage } from '@/pages/CaptainSettlementsPage';
 import { Card } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
@@ -77,6 +78,7 @@ export default function App() {
         <Route path="captains" element={<CaptainsPage />} />
         <Route path="captains/:captainId" element={<CaptainDetailPage />} />
         <Route path="payments" element={<PaymentsPage />} />
+        <Route path="captain-settlements" element={<CaptainSettlementsPage />} />
         <Route path="fraud" element={<FraudPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

@@ -7,6 +7,7 @@ const navItems = [
   { to: '/customers', label: 'Customers' },
   { to: '/captains', label: 'Captains' },
   { to: '/payments', label: 'Payments & Issues' },
+  { to: '/captain-settlements', label: 'Captain Settlements' },
   { to: '/fraud', label: 'Fraud Signals' },
 ];
 
