@@ -26,6 +26,7 @@ import { useDialog } from '../components/ThemedDialog';
 import { ScreenShell } from '../components/ScreenShell';
 import { PhoneOtpAuth } from '../components/PhoneOtpAuth';
 import { customerAuthService } from '../services/customerAuth';
+import { toIndianE164 } from '../services/authMode';
 import { rideCreationService, type CancellationReason } from '../services/rideCreation';
 import { rideDispatchService, type AssignedCaptainDetails, type CustomerPromotionStatus, type DispatchRide, type RideStatus } from '../services/rideDispatch';
 import { googleMapsService, type PlaceSuggestion } from '../services/googleMaps';
@@ -100,6 +101,52 @@ export function CustomerLoginScreen({
 }) {
   const { t } = useTranslation();
   return <PhoneOtpAuth title={t('screens.customerLogin')} subtitle={t('login.subtitle')} emoji="📱" onBack={onBack} onSendOtp={customerAuthService.sendOtp} onVerifyOtp={async (phone, otp) => { await customerAuthService.verifyOtp(phone, otp); onComplete(); }} />;
+}
+
+export function CustomerIntroScreen({ onComplete }: { onComplete: () => void }) {
+  const brandOpacity = useRef(new Animated.Value(0)).current;
+  const brandTranslateY = useRef(new Animated.Value(14)).current;
+  const footerOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(brandOpacity, { toValue: 1, duration: 380, useNativeDriver: true }),
+      Animated.timing(brandTranslateY, { toValue: 0, duration: 380, useNativeDriver: true }),
+      Animated.timing(footerOpacity, { toValue: 1, duration: 460, delay: 180, useNativeDriver: true }),
+    ]).start(({ finished }) => { if (finished) onComplete(); });
+  }, [brandOpacity, brandTranslateY, footerOpacity, onComplete]);
+
+  return <SafeAreaView style={styles.introSafe} edges={['top', 'right', 'bottom', 'left']}>
+    <View style={styles.introContent}>
+      <Animated.Text style={[styles.introBrand, { opacity: brandOpacity, transform: [{ translateY: brandTranslateY }] }]}>Sawaari</Animated.Text>
+      <Animated.Text style={[styles.introFooter, { opacity: footerOpacity }]}>Made with love ❤️ for Nandyal</Animated.Text>
+    </View>
+  </SafeAreaView>;
+}
+
+export function CustomerAuthChoiceScreen({ onLogin, onSignup }: { onLogin: () => void; onSignup: () => void }) {
+  return <ScreenShell noHeader>
+    <View style={styles.authChoiceHero}><Text style={styles.authChoiceBrand}>Sawaari</Text><Text style={styles.authChoiceTagline}>Your local ride, your community</Text></View>
+    <View style={[styles.authChoiceCard, shadows.card]}><Text style={styles.authChoiceTitle}>Ready to ride?</Text><Text style={styles.authChoiceHelp}>Create an account or log in with your mobile number.</Text><PrimaryButton label="Sign up" onPress={onSignup} /><PrimaryButton label="Login" secondary onPress={onLogin} /></View>
+  </ScreenShell>;
+}
+
+export function CustomerSignupScreen({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [addressType, setAddressType] = useState<'home' | 'work' | null>(null);
+  const validPhone = () => {
+    try { toIndianE164(phone); return true; } catch { return false; }
+  };
+
+  const details = <View style={[styles.signupCard, shadows.soft]}>
+    <Text style={styles.signupLabel}>Name</Text><TextInput value={name} onChangeText={setName} autoCapitalize="words" placeholder="Your name" placeholderTextColor={colors.textMuted} style={styles.signupInput} />
+    <Text style={styles.signupLabel}>Phone number</Text><TextInput value={phone} onChangeText={(next) => setPhone(next.replace(/[^+\d]/g, '').replace(/(?!^)\+/g, '').slice(0, 13))} keyboardType="phone-pad" placeholder="9876543210 or +919876543210" placeholderTextColor={colors.textMuted} style={styles.signupInput} />
+    <Text style={styles.signupLabel}>Address <Text style={styles.signupOptional}>(optional)</Text></Text><TextInput value={address} onChangeText={setAddress} placeholder="Add an address" placeholderTextColor={colors.textMuted} style={styles.signupInput} />
+    <View style={styles.addressTypes}>{(['home', 'work'] as const).map((type) => <Pressable key={type} onPress={() => setAddressType(type)} style={[styles.addressType, addressType === type && styles.addressTypeActive]}><Text style={[styles.addressTypeText, addressType === type && styles.addressTypeTextActive]}>{type === 'home' ? 'Home' : 'Work'}</Text></Pressable>)}</View>
+  </View>;
+  return <PhoneOtpAuth title="Create your account" subtitle="Enter your details to get started" emoji="🛺" onBack={onBack} initialPhone={phone} phoneStepContent={details} canSendOtp={Boolean(name.trim() && validPhone())} onSendOtp={async (value) => { setPhone(value); await customerAuthService.sendOtp(value); }} onVerifyOtp={async (value, otp) => { await customerAuthService.verifyOtp(value, otp); await customerAuthService.saveSignupProfile(name); onComplete(); }} />;
 }
 
 /* ─────────────────────────── HOME ─────────────────────────── */
@@ -1267,6 +1314,25 @@ function CustomerTabBar({ active, onHome, onBookings, onProfile }: { active: 'ho
 /* ─────────────────────────── STYLES ─────────────────────────── */
 
 const styles = StyleSheet.create({
+  introSafe: { flex: 1, backgroundColor: colors.primary },
+  introContent: { alignItems: 'center', flex: 1, justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 32 },
+  introBrand: { color: colors.textOnPrimary, fontFamily, fontSize: 46, fontWeight: '900', marginTop: '62%' },
+  introFooter: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '700', textAlign: 'center' },
+  authChoiceHero: { alignItems: 'center', flex: 1, justifyContent: 'center', minHeight: 280 },
+  authChoiceBrand: { color: colors.primary, fontFamily, fontSize: 46, fontWeight: '900' },
+  authChoiceTagline: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, marginTop: 8 },
+  authChoiceCard: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.xl, borderWidth: 1, gap: 14, padding: 22 },
+  authChoiceTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.xl, fontWeight: '900', textAlign: 'center' },
+  authChoiceHelp: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, lineHeight: 24, marginBottom: 4, textAlign: 'center' },
+  signupCard: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 8, padding: 16 },
+  signupLabel: { color: colors.textPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '800', marginTop: 4 },
+  signupOptional: { color: colors.textMuted, fontWeight: '400' },
+  signupInput: { backgroundColor: colors.bg, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, color: colors.textPrimary, fontFamily, fontSize: fontSize.md, padding: 14 },
+  addressTypes: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  addressType: { alignItems: 'center', backgroundColor: colors.primaryLight, borderColor: colors.primary, borderRadius: radii.pill, borderWidth: 1, minWidth: 88, paddingHorizontal: 16, paddingVertical: 10 },
+  addressTypeActive: { backgroundColor: colors.primary },
+  addressTypeText: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
+  addressTypeTextActive: { color: colors.textOnPrimary },
   // Map-led customer home
   mapHomeSafe: { flex: 1, backgroundColor: colors.primaryLight },
   modalOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0, 0, 0, 0.45)', justifyContent: 'center', alignItems: 'center', zIndex: 10 },
