@@ -12,6 +12,7 @@ export type CaptainPayout = { method: 'bank' | 'upi'; accountNumber?: string; if
 const delay = (ms = 450) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const requiredDocumentTypes: CaptainDocumentType[] = ['license', 'rc', 'insurance'];
+const productionAuth = createProductionAuthService('captain');
 
 function requireSupabase() {
   if (!supabase) throw new Error('SUPABASE_NOT_CONFIGURED');
@@ -44,15 +45,9 @@ function payoutDetails(payout: CaptainPayout) {
 
 /** Replace these functions with API calls later; screens depend only on this contract. */
 export const captainOnboardingService = {
-  sendOtp: isProductionAuthMode ? createProductionAuthService('captain').sendOtp : demoAuthService.sendOtp,
+  sendOtp: productionAuth.sendOtp,
   async verifyOtp(phone: string, otp: string) {
-    if (isProductionAuthMode) {
-      await createProductionAuthService('captain').verifyOtp(phone, otp);
-      void registerPushNotifications('captain').catch(() => undefined);
-      return { verified: true };
-    }
-    await demoAuthService.verifyOtp(phone, otp);
-    await currentCaptainUser();
+    await productionAuth.verifyOtp(phone, otp);
     void registerPushNotifications('captain').catch(() => undefined);
     return { verified: true };
   },

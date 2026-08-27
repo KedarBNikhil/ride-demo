@@ -8,6 +8,7 @@ export const isProductionAuthMode = authMode === 'production';
 
 export function toIndianE164(phone: string) {
   const digits = phone.replace(/\D/g, '');
-  if (!/^\d{10}$/.test(digits)) throw new Error('INVALID_PHONE');
-  return `+91${digits}`;
+  if (/^\d{10}$/.test(digits)) return `+91${digits}`;
+  if (/^91\d{10}$/.test(digits)) return `+${digits}`;
+  throw new Error('INVALID_PHONE');
 }

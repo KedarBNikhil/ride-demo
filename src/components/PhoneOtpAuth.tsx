@@ -5,7 +5,6 @@ import { PrimaryButton } from './PrimaryButton';
 import { ScreenShell } from './ScreenShell';
 import { NumericCodeInput } from './NumericCodeInput';
 import { colors, fontFamily, fontSize, radii, shadows } from '../theme';
-import { isProductionAuthMode } from '../services/authMode';
 
 type Props = {
   title: string;
@@ -26,11 +25,11 @@ export function PhoneOtpAuth({ title, subtitle, emoji, onBack, onSendOtp, onVeri
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const value = step === 'phone' ? phone : otp;
-  const limit = step === 'phone' ? 10 : isProductionAuthMode ? 6 : 4;
+  const limit = step === 'phone' ? 10 : 6;
 
   const submit = async () => {
     if (step === 'phone' && !/^\d{10}$/.test(phone)) return setError(t('login.invalidPhone'));
-    if (step === 'otp' && !(isProductionAuthMode ? /^\d{6}$/ : /^1234$/).test(otp)) return setError(t('login.invalidOtp'));
+    if (step === 'otp' && !/^\d{6}$/.test(otp)) return setError(t('login.invalidOtp'));
     setError(''); setLoading(true);
     try {
       if (step === 'phone') { await onSendOtp(phone); setStep('otp'); }

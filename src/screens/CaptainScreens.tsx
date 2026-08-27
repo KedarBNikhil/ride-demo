@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenShell } from '../components/ScreenShell';
 import { PhoneOtpAuth } from '../components/PhoneOtpAuth';
+import { captainOnboardingService } from '../services/captainOnboarding';
 import { formatFare, formatNumber } from '../utils/format';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 
@@ -28,7 +29,7 @@ export function CaptainLoginScreen({
   onBack: () => void;
 }) {
   const { t } = useTranslation();
-  return <PhoneOtpAuth title={t('captain.loginTitle')} subtitle={t('captain.loginSubtitle')} emoji="🏍️" onBack={onBack} onSendOtp={async () => undefined} onVerifyOtp={async () => { onComplete(); }} />;
+  return <PhoneOtpAuth title={t('captain.loginTitle')} subtitle={t('captain.loginSubtitle')} emoji="🏍️" onBack={onBack} onSendOtp={captainOnboardingService.sendOtp} onVerifyOtp={async (phone, otp) => { await captainOnboardingService.verifyOtp(phone, otp); onComplete(); }} />;
 }
 
 /* ─────────────────────────── HOME ─────────────────────────── */
