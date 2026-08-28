@@ -4,11 +4,12 @@ import { supabase } from '../lib/supabase';
 import { registerPushNotifications } from './pushNotifications';
 import { isProductionAuthMode } from './authMode';
 import { createProductionAuthService } from './productionAuth';
+import { normalizeAccountHolder, normalizeAccountNumber, normalizeIfsc, normalizeUpi, payoutIsValid } from '../utils/payoutValidation';
 
 export type CaptainProfile = { name: string; language: AppLanguage; vehicleType: 'bike' | 'auto' | null };
 export type CaptainDocumentType = 'license' | 'rc' | 'insurance';
 export type CaptainDocument = { uri: string; name: string };
-export type CaptainPayout = { method: 'bank' | 'upi'; accountNumber?: string; ifsc?: string; accountHolder?: string; upiId?: string };
+export type CaptainPayout = { method: 'bank' | 'upi'; accountNumber?: string; confirmAccountNumber?: string; ifsc?: string; accountHolder?: string; upiId?: string };
 const delay = (ms = 450) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const requiredDocumentTypes: CaptainDocumentType[] = ['license', 'rc', 'insurance'];
@@ -39,8 +40,8 @@ function documentContentType(document: CaptainDocument) {
 
 function payoutDetails(payout: CaptainPayout) {
   return payout.method === 'bank'
-    ? { account_number: payout.accountNumber?.trim(), ifsc: payout.ifsc?.trim(), account_holder: payout.accountHolder?.trim() }
-    : { upi_id: payout.upiId?.trim() };
+    ? { account_number: normalizeAccountNumber(payout.accountNumber ?? ''), ifsc: normalizeIfsc(payout.ifsc ?? ''), account_holder: normalizeAccountHolder(payout.accountHolder ?? '') }
+    : { upi_id: normalizeUpi(payout.upiId ?? '') };
 }
 
 /** Replace these functions with API calls later; screens depend only on this contract. */
@@ -95,6 +96,7 @@ export const captainOnboardingService = {
     return { submitted: true };
   },
   async savePayout(payout: CaptainPayout) {
+    if (!payoutIsValid(payout.method, payout)) throw new Error('Invalid payout details');
     const user = await currentCaptainUser();
     const { error } = await requireSupabase().from('captain_onboarding_applications').update({
       payout_method: payout.method,
