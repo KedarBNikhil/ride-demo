@@ -84,7 +84,7 @@ booking flow.
 
 ## Location services
 
-The customer location picker works with bundled Nandyal suggestions and an interactive pin-drop map without configuration. To enable live Google Places autocomplete and Google Maps on Android, set `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY` and `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` before building a development client. No key is committed to this demo.
+The customer location picker works with bundled Nandyal suggestions and an interactive pin-drop map without configuration. To enable live Google Places autocomplete and Google Maps on Android, set `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY` and `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` before building a development client. For EAS builds, configure those values in the EAS build environment; `.env.local` is ignored and is not uploaded. The app configuration rejects an EAS build with no Maps key, rather than producing an APK with a blank map. No key is committed to this demo.
 
 ## Stage 1 conventions
 
@@ -128,4 +128,3 @@ Setup:
 
 Operator actions available: confirm/flag settlements, update or hold captain
 payouts, resolve payout disputes, resolve captain-reported payment issues.
-

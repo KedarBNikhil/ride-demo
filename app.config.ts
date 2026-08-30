@@ -16,6 +16,16 @@ const scheme = isCaptain ? 'exp+nandyal-ride-captain' : isChooser ? 'exp+nandyal
 const androidPackage = isCaptain ? 'com.nandyalride.captain' : isChooser ? 'com.nandyalride.demo' : 'com.nandyalride.customer';
 const iosBundleIdentifier = isCaptain ? 'com.nandyalride.captain' : isChooser ? 'com.nandyalride.demo' : 'com.nandyalride.customer';
 const googleServicesFile = isCaptain ? './firebase/nandyalride-captain.json' : './firebase/nandyalride-customer.json';
+const googleMapsApiKey = isCaptain
+  ? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_CAPTAIN
+  : process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_CUSTOMER ?? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+// Android Maps reads this at native-build time. `.env.local` is intentionally
+// ignored, so an EAS build needs the key configured in its build environment.
+// Failing here prevents a Captain APK with a permanently blank map.
+if (process.env.EAS_BUILD === 'true' && !googleMapsApiKey) {
+  throw new Error(`A Google Maps API key must be set for the ${variant} EAS build.`);
+}
 
 const config: ExpoConfig = {
   name, slug, scheme, version: '1.0.0', orientation: 'portrait', userInterfaceStyle: 'light',
@@ -23,7 +33,7 @@ const config: ExpoConfig = {
   android: {
     package: androidPackage,
     googleServicesFile,
-    config: { googleMaps: { apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '' } },
+    config: { googleMaps: { apiKey: googleMapsApiKey ?? '' } },
     permissions: isCaptain ? ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'CAMERA', 'POST_NOTIFICATIONS'] : ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'POST_NOTIFICATIONS', 'READ_CONTACTS'],
   },
   ios: {

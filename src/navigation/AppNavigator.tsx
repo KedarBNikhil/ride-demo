@@ -17,7 +17,7 @@ import { CaptainMainStack } from './CaptainMainStack';
 import type { CaptainProfile } from '../services/captainOnboarding';
 import { captainOnboardingService } from '../services/captainOnboarding';
 import { rideDispatchService, type DispatchRide, type RideStatus } from '../services/rideDispatch';
-import { subscribeToCustomerRideNotificationResponses } from '../services/pushNotifications';
+import { configurePushNotifications, subscribeToCustomerRideNotificationResponses } from '../services/pushNotifications';
 import { OperatorReconciliationScreen } from '../screens/OperatorReconciliationScreen';
 
 export type AppMode = 'customer' | 'captain' | 'operator';
@@ -41,6 +41,10 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
   const [captainOnboardingComplete, setCaptainOnboardingComplete] = useState<boolean | null>(mode === 'captain' ? null : false);
   const [captainOnboardingSubmitted, setCaptainOnboardingSubmitted] = useState<boolean | null>(mode === 'captain' ? null : false);
   const storageKey = `nandyal-ride-demo.${mode}.language`;
+
+  useEffect(() => {
+    configurePushNotifications();
+  }, []);
 
   const customerRideFromDispatch = (ride: DispatchRide): CustomerRide => ({
     id: ride.id, kind: ride.ride_type, passengerCount: ride.ride_type === 'auto' ? Number(ride.passenger_count ?? 1) : 1, pickup: ride.pickup_address, drop: ride.drop_address,

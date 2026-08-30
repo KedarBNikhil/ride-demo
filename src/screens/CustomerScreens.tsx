@@ -377,6 +377,7 @@ export function LocationPickerScreen({
   const [liveStatus, setLiveStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle');
   const placesSessionToken = useRef(newPlacesSessionToken());
   const autocompleteSeq = useRef(0);
+  const locationUpdateSeq = useRef<Record<LocationTarget, number>>({ pickup: 0, drop: 0 });
   const pickupInput = useRef<TextInput>(null);
   const dropInput = useRef<TextInput>(null);
   const query = drafts[target];
@@ -399,6 +400,7 @@ export function LocationPickerScreen({
   }, [initialTarget]);
 
   const setDraft = (nextTarget: LocationTarget, value: string) => {
+    locationUpdateSeq.current[nextTarget] += 1;
     setTarget(nextTarget);
     setDrafts((current) => ({ ...current, [nextTarget]: value }));
     setResolution((current) => ({ ...current, [nextTarget]: 'unresolved' }));
@@ -407,6 +409,7 @@ export function LocationPickerScreen({
   };
 
   const choosePlace = (place: string, coordinate?: Coordinate, placeTarget: LocationTarget = target) => {
+    locationUpdateSeq.current[placeTarget] += 1;
     if (!coordinate) {
       setResolution((current) => ({ ...current, [placeTarget]: 'failed' }));
       return;
@@ -439,7 +442,7 @@ export function LocationPickerScreen({
     placesSessionToken.current = newPlacesSessionToken();
     try {
       const details = await googleMapsService.placeDetails(suggestion.placeId, sessionToken);
-      choosePlace(details.address || suggestion.text, details.coordinate, selectedTarget);
+      choosePlace(suggestion.text || details.address, details.coordinate, selectedTarget);
     } catch (error) {
       console.warn('[place-details] lookup failed', error);
       setResolution((current) => ({ ...current, [selectedTarget]: 'failed' }));
@@ -508,7 +511,9 @@ export function LocationPickerScreen({
     try {
       const coordinate = coordinateFromPosition(await getCustomerGpsPosition());
       choosePlace(t('location.gpsDefault'), coordinate, selectedTarget);
+      const updateSeq = locationUpdateSeq.current[selectedTarget];
       void reverseGeocodeAddress(coordinate, t('location.gpsDefault')).then((address) => {
+        if (locationUpdateSeq.current[selectedTarget] !== updateSeq) return;
         setDrafts((current) => ({ ...current, [selectedTarget]: address }));
         onChange(selectedTarget, address, coordinate);
       });
@@ -1079,7 +1084,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
       if (updatedRide.captain_id) {
         void rideDispatchService.getAssignedCaptain(updatedRide.id).then(setCaptainDetails).catch(() => setCaptainDetails(null));
       }
-      if ((updatedRide.status === 'accepted' || updatedRide.status === 'arrived') && pickupOtpIssuedForRide.current !== updatedRide.id) {
+      if (updatedRide.status === 'arrived' && pickupOtpIssuedForRide.current !== updatedRide.id) {
         pickupOtpIssuedForRide.current = updatedRide.id;
         void rideDispatchService.issueCustomerPickupOtp(updatedRide.id).then(setPickupPin).catch(() => {
           pickupOtpIssuedForRide.current = null;
@@ -1220,7 +1225,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
       </View>}
       <View style={styles.assignedPickupRow}><View style={styles.assignedPickupDot} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.pickup')} · {ride.pickup}</Text></View>
       <View style={styles.assignedPickupRow}><View style={[styles.assignedPickupDot, styles.assignedDropDot]} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.drop')} · {ride.drop}</Text></View>
-      {!!pickupPin && !inProgress && <View style={styles.pickupPinCard}><Text style={styles.pickupPinLabel}>{t('rides.pickupPinLabel')}</Text><Text style={styles.pickupPin}>{pickupPin}</Text><Text style={styles.pickupPinHint}>{t('rides.pickupPinHint')}</Text></View>}
+      {arrived && !!pickupPin && !inProgress && <View style={styles.pickupPinCard}><Text style={styles.pickupPinLabel}>{t('rides.pickupPinLabel')}</Text><Text style={styles.pickupPin}>{pickupPin}</Text><Text style={styles.pickupPinHint}>{t('rides.pickupPinHint')}</Text></View>}
       {inProgress && <><View style={styles.tripStatRow}><Text style={styles.tripStatLabel}>{t('rides.destinationDistance')}</Text><Text style={styles.tripStatValue}>{liveRide?.trip_distance_meters == null ? '—' : `${formatNumber(Number(liveRide.trip_distance_meters) / 1000, { maximumFractionDigits: 1 })} km`}</Text></View><Pressable onPress={() => { void Linking.openURL('tel:112'); }} accessibilityRole="button" style={styles.sosButton}><Text style={styles.sosText}>{t('rides.sos')}</Text></Pressable></>}
       {canCancel && !awaitingFareApproval && <PrimaryButton label={t('rides.cancelRide')} onPress={startCancellation} danger />}
     </ScrollView>

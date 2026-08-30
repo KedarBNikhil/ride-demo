@@ -202,6 +202,13 @@ export interface CaptainSettlementRow {
   settlement_id: string;
   captain_id: string;
   captain_name: string | null;
+  payout_method: 'bank' | 'upi' | null;
+  payout_details: {
+    account_number?: string;
+    ifsc?: string;
+    account_holder?: string;
+    upi_id?: string;
+  } | null;
   approved_rides: number;
   gross_amount: number;
   adjustments: number;

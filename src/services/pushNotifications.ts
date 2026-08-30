@@ -10,6 +10,24 @@ export type CustomerRideNotification = { rideId: string };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/**
+ * Must be installed once for the entire app, rather than by a ride screen.
+ * Expo Go deliberately skips the native module because this project has no
+ * Expo Go push credentials.
+ */
+export function configurePushNotifications() {
+  if (isExpoGo) return;
+  const Notifications = require('expo-notifications') as typeof import('expo-notifications');
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
+
 export function captainOfferNotificationFromData(data: unknown): CaptainOfferNotification | null {
   if (!data || typeof data !== 'object') return null;
   const { type, rideId, offerId } = data as Record<string, unknown>;
@@ -76,7 +94,7 @@ export async function registerPushNotifications(appVariant: 'customer' | 'captai
   const Device = require('expo-device') as typeof import('expo-device');
   const Notifications = require('expo-notifications') as typeof import('expo-notifications');
   if (!Device.isDevice) return null;
-  Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldPlaySound: true, shouldSetBadge: false, shouldShowBanner: true, shouldShowList: true }) });
+  configurePushNotifications();
   const existing = await Notifications.getPermissionsAsync();
   const permission = existing.status === 'granted'
     ? existing
