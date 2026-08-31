@@ -7,6 +7,15 @@ import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 import { ScreenShell } from '../components/ScreenShell';
 import { useDialog } from '../components/ThemedDialog';
 import { rideDispatchService, type ReceivedRating } from '../services/rideDispatch';
+import { getCurrentProfile, type CurrentProfile } from '../services/currentProfile';
+import { deleteCurrentAccount } from '../services/accountDeletion';
+import { selectionHaptic } from '../utils/haptics';
+
+function displayPhoneNumber(phone: string | null | undefined) {
+  if (!phone) return '—';
+  const digits = phone.replace(/\D/g, '');
+  return digits.startsWith('91') && digits.length === 12 ? digits.slice(2) : phone;
+}
 
 function LangChip({
   symbol,
@@ -26,7 +35,7 @@ function LangChip({
   const scale = useRef(new Animated.Value(1)).current;
   return (
     <Pressable
-      onPress={() => onPress(value)}
+      onPress={() => { selectionHaptic(); onPress(value); }}
       onPressIn={() =>
         Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 50 }).start()
       }
@@ -61,16 +70,22 @@ export function SettingsScreen({
   profile = false,
   ratingRole,
   onSafety,
+  onAbout,
+  onAccountDeleted,
 }: {
   onLanguageChange: (language: AppLanguage) => void;
   onBack: () => void;
   profile?: boolean;
   ratingRole?: 'customer' | 'captain';
   onSafety?: () => void;
+  onAbout?: () => void;
+  onAccountDeleted?: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const dialog = useDialog();
   const [receivedRating, setReceivedRating] = useState<ReceivedRating | null>(null);
+  const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const profileText = i18n.language === 'te'
     ? { rating: 'రేటింగ్', noRatings: 'ఇంకా రేటింగ్‌లు లేవు', ratingCount: (count: number) => `${count} రేటింగ్‌లు` }
     : { rating: 'Rating', noRatings: 'No ratings yet', ratingCount: (count: number) => `${count} ratings` };
@@ -79,9 +94,42 @@ export function SettingsScreen({
     void rideDispatchService.getReceivedRating(ratingRole).then(setReceivedRating).catch(() => setReceivedRating(null));
     return undefined;
   }, [ratingRole]));
+  useFocusEffect(useCallback(() => {
+    if (!profile) return undefined;
+    void getCurrentProfile().then(setCurrentProfile).catch(() => setCurrentProfile(null));
+    return undefined;
+  }, [profile]));
+  const confirmDeleteAccount = () => {
+    if (!ratingRole || deletingAccount) return;
+    dialog({
+      title: t('profile.deleteAccountTitle'),
+      message: t('profile.deleteAccountConfirmation'),
+      buttons: [
+        { text: t('actions.cancel'), style: 'cancel' },
+        { text: t('profile.deleteAccountAction'), style: 'destructive', onPress: () => { void (async () => {
+          setDeletingAccount(true);
+          try {
+            await deleteCurrentAccount(ratingRole);
+            onAccountDeleted?.();
+          } catch {
+            dialog({ title: t('login.tryAgain') });
+          } finally {
+            setDeletingAccount(false);
+          }
+        })(); } },
+      ],
+    });
+  };
   return (
     <ScreenShell back={onBack} title={t(profile ? 'screens.profile' : 'screens.settings')}>
       {/* Section: Language */}
+      {profile && <View style={styles.profileCard}>
+        <View style={styles.profileAvatar} accessibilityLabel="Profile picture placeholder"><View style={styles.profileAvatarHead} /><View style={styles.profileAvatarBody} /></View>
+        <View style={styles.profileDetails}>
+          <Text style={styles.profileName}>{currentProfile?.name ?? '—'}</Text>
+          <Text style={styles.profilePhone}>{displayPhoneNumber(currentProfile?.phone)}</Text>
+        </View>
+      </View>}
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>{t('language.change')}</Text>
         <View style={styles.chips}>
@@ -139,6 +187,17 @@ export function SettingsScreen({
         {receivedRating?.count ? <Text style={styles.ratingCount}>{t('profile.ratingCount', { count: receivedRating.count, defaultValue: profileText.ratingCount(receivedRating.count) })}</Text> : <Text style={styles.ratingCount}>{t('profile.noRatings', { defaultValue: profileText.noRatings })}</Text>}
       </View>}
 
+      {profile && <Pressable onPress={onAbout} accessibilityRole="button" style={[styles.chip, shadows.soft]}>
+        <View style={styles.chipText}>
+          <Text style={styles.chipName}>About</Text>
+        </View>
+        <Text style={styles.rowChevron}>›</Text>
+      </Pressable>}
+
+      {profile && ratingRole && <Pressable onPress={confirmDeleteAccount} disabled={deletingAccount} accessibilityRole="button" style={[styles.deleteAccountButton, deletingAccount && styles.deleteAccountButtonDisabled]}>
+        <Text style={styles.deleteAccountText}>{deletingAccount ? t('login.pleaseWait') : t('profile.deleteAccountAction')}</Text>
+      </Pressable>}
+
       {/* App info */}
       <View style={styles.infoCard}>
         <Text style={styles.infoTitle}>{t('app.name')}</Text>
@@ -152,6 +211,13 @@ const styles = StyleSheet.create({
   section: {
     gap: 12,
   },
+  profileCard: { alignItems: 'center', backgroundColor: colors.primaryLight, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', gap: 12, padding: 16 },
+  profileAvatar: { alignItems: 'center', backgroundColor: '#B7BCC4', borderRadius: radii.pill, height: 52, justifyContent: 'center', width: 52 },
+  profileAvatarHead: { backgroundColor: '#66717D', borderRadius: radii.pill, height: 16, width: 16 },
+  profileAvatarBody: { backgroundColor: '#66717D', borderTopLeftRadius: radii.pill, borderTopRightRadius: radii.pill, height: 14, marginTop: 4, width: 28 },
+  profileDetails: { flex: 1, gap: 4 },
+  profileName: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '900' },
+  profilePhone: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md },
   sectionLabel: {
     color: colors.textSecondary,
     fontFamily,
@@ -219,6 +285,9 @@ const styles = StyleSheet.create({
     width: 16,
   },
   rowChevron: { alignSelf: 'center', color: colors.textMuted, fontSize: 26 },
+  deleteAccountButton: { alignItems: 'center', borderColor: colors.error, borderRadius: radii.md, borderWidth: 1, justifyContent: 'center', minHeight: 52, paddingHorizontal: 16 },
+  deleteAccountButtonDisabled: { opacity: 0.6 },
+  deleteAccountText: { color: colors.error, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
 
   infoCard: {
     alignItems: 'center',

@@ -45,7 +45,10 @@
   "profile": {
     "rating": "Rating",
     "ratingCount": "{{count}} ratings",
-    "noRatings": "No ratings yet"
+    "noRatings": "No ratings yet",
+    "deleteAccountTitle": "Delete account?",
+    "deleteAccountConfirmation": "Your account will be permanently deleted. You can register again later with this phone number, but any new-user offers will not be restored.",
+    "deleteAccountAction": "Delete account"
   },
   "login": {
     "subtitle": "Enter your phone number to book a ride",

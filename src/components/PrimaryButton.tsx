@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, Animated } from 'react-native';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
+import { selectionHaptic } from '../utils/haptics';
 
 type Props = {
   label: string;
@@ -27,6 +28,11 @@ export function PrimaryButton({
   const handlePressOut = () => {
     Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 40 }).start();
   };
+  const handlePress = () => {
+    if (disabled) return;
+    selectionHaptic();
+    onPress();
+  };
 
   const containerStyle = [
     styles.button,
@@ -48,7 +54,7 @@ export function PrimaryButton({
   return (
     <Pressable
       disabled={disabled}
-      onPress={onPress}
+      onPress={handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
     >

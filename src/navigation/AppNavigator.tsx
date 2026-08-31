@@ -9,16 +9,18 @@ import { createAppI18n, type AppLanguage } from '../i18n/createI18n';
 import { LanguageSelectScreen } from '../screens/LanguageSelectScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { EmergencyContactsScreen } from '../screens/EmergencyContactsScreen';
+import { AboutScreen } from '../screens/AboutScreen';
 import { DialogProvider } from '../components/ThemedDialog';
-import { BookingConfirmScreen, CustomerAuthChoiceScreen, CustomerBookingsScreen, CustomerHomeScreen, CustomerIntroScreen, CustomerLoginScreen, CustomerSignupScreen, type CustomerRide, LocationPickerScreen, RideConfirmedScreen, RideTypeScreen, SearchingScreen } from '../screens/CustomerScreens';
+import { BookingConfirmScreen, CustomerAuthChoiceScreen, CustomerBookingsScreen, CustomerHomeScreen, CustomerIntroScreen, CustomerLoginScreen, CustomerOffersScreen, CustomerSignupScreen, type CustomerRide, LocationPickerScreen, RideConfirmedScreen, RideTypeScreen, SearchingScreen } from '../screens/CustomerScreens';
 import { CustomerRideChat } from '../components/CustomerRideChat';
 import { CaptainOnboardingStack } from './CaptainOnboardingStack';
 import { CaptainMainStack } from './CaptainMainStack';
 import type { CaptainProfile } from '../services/captainOnboarding';
 import { captainOnboardingService } from '../services/captainOnboarding';
 import { rideDispatchService, type DispatchRide, type RideStatus } from '../services/rideDispatch';
-import { configurePushNotifications, subscribeToCustomerRideNotificationResponses } from '../services/pushNotifications';
+import { configurePushNotifications, registerPushNotifications, subscribeToCustomerRideNotificationResponses } from '../services/pushNotifications';
 import { OperatorReconciliationScreen } from '../screens/OperatorReconciliationScreen';
+import { supabase } from '../lib/supabase';
 
 export type AppMode = 'customer' | 'captain' | 'operator';
 const Stack = createNativeStackNavigator();
@@ -46,6 +48,27 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
     configurePushNotifications();
   }, []);
 
+  // A development build can restore an existing authenticated session without
+  // revisiting the OTP screen. Register here so every authenticated launch
+  // refreshes the device token for background delivery in either app variant.
+  useEffect(() => {
+    if ((mode !== 'customer' && mode !== 'captain') || !supabase) return;
+    let mounted = true;
+    const register = (hasSession: boolean) => {
+      if (!mounted || !hasSession) return;
+      void registerPushNotifications(mode).catch((error) => {
+        console.warn('[push] device registration failed', error);
+      });
+    };
+
+    void supabase.auth.getSession().then(({ data: { session } }) => register(Boolean(session)));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => register(Boolean(session)));
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [mode]);
+
   const customerRideFromDispatch = (ride: DispatchRide): CustomerRide => ({
     id: ride.id, kind: ride.ride_type, passengerCount: ride.ride_type === 'auto' ? Number(ride.passenger_count ?? 1) : 1, pickup: ride.pickup_address, drop: ride.drop_address,
     ...(ride.pickup_latitude != null && ride.pickup_longitude != null ? { pickupCoordinate: { latitude: Number(ride.pickup_latitude), longitude: Number(ride.pickup_longitude) } } : {}),
@@ -53,7 +76,7 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
   });
   const clearCustomerRide = useCallback(() => {
     setCustomerRideStatus('cancelled');
-    setCustomerRide(({ id: _id, routeQuote: _routeQuote, ...currentRide }) => currentRide);
+    setCustomerRide(({ id: _id, routeQuote: _routeQuote, pickupOtp: _pickupOtp, ...currentRide }) => currentRide);
   }, []);
   const hideSearchUnavailableMessage = useCallback(() => setSearchUnavailableMessage(false), []);
 
@@ -160,21 +183,23 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
           <Stack.Screen name="CustomerAuthChoice">{({ navigation }) => <CustomerAuthChoiceScreen onLogin={() => navigation.navigate('CustomerLogin')} onSignup={() => navigation.navigate('CustomerSignup')} />}</Stack.Screen>
           <Stack.Screen name="CustomerLogin">{({ navigation }) => <CustomerLoginScreen onBack={() => navigation.goBack()} onComplete={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} />}</Stack.Screen>
           <Stack.Screen name="CustomerSignup">{({ navigation }) => <CustomerSignupScreen onBack={() => navigation.goBack()} onComplete={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} />}</Stack.Screen>
-          <Stack.Screen name="CustomerHome">{({ navigation }) => <CustomerHomeScreen ride={customerRide} hasActiveRide={customerRideStatus === 'requested' || customerRideStatus === 'searching' || customerRideStatus === 'accepted' || customerRideStatus === 'arrived' || customerRideStatus === 'in_progress'} onBack={onExit} onProfile={() => navigation.navigate('Settings', { profile: true })} onBookings={() => navigation.navigate('CustomerBookings')} onPickLocation={(target) => { setLocationTarget(target); navigation.navigate('LocationPicker'); }} onStartBooking={(pickup, pickupCoordinate) => { setCustomerRide((ride) => ({ ...ride, pickup, pickupCoordinate, routeQuote: undefined })); setLocationTarget('drop'); navigation.navigate('LocationPicker'); }} onPickupHere={(pickup, pickupCoordinate) => { setCustomerRide((ride) => ({ ...ride, pickup, pickupCoordinate, routeQuote: undefined })); setLocationTarget('pickup'); navigation.navigate('LocationPicker'); }} />}</Stack.Screen>
+          <Stack.Screen name="CustomerHome">{({ navigation }) => <CustomerHomeScreen ride={customerRide} hasActiveRide={customerRideStatus === 'requested' || customerRideStatus === 'searching' || customerRideStatus === 'accepted' || customerRideStatus === 'arrived' || customerRideStatus === 'in_progress'} onBack={onExit} onProfile={() => navigation.navigate('Settings', { profile: true })} onBookings={() => navigation.navigate('CustomerBookings')} onPickLocation={(target) => { setLocationTarget(target); navigation.navigate('LocationPicker'); }} onChooseDestination={(drop, dropCoordinate) => { setCustomerRide((ride) => ({ ...ride, drop, dropCoordinate, routeQuote: undefined })); setLocationTarget('drop'); navigation.navigate('LocationPicker'); }} onStartBooking={(pickup, pickupCoordinate) => { setCustomerRide((ride) => ({ ...ride, pickup, pickupCoordinate, routeQuote: undefined })); setLocationTarget('drop'); navigation.navigate('LocationPicker'); }} onPickupHere={(pickup, pickupCoordinate) => { setCustomerRide((ride) => ({ ...ride, pickup, pickupCoordinate, routeQuote: undefined })); setLocationTarget('pickup'); navigation.navigate('LocationPicker'); }} />}</Stack.Screen>
           <Stack.Screen name="LocationPicker">{({ navigation }) => <LocationPickerScreen ride={customerRide} initialTarget={locationTarget} onBack={() => navigation.goBack()} onChange={(target, place, coordinate) => setCustomerRide((ride) => ({ ...ride, [target]: place, routeQuote: undefined, [target === 'pickup' ? 'pickupCoordinate' : 'dropCoordinate']: coordinate }))} onContinue={() => navigation.navigate('RideType')} />}</Stack.Screen>
-          <Stack.Screen name="RideType">{({ navigation }) => <RideTypeScreen ride={customerRide} selected={customerRide.kind} onBack={() => { if (navigation.canGoBack()) navigation.goBack(); else navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onEditLocation={(target) => { setLocationTarget(target); navigation.navigate('LocationPicker'); }} onSelect={(kind) => setCustomerRide((ride) => ({ ...ride, kind, passengerCount: kind === 'bike' ? 1 : ride.passengerCount }))} onPassengerCountChange={(passengerCount) => setCustomerRide((ride) => ({ ...ride, passengerCount }))} onRouteQuote={(routeQuote) => setCustomerRide((ride) => ({ ...ride, routeQuote }))} onNext={() => navigation.navigate('BookingConfirm')} unavailableMessage={searchUnavailableMessage ? 'No captains available at the moment. Please try again' : undefined} onUnavailableMessageHidden={hideSearchUnavailableMessage} />}</Stack.Screen>
-          <Stack.Screen name="BookingConfirm">{({ navigation }) => <BookingConfirmScreen ride={customerRide} onBack={() => navigation.goBack()} onBook={async (rideId) => { setCustomerRide((ride) => ({ ...ride, id: rideId })); setCustomerRideStatus('searching'); navigation.navigate('Searching'); }} />}</Stack.Screen>
-          <Stack.Screen name="Searching" options={{ animation: 'fade' }}>{({ navigation }) => <SearchingScreen rideId={customerRide.id} onBack={() => navigation.goBack()} onFound={() => navigation.replace('RideConfirmed')} onUnavailable={() => { clearCustomerRide(); setSearchUnavailableMessage(true); navigation.reset({ index: 0, routes: [{ name: 'RideType' }] }); }} onCancel={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined })); navigation.reset({ index: 0, routes: [{ name: 'RideType' }] }); }} onHome={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} onBookings={() => navigation.navigate('CustomerBookings')} onProfile={() => navigation.navigate('Settings', { profile: true })} />}</Stack.Screen>
-          <Stack.Screen name="RideConfirmed" options={{ animation: 'fade' }}>{({ navigation }) => <RideConfirmedScreen ride={customerRide} onHome={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} onCancelled={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined })); navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onFareQuoteCancelled={() => { clearCustomerRide(); navigation.reset({ index: 0, routes: [{ name: 'RideType' }] }); }} onBookings={() => navigation.navigate('CustomerBookings')} onProfile={() => navigation.navigate('Settings', { profile: true })} onOpenChat={(rideId, captainName) => navigation.navigate('CustomerRideChat', { rideId, captainName })} />}</Stack.Screen>
+          <Stack.Screen name="RideType">{({ navigation }) => <RideTypeScreen ride={customerRide} selected={customerRide.kind} onBack={() => { if (navigation.canGoBack()) navigation.goBack(); else navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onEditLocation={(target) => { setLocationTarget(target); navigation.navigate('LocationPicker'); }} onSelect={(kind) => setCustomerRide((ride) => ({ ...ride, kind, passengerCount: kind === 'bike' ? 1 : ride.passengerCount }))} onPassengerCountChange={(passengerCount) => setCustomerRide((ride) => ({ ...ride, passengerCount }))} onRouteQuote={(routeQuote) => setCustomerRide((ride) => ({ ...ride, routeQuote }))} onOffers={() => navigation.navigate('CustomerOffers')} onNext={() => navigation.navigate('BookingConfirm')} unavailableMessage={searchUnavailableMessage ? 'No captains available at the moment. Please try again' : undefined} onUnavailableMessageHidden={hideSearchUnavailableMessage} />}</Stack.Screen>
+          <Stack.Screen name="CustomerOffers">{({ navigation }) => <CustomerOffersScreen onBack={() => navigation.goBack()} />}</Stack.Screen>
+          <Stack.Screen name="BookingConfirm">{({ navigation }) => <BookingConfirmScreen ride={customerRide} onBack={() => navigation.goBack()} onBook={async (rideId) => { setCustomerRide((ride) => ({ ...ride, id: rideId, pickupOtp: undefined })); setCustomerRideStatus('searching'); navigation.navigate('Searching'); }} />}</Stack.Screen>
+          <Stack.Screen name="Searching" options={{ animation: 'fade' }}>{({ navigation }) => <SearchingScreen rideId={customerRide.id} onBack={() => navigation.goBack()} onFound={() => navigation.replace('RideConfirmed')} onUnavailable={() => { clearCustomerRide(); setSearchUnavailableMessage(true); navigation.reset({ index: 0, routes: [{ name: 'RideType' }] }); }} onCancel={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined, pickupOtp: undefined })); navigation.reset({ index: 0, routes: [{ name: 'RideType' }] }); }} onHome={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} onBookings={() => navigation.navigate('CustomerBookings')} onProfile={() => navigation.navigate('Settings', { profile: true })} />}</Stack.Screen>
+          <Stack.Screen name="RideConfirmed" options={{ animation: 'fade' }}>{({ navigation }) => <RideConfirmedScreen ride={customerRide} onHome={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} onCancelled={() => { setCustomerRideStatus('cancelled'); setCustomerRide((ride) => ({ ...ride, routeQuote: undefined, pickupOtp: undefined })); navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onFareQuoteCancelled={() => { clearCustomerRide(); navigation.reset({ index: 0, routes: [{ name: 'RideType' }] }); }} onBookings={() => navigation.navigate('CustomerBookings')} onProfile={() => navigation.navigate('Settings', { profile: true })} onOpenChat={(rideId, captainName) => navigation.navigate('CustomerRideChat', { rideId, captainName })} onPickupOtpIssued={(pickupOtp) => setCustomerRide((currentRide) => currentRide.id === customerRide.id ? { ...currentRide, pickupOtp } : currentRide)} />}</Stack.Screen>
           <Stack.Screen name="CustomerRideChat">{({ navigation, route }) => { const { rideId, captainName } = route.params as { rideId: string; captainName: string }; return <CustomerRideChat rideId={rideId} captainName={captainName} onBack={() => navigation.goBack()} />; }}</Stack.Screen>
           <Stack.Screen name="CustomerBookings">{({ navigation }) => <CustomerBookingsScreen ride={customerRide} onHome={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} onProfile={() => navigation.navigate('Settings', { profile: true })} onCancelled={() => { setCustomerRideStatus('cancelled'); navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onOpenRide={(selectedRide, status) => { setCustomerRide(selectedRide); setCustomerRideStatus(status); if (status === 'cancelled' || status === 'completed') { setLocationTarget('pickup'); navigation.navigate('LocationPicker'); } else if (status === 'requested' || status === 'searching') navigation.navigate('Searching'); else navigation.navigate('RideConfirmed'); }} />}</Stack.Screen>
         </> : mode === 'captain' ? <>
-          {captainOnboardingComplete ? <Stack.Screen name="CaptainMain">{() => <CaptainMainStack online={captainOnline} onToggle={() => setCaptainOnline((online) => !online)} onLanguageChange={chooseLanguage} onTripComplete={() => setCaptainOnline(true)} />}</Stack.Screen> : <Stack.Screen name="CaptainOnboarding">{() => <CaptainOnboardingStack language={language} onLanguageChange={chooseLanguage} profile={captainProfile} onProfileChange={setCaptainProfile} onExit={onExit} submitted={Boolean(captainOnboardingSubmitted)} onSubmitted={submitCaptainOnboarding} onApproved={completeCaptainOnboarding} />}</Stack.Screen>}
+          {captainOnboardingComplete ? <Stack.Screen name="CaptainMain">{() => <CaptainMainStack online={captainOnline} onToggle={() => setCaptainOnline((online) => !online)} onLanguageChange={chooseLanguage} onTripComplete={() => setCaptainOnline(true)} onAccountDeleted={() => { setCaptainOnline(false); setCaptainOnboardingComplete(false); setCaptainOnboardingSubmitted(false); }} />}</Stack.Screen> : <Stack.Screen name="CaptainOnboarding">{() => <CaptainOnboardingStack language={language} onLanguageChange={chooseLanguage} profile={captainProfile} onProfileChange={setCaptainProfile} onExit={onExit} submitted={Boolean(captainOnboardingSubmitted)} onSubmitted={submitCaptainOnboarding} onApproved={completeCaptainOnboarding} />}</Stack.Screen>}
         </> : mode === 'operator' ? <>
           <Stack.Screen name="OperatorLogin">{({ navigation }) => <CustomerLoginScreen onComplete={() => navigation.replace('OperatorReconciliation')} onBack={onExit} />}</Stack.Screen>
           <Stack.Screen name="OperatorReconciliation">{() => <OperatorReconciliationScreen onExit={onExit} />}</Stack.Screen>
         </> : null}
-        <Stack.Screen name="Settings">{({ navigation, route }) => <SettingsScreen profile={Boolean((route.params as { profile?: boolean } | undefined)?.profile)} ratingRole={mode === 'customer' ? 'customer' : undefined} onBack={() => navigation.goBack()} onLanguageChange={(next) => { chooseLanguage(next).then(() => navigation.goBack()); }} onSafety={mode === 'customer' ? () => navigation.navigate('EmergencyContacts') : undefined} />}</Stack.Screen>
+        <Stack.Screen name="Settings">{({ navigation, route }) => <SettingsScreen profile={Boolean((route.params as { profile?: boolean } | undefined)?.profile)} ratingRole={mode === 'customer' ? 'customer' : undefined} onBack={() => navigation.goBack()} onLanguageChange={(next) => { chooseLanguage(next).then(() => navigation.goBack()); }} onSafety={mode === 'customer' ? () => navigation.navigate('EmergencyContacts') : undefined} onAbout={() => navigation.navigate('About')} onAccountDeleted={mode === 'customer' ? () => navigation.reset({ index: 0, routes: [{ name: 'CustomerAuthChoice' }] }) : undefined} />}</Stack.Screen>
+        <Stack.Screen name="About">{({ navigation }) => <AboutScreen onBack={() => navigation.goBack()} />}</Stack.Screen>
         <Stack.Screen name="EmergencyContacts">{({ navigation }) => <EmergencyContactsScreen onBack={() => navigation.goBack()} />}</Stack.Screen>
       </Stack.Navigator>
     </NavigationContainer>

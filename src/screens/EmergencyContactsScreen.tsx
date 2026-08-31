@@ -8,6 +8,7 @@ import { ScreenShell } from '../components/ScreenShell';
 import { useDialog } from '../components/ThemedDialog';
 import { emergencyContactsService, type EmergencyContact } from '../services/emergencyContacts';
 import { colors, fontFamily, fontSize, radii, shadows } from '../theme';
+import { selectionHaptic } from '../utils/haptics';
 
 type PermissionState = 'undetermined' | 'granted' | 'denied';
 type DeviceContact = { key: string; name: string; phone: string };
@@ -32,6 +33,7 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
   const [manualName, setManualName] = useState('');
   const [manualPhone, setManualPhone] = useState('');
   const [saving, setSaving] = useState(false);
+  const [manualEntry, setManualEntry] = useState(false);
   const autoOpened = useRef(false);
 
   useFocusEffect(useCallback(() => {
@@ -88,19 +90,13 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
   };
 
   const openAddFlow = () => {
-    if (permission === 'granted') {
-      openPicker();
-      return;
-    }
-    if (permission === 'undetermined') {
-      void requestAccess();
-      return;
-    }
-    setMode('overview');
+    setManualEntry(true);
   };
 
   const addContact = async (name: string, phone: string, key?: string) => {
     if (saving) return;
+    const normalizedPhone = phone.replace(/\D/g, '');
+    if (saved.some((contact) => contact.phoneNumber.replace(/\D/g, '') === normalizedPhone)) return;
     setSaving(true);
     try {
       const created = await emergencyContactsService.add(name, phone);
@@ -108,6 +104,7 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
       if (key) setAddedKeys((current) => [...current, key]);
       setManualName('');
       setManualPhone('');
+      setManualEntry(false);
     } catch {
       dialog({ title: t('safety.title'), message: t('safety.addFailed') });
     } finally {
@@ -203,7 +200,7 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
               <Text style={styles.rowName} numberOfLines={1}>{contact.contactName}</Text>
               <Text style={styles.rowSub} numberOfLines={1}>{contact.phoneNumber}</Text>
             </View>
-            <Pressable accessibilityRole="button" accessibilityLabel={t('safety.remove')} onPress={() => confirmRemove(contact)} style={styles.trashButton}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('safety.remove')} onPress={() => { selectionHaptic(); confirmRemove(contact); }} style={styles.trashButton}>
               <Text style={styles.trashText}>🗑</Text>
             </Pressable>
           </View>
@@ -220,18 +217,18 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
         </View>
       )}
 
-      {!hasContacts && permission === 'undetermined' && (
+      {permission === 'undetermined' && (
         <View style={[styles.card, shadows.soft]}>
           <Text style={styles.cardTitle}>{t('safety.introTitle')}</Text>
           <Text style={styles.cardText}>{t('safety.intro')}</Text>
           <PrimaryButton label={t('safety.allow')} onPress={() => void requestAccess()} />
-          <Pressable accessibilityRole="button" onPress={() => setMode('overview')} style={styles.linkWrap}>
+          <Pressable accessibilityRole="button" onPress={() => { selectionHaptic(); setMode('overview'); }} style={styles.linkWrap}>
             <Text style={styles.linkText}>{t('safety.manual')}</Text>
           </Pressable>
         </View>
       )}
 
-      {!hasContacts && permission === 'denied' && (
+      {permission === 'denied' && (
         <View style={[styles.card, shadows.soft]}>
           <Text style={styles.cardTitle}>{t('safety.deniedTitle')}</Text>
           <Text style={styles.cardText}>{t('safety.denied')}</Text>
@@ -239,7 +236,7 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
         </View>
       )}
 
-      {!hasContacts && (
+      {(!hasContacts || manualEntry) && (
         <View style={[styles.card, shadows.soft]}>
           <Text style={styles.cardTitle}>{t('safety.manualTitle')}</Text>
           <TextInput value={manualName} onChangeText={setManualName} placeholder={t('safety.namePlaceholder')} placeholderTextColor={colors.textMuted} style={styles.input} />

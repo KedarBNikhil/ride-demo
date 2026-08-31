@@ -15,9 +15,11 @@ import type { CaptainRideRequest, DispatchRide } from '../services/rideDispatch'
 import { rideDispatchService } from '../services/rideDispatch';
 import { subscribeToCaptainOfferNotificationResponses } from '../services/pushNotifications';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { AboutScreen } from '../screens/AboutScreen';
 import { useDialog } from '../components/ThemedDialog';
 import { useTranslation } from 'react-i18next';
 import { colors, fontFamily, radii } from '../theme';
+import { selectionHaptic } from '../utils/haptics';
 
 const Stack = createNativeStackNavigator();
 
@@ -66,12 +68,12 @@ function CaptainActiveTabBar({ onHome, onBookings, onEarnings, onSettings }: { o
   return <View style={activeTabStyles.bar}><CaptainActiveTab icon="⌂" label={t('captain.tabHome')} onPress={onHome} /><CaptainActiveTab icon="▤" label={t('captain.tabBookings')} active onPress={onBookings} /><CaptainActiveTab icon="₹" label={t('captain.tabEarnings')} onPress={onEarnings} /><CaptainActiveTab icon="♙" label={t('captain.tabProfile')} onPress={onSettings} /></View>;
 }
 function CaptainActiveTab({ icon, label, active, onPress }: { icon: string; label: string; active?: boolean; onPress: () => void }) {
-  return <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: active }} style={activeTabStyles.tab}><Text style={[activeTabStyles.icon, active && activeTabStyles.active]}>{icon}</Text><Text style={[activeTabStyles.label, active && activeTabStyles.activeLabel]} numberOfLines={1}>{label}</Text></Pressable>;
+  return <Pressable onPress={() => { selectionHaptic(); onPress(); }} accessibilityRole="button" accessibilityState={{ selected: active }} style={activeTabStyles.tab}><Text style={[activeTabStyles.icon, active && activeTabStyles.active]}>{icon}</Text><Text style={[activeTabStyles.label, active && activeTabStyles.activeLabel]} numberOfLines={1}>{label}</Text></Pressable>;
 }
 const activeTabStyles = StyleSheet.create({ bar: { backgroundColor: colors.surface, borderColor: colors.border, borderTopWidth: 1, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', left: 0, minHeight: 76, paddingBottom: 11, paddingTop: 9, position: 'absolute', right: 0, zIndex: 30 }, tab: { alignItems: 'center', flex: 1, gap: 2, minWidth: 0 }, icon: { color: colors.textMuted, fontSize: 23, lineHeight: 25 }, active: { color: colors.primary }, label: { color: colors.textMuted, fontFamily, fontSize: 11 }, activeLabel: { color: colors.primaryDark, fontWeight: '800' } });
 const cancellationStyles = StyleSheet.create({ overlay: { alignItems: 'center', backgroundColor: 'rgba(19, 39, 35, 0.52)', bottom: 0, justifyContent: 'flex-end', left: 0, position: 'absolute', right: 0, top: 0, zIndex: 60 }, sheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, gap: 14, padding: 22, paddingBottom: 34, width: '100%' }, handle: { alignSelf: 'center', backgroundColor: colors.border, borderRadius: radii.pill, height: 5, marginBottom: 4, width: 46 }, icon: { alignSelf: 'center', backgroundColor: '#FDE9E6', borderRadius: radii.pill, color: colors.accent, fontSize: 25, fontWeight: '900', height: 52, lineHeight: 52, overflow: 'hidden', textAlign: 'center', width: 52 }, title: { color: colors.textPrimary, fontFamily, fontSize: 22, fontWeight: '800', textAlign: 'center' }, message: { color: colors.textSecondary, fontFamily, fontSize: 15, lineHeight: 22, textAlign: 'center' }, reasonCard: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, gap: 4, padding: 14 }, reasonLabel: { color: colors.textSecondary, fontFamily, fontSize: 12, fontWeight: '700' }, reasonText: { color: colors.textPrimary, fontFamily, fontSize: 16, fontWeight: '800' }, charge: { color: colors.accent, fontFamily, fontSize: 14, fontWeight: '700', textAlign: 'center' }, doneButton: { alignItems: 'center', backgroundColor: colors.primaryDark, borderRadius: radii.md, minHeight: 52, justifyContent: 'center', marginTop: 4 }, doneButtonText: { color: colors.bg, fontFamily, fontSize: 16, fontWeight: '800' } });
 
-export function CaptainMainStack({ online, onToggle, onLanguageChange, onTripComplete }: { online: boolean; onToggle: () => void; onLanguageChange: (language: AppLanguage) => Promise<void>; onTripComplete: () => void }) {
+export function CaptainMainStack({ online, onToggle, onLanguageChange, onTripComplete, onAccountDeleted }: { online: boolean; onToggle: () => void; onLanguageChange: (language: AppLanguage) => Promise<void>; onTripComplete: () => void; onAccountDeleted: () => void }) {
   const { t } = useTranslation();
   const dialog = useDialog();
   const [request, setRequest] = useState<CaptainRideRequest | null>(null);
@@ -101,6 +103,7 @@ export function CaptainMainStack({ online, onToggle, onLanguageChange, onTripCom
     <Stack.Screen name="CaptainRideChat">{({ navigation, route }) => { const { rideId, customerName } = route.params as { rideId: string; customerName: string }; return <CaptainRideChat rideId={rideId} customerName={customerName} onBack={() => navigation.goBack()} />; }}</Stack.Screen>
     <Stack.Screen name="EndRide" options={{ gestureEnabled: false }}>{({ navigation, route }) => { const params = route.params as { rideId: string }; return <EndRideScreen rideId={params.rideId} onConfirmed={() => navigation.replace('RateCustomer', { rideId: params.rideId })} />; }}</Stack.Screen>
     <Stack.Screen name="RateCustomer" options={{ gestureEnabled: false }}>{({ navigation, route }) => <RateCustomerScreen rideId={(route.params as { rideId: string }).rideId} onDone={() => { onTripComplete(); navigation.reset({ index: 0, routes: [{ name: 'CaptainHome' }] }); }} />}</Stack.Screen>
-    <Stack.Screen name="Settings">{({ navigation }) => <SettingsScreen profile ratingRole="captain" onBack={() => navigation.goBack()} onLanguageChange={(language) => { void onLanguageChange(language).then(() => navigation.goBack()); }} />}</Stack.Screen>
+    <Stack.Screen name="Settings">{({ navigation }) => <SettingsScreen profile ratingRole="captain" onBack={() => navigation.goBack()} onLanguageChange={(language) => { void onLanguageChange(language).then(() => navigation.goBack()); }} onAbout={() => navigation.navigate('About')} onAccountDeleted={onAccountDeleted} />}</Stack.Screen>
+    <Stack.Screen name="About">{({ navigation }) => <AboutScreen onBack={() => navigation.goBack()} />}</Stack.Screen>
   </Stack.Navigator>;
 }

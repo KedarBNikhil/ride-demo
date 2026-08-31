@@ -3,6 +3,7 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import type { Coordinate, RideKind } from '../screens/CustomerScreens';
 
 let rideSubscriptionSequence = 0;
+const pickupOtpRequests = new Map<string, Promise<string | null>>();
 
 export type RideStatus = 'requested' | 'searching' | 'accepted' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
 export type DispatchRide = {
@@ -306,9 +307,18 @@ export const rideDispatchService = {
   },
 
   async issueCustomerPickupOtp(rideId: string) {
-    const { data, error } = await requireClient().rpc('issue_customer_pickup_otp', { p_ride_id: rideId });
-    if (error) throw error;
-    return data as string | null;
+    const inFlight = pickupOtpRequests.get(rideId);
+    if (inFlight) return inFlight;
+    const request = Promise.resolve(requireClient().rpc('issue_customer_pickup_otp', { p_ride_id: rideId }))
+      .then(({ data, error }) => {
+        if (error) throw error;
+        return data as string | null;
+      })
+      .finally(() => {
+        if (pickupOtpRequests.get(rideId) === request) pickupOtpRequests.delete(rideId);
+      });
+    pickupOtpRequests.set(rideId, request);
+    return request;
   },
 
   async getCaptainActiveRide(): Promise<CaptainActiveRide | null> {

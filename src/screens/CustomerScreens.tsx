@@ -40,13 +40,14 @@ import { formatFare, formatNumber, formatOtp } from '../utils/format';
 import { filterAndSortRideHistory, rideHistoryPeriodLabel, type RideHistoryFilter } from '../utils/rideHistory';
 import { RideHistoryFilterControl } from '../components/RideHistoryFilter';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
+import { selectionHaptic } from '../utils/haptics';
 
 const sawaariHomeFooter = require('../../assets/images/sawaari-brand-nandyal.png');
 
 export type RideKind = 'bike' | 'auto';
 export type Coordinate = { latitude: number; longitude: number };
 export type RouteQuote = { id: string; distanceMeters: number; durationSeconds: number; encodedPolyline: string };
-export type CustomerRide = { id?: string; pickup: string; drop: string; kind: RideKind; passengerCount: number; pickupCoordinate?: Coordinate; dropCoordinate?: Coordinate; routeQuote?: RouteQuote };
+export type CustomerRide = { id?: string; pickup: string; drop: string; kind: RideKind; passengerCount: number; pickupCoordinate?: Coordinate; dropCoordinate?: Coordinate; routeQuote?: RouteQuote; pickupOtp?: string };
 type LocationTarget = 'pickup' | 'drop';
 type CustomerFareDisplay = { originalEstimatedFare: number | null; customerCharge: number | null; finalFare: number | null; routeDistanceMeters: number | null; isFree: boolean; promotionAvailable: boolean };
 const NANDYAL: Region = { latitude: 15.4889, longitude: 78.4836, latitudeDelta: 0.035, longitudeDelta: 0.035 };
@@ -154,6 +155,7 @@ export function CustomerSignupScreen({ onComplete, onBack }: { onComplete: () =>
 export function CustomerHomeScreen({
   ride,
   onPickLocation,
+  onChooseDestination,
   onStartBooking,
   onPickupHere,
   onBookings,
@@ -163,6 +165,7 @@ export function CustomerHomeScreen({
 }: {
   ride: CustomerRide;
   onPickLocation: (target: LocationTarget) => void;
+  onChooseDestination: (place: string, coordinate: Coordinate) => void;
   onStartBooking: (pickup: string, coordinate: Coordinate) => void;
   onPickupHere: (pickup: string, coordinate: Coordinate) => void;
   onBookings: () => void;
@@ -246,9 +249,9 @@ export function CustomerHomeScreen({
     }), [collapsedOffset, sheetDragStart, sheetOffset]);
 
   const landmarks = [
-    { icon: '🚌', label: t('home.landmarkBusStand'), target: 'drop' as const },
-    { icon: '🚉', label: t('home.landmarkRailway'), target: 'drop' as const },
-    { icon: '✚', label: t('home.landmarkHospital'), target: 'drop' as const },
+    { icon: '🚌', label: t('home.landmarkBusStand'), place: offlineLocationCatalogue.find((place) => place.id === 'bus-stand') },
+    { icon: '🚉', label: t('home.landmarkRailway'), place: offlineLocationCatalogue.find((place) => place.id === 'railway-station') },
+    { icon: '✚', label: t('home.landmarkHospital'), place: offlineLocationCatalogue.find((place) => place.id === 'government-general-hospital') },
   ];
 
   const handlePickLocation = (target: LocationTarget) => {
@@ -282,30 +285,36 @@ export function CustomerHomeScreen({
       {!mapReady && <View style={styles.mapFallback}><Text style={styles.mapFallbackText}>{t('home.mapLoading')}</Text></View>}
       {locationUnavailable && <View style={styles.locationNotice}><Text style={styles.locationNoticeText}>{t('home.locationUnavailable')}</Text></View>}
 
-      <GestureDetector gesture={sheetPanGesture}>
-        <Reanimated.View style={[styles.homeSheet, { height: sheetHeight }, sheetAnimatedStyle, shadows.card, styles.homeSheetLayer]}>
-          <Image accessibilityIgnoresInvertColors resizeMode="cover" source={sawaariHomeFooter} style={styles.homeSheetBackdrop} />
-          <Pressable onPress={() => setSheet(!sheetExpanded)} style={styles.sheetHandleArea} accessibilityRole="button" accessibilityLabel={t('home.toggleSheet')}>
-            <View style={styles.sheetHandle} />
-          </Pressable>
-          <ScrollView contentContainerStyle={styles.homeSheetContent} showsVerticalScrollIndicator={false} style={styles.homeSheetScroll}>
-            <PromotionOfferCard promotion={promotion} t={t} />
-            <Pressable onPress={startBooking} accessibilityRole="button" style={styles.destinationAction}>
-              <Text style={styles.destinationPin}>⌖</Text><View style={styles.destinationTextWrap}><Text style={styles.destinationLabel}>{t('home.whereTo')}</Text><Text style={styles.destinationSub}>{t('home.whereToHint')}</Text></View><Text style={styles.destinationArrow}>→</Text>
+      <Reanimated.View style={[styles.homeSheet, { height: sheetHeight }, sheetAnimatedStyle, shadows.card, styles.homeSheetLayer]}>
+        <GestureDetector gesture={sheetPanGesture}>
+          <View collapsable={false}>
+            <Pressable onPress={() => { selectionHaptic(); setSheet(!sheetExpanded); }} style={styles.sheetHandleArea} accessibilityRole="button" accessibilityLabel={t('home.toggleSheet')}>
+              <View style={styles.sheetHandle} />
             </Pressable>
-            <View style={styles.savedRow}>
-              <SavedPlace icon="⌂" label={t('home.home')} sublabel={t('home.savedPlaceHint')} onPress={() => handlePickLocation('pickup')} />
-              <SavedPlace icon="▣" label={t('home.work')} sublabel={t('home.savedPlaceHint')} onPress={() => handlePickLocation('pickup')} />
+          </View>
+        </GestureDetector>
+        <ScrollView contentContainerStyle={styles.homeSheetContent} showsVerticalScrollIndicator={false} style={styles.homeSheetScroll}>
+            <View style={styles.homeSheetDynamicContent}>
+              <PromotionOfferCard promotion={promotion} t={t} />
+              <Pressable onPress={() => { selectionHaptic(); startBooking(); }} accessibilityRole="button" style={styles.destinationAction}>
+                <Text style={styles.destinationPin}>⌖</Text><View style={styles.destinationTextWrap}><Text style={styles.destinationLabel}>{t('home.whereTo')}</Text><Text style={styles.destinationSub}>{t('home.whereToHint')}</Text></View><Text style={styles.destinationArrow}>→</Text>
+              </Pressable>
+              <View style={styles.savedRow}>
+                <SavedPlace icon="⌂" label={t('home.home')} sublabel={t('home.savedPlaceHint')} onPress={() => handlePickLocation('pickup')} />
+                <SavedPlace icon="▣" label={t('home.work')} sublabel={t('home.savedPlaceHint')} onPress={() => handlePickLocation('pickup')} />
+              </View>
+              <View style={styles.homeExpandedOnly}>
+                <View style={styles.sectionHeading}><Text style={styles.homeSectionTitle}>{t('home.nearby')}</Text><Text style={styles.homeSectionLink} onPress={() => { selectionHaptic(); handlePickLocation('drop'); }}>{t('home.seeAll')}</Text></View>
+                <View style={styles.landmarkRow}>{landmarks.map((landmark) => <Pressable key={landmark.label} accessibilityRole="button" onPress={() => { if (!landmark.place?.coordinate) return; selectionHaptic(); onChooseDestination(landmark.label, landmark.place.coordinate); }} style={styles.landmarkCard}><Text style={styles.landmarkIcon}>{landmark.icon}</Text><Text style={styles.landmarkText} numberOfLines={2}>{landmark.label}</Text></Pressable>)}</View>
+              </View>
             </View>
-            <View style={styles.homeExpandedOnly}>
-              <View style={styles.sectionHeading}><Text style={styles.homeSectionTitle}>{t('home.nearby')}</Text><Text style={styles.homeSectionLink} onPress={() => handlePickLocation('drop')}>{t('home.seeAll')}</Text></View>
-              <View style={styles.landmarkRow}>{landmarks.map((landmark) => <Pressable key={landmark.label} accessibilityRole="button" onPress={() => handlePickLocation(landmark.target)} style={styles.landmarkCard}><Text style={styles.landmarkIcon}>{landmark.icon}</Text><Text style={styles.landmarkText} numberOfLines={2}>{landmark.label}</Text></Pressable>)}</View>
+            <View pointerEvents="none" style={styles.homeSheetBrandWallpaper}>
+              <Image accessibilityIgnoresInvertColors resizeMode="cover" source={sawaariHomeFooter} style={styles.homeSheetBrandArtwork} />
             </View>
-          </ScrollView>
-        </Reanimated.View>
-      </GestureDetector>
+        </ScrollView>
+      </Reanimated.View>
       <Reanimated.View style={[styles.mapRecenterButton, { bottom: sheetHeight + 88 }, mapRecenterFloatStyle]}>
-        <Pressable onPress={centerOnLocation} accessibilityRole="button" accessibilityLabel={t('home.recenter')} style={StyleSheet.absoluteFill}><Text style={styles.mapRecenterIcon}>⌖</Text></Pressable>
+        <Pressable onPress={() => { selectionHaptic(); void centerOnLocation(); }} accessibilityRole="button" accessibilityLabel={t('home.recenter')} style={StyleSheet.absoluteFill}><Text style={styles.mapRecenterIcon}>⌖</Text></Pressable>
       </Reanimated.View>
       <View style={styles.homeTabBar}>
         <HomeTab icon="⌂" label={t('home.tabHome')} active />
@@ -318,11 +327,11 @@ export function CustomerHomeScreen({
 }
 
 function SavedPlace({ icon, label, sublabel, onPress }: { icon: string; label: string; sublabel: string; onPress: () => void }) {
-  return <Pressable onPress={onPress} accessibilityRole="button" style={styles.savedPlace}><Text style={styles.savedPlaceIcon}>{icon}</Text><View style={styles.savedPlaceText}><Text style={styles.savedPlaceLabel}>{label}</Text><Text style={styles.savedPlaceSub}>{sublabel}</Text></View></Pressable>;
+  return <Pressable onPress={() => { selectionHaptic(); onPress(); }} accessibilityRole="button" style={styles.savedPlace}><Text style={styles.savedPlaceIcon}>{icon}</Text><View style={styles.savedPlaceText}><Text style={styles.savedPlaceLabel}>{label}</Text><Text style={styles.savedPlaceSub}>{sublabel}</Text></View></Pressable>;
 }
 
 function HomeTab({ icon, label, active, onPress }: { icon: string; label: string; active?: boolean; onPress?: () => void }) {
-  return <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: active }} style={styles.homeTab}><Text style={[styles.homeTabIcon, active && styles.homeTabIconActive]}>{icon}</Text><Text style={[styles.homeTabLabel, active && styles.homeTabLabelActive]} numberOfLines={1}>{label}</Text></Pressable>;
+  return <Pressable disabled={!onPress} onPress={() => { if (onPress) { selectionHaptic(); onPress(); } }} accessibilityRole="button" accessibilityState={{ selected: active }} style={styles.homeTab}><Text style={[styles.homeTabIcon, active && styles.homeTabIconActive]}>{icon}</Text><Text style={[styles.homeTabLabel, active && styles.homeTabLabelActive]} numberOfLines={1}>{label}</Text></Pressable>;
 }
 
 function LocationRow({
@@ -695,6 +704,7 @@ export function RideTypeScreen({
   onSelect,
   onPassengerCountChange,
   onRouteQuote,
+  onOffers,
   onNext,
   onBack,
   onEditLocation,
@@ -706,6 +716,7 @@ export function RideTypeScreen({
   onSelect: (kind: RideKind) => void;
   onPassengerCountChange: (count: number) => void;
   onRouteQuote: (quote: RouteQuote) => void;
+  onOffers: () => void;
   onNext: () => void;
   onBack: () => void;
   onEditLocation: (target: LocationTarget) => void;
@@ -782,7 +793,7 @@ export function RideTypeScreen({
       ))}</View>
       {promotionUnavailable && <Text style={styles.promotionUnavailable}>{selectedFareDisplay.routeDistanceMeters != null && selectedFareDisplay.routeDistanceMeters > promotion!.maximum_free_distance_meters ? t('rides.freeOfferDistanceUnavailable', { distance: promotion!.maximum_free_distance_meters / 1000 }) : t('rides.freeOfferUsedUnavailable')}</Text>}
       {selected === 'auto' && <View style={styles.passengerPicker}><Text style={styles.passengerPickerLabel}>{t('rides.autoPassengers')}</Text><View style={styles.passengerChoices}>{[1, 2, 3].map((count) => <Pressable key={count} onPress={() => onPassengerCountChange(count)} accessibilityRole="button" accessibilityState={{ selected: ride.passengerCount === count }} style={[styles.passengerChoice, ride.passengerCount === count && styles.passengerChoiceSelected]}><Text style={[styles.passengerChoiceText, ride.passengerCount === count && styles.passengerChoiceTextSelected]}>{formatNumber(count)}</Text></Pressable>)}</View></View>}
-      <View style={styles.rideOptionsExtras}><Text style={styles.rideOptionsExtra}>₹ {t('rides.cash')}</Text><View style={styles.rideOptionsDivider} /><Text style={styles.rideOptionsExtra}>{t('rides.offers')}</Text></View>
+      <View style={styles.rideOptionsExtras}><Text style={styles.rideOptionsExtra}>₹ {t('rides.cash')}</Text><View style={styles.rideOptionsDivider} /><Pressable onPress={() => { selectionHaptic(); onOffers(); }} accessibilityRole="button" style={styles.rideOffersButton}><Text style={styles.rideOptionsExtra}>{t('rides.offers')}</Text></Pressable></View>
       <PrimaryButton label={t('rides.bookSelected', { ride: t(`rides.${selected}`) })} onPress={onNext} disabled={!hasValidRouteQuote || routeLoading} />
     </View>
     </View>
@@ -817,7 +828,7 @@ function RideCard({
   const selectedBackground = selectedValue.interpolate({ inputRange: [0, 1], outputRange: ['rgba(224,247,243,0)', colors.primaryLight] });
   return (
     <Pressable
-      onPress={onSelect}
+      onPress={() => { selectionHaptic(); onSelect(); }}
       onPressIn={() =>
         Animated.spring(scale, { toValue: 0.97, useNativeDriver: false, speed: 50 }).start()
       }
@@ -861,6 +872,19 @@ function Chip({ label }: { label: string }) {
 function PromotionOfferCard({ promotion, t, compact = false }: { promotion: CustomerPromotionStatus | null; t: (key: string, options?: Record<string, unknown>) => string; compact?: boolean }) {
   if (!promotion?.promotion_enabled || promotion.remaining_free_rides <= 0) return null;
   return <View style={[styles.promotionCard, compact && styles.promotionCardCompact]}><Text style={styles.promotionTitle}>{t('rides.freeOfferActive')}</Text><Text style={styles.promotionDetail}>{t('rides.freeOfferSummary', { remaining: promotion.remaining_free_rides, maximum: promotion.maximum_free_rides, distance: promotion.maximum_free_distance_meters / 1000 })}</Text></View>;
+}
+
+export function CustomerOffersScreen({ onBack }: { onBack: () => void }) {
+  const { t } = useTranslation();
+  const [promotion, setPromotion] = useState<CustomerPromotionStatus | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  useFocusEffect(useCallback(() => {
+    void rideDispatchService.getCustomerPromotionStatus().then(setPromotion).catch(() => setPromotion(null)).finally(() => setLoaded(true));
+  }, []));
+  const eligible = Boolean(promotion?.promotion_enabled && promotion.remaining_free_rides > 0);
+  return <ScreenShell back={onBack} title={t('rides.offers')}>
+    {!loaded ? <Text style={styles.offersEmpty}>{t('login.pleaseWait')}</Text> : eligible ? <PromotionOfferCard promotion={promotion} t={t} /> : <Text style={styles.offersEmpty}>No offers being offered at the moment</Text>}
+  </ScreenShell>;
 }
 
 function CustomerFareValue({ display, t, alignStart = false }: { display: CustomerFareDisplay; t: (key: string) => string; alignStart?: boolean }) {
@@ -1023,7 +1047,7 @@ const cancellationReasons: Array<{ code: CancellationReason; labelKey: string }>
   { code: 'other', labelKey: 'Other' },
 ];
 
-export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCancelled, onBookings, onProfile, onOpenChat }: { ride: CustomerRide; onHome: () => void; onCancelled: () => void; onFareQuoteCancelled: () => void; onBookings: () => void; onProfile: () => void; onOpenChat: (rideId: string, captainName: string) => void }) {
+export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCancelled, onBookings, onProfile, onOpenChat, onPickupOtpIssued }: { ride: CustomerRide; onHome: () => void; onCancelled: () => void; onFareQuoteCancelled: () => void; onBookings: () => void; onProfile: () => void; onOpenChat: (rideId: string, captainName: string) => void; onPickupOtpIssued: (pickupOtp: string) => void }) {
   const { t } = useTranslation();
   const dialog = useDialog();
   const mapRef = useRef<MapView>(null);
@@ -1041,7 +1065,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
   const [liveStatus, setLiveStatus] = useState<RideStatus>('accepted');
   const [liveRide, setLiveRide] = useState<DispatchRide | null>(null);
   const [captainDetails, setCaptainDetails] = useState<AssignedCaptainDetails | null>(null);
-  const [pickupPin, setPickupPin] = useState<string | null>(null);
+  const [pickupPin, setPickupPin] = useState<string | null>(ride.pickupOtp ?? null);
   const pickupOtpIssuedForRide = useRef<string | null>(null);
   const [captainRoute, setCaptainRoute] = useState<Coordinate[]>([]);
   const pickup = ride.pickupCoordinate ?? locationCoordinate(ride.pickup, 0);
@@ -1068,7 +1092,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
   useEffect(() => {
     setLiveRide(null);
     setCaptainDetails(null);
-    setPickupPin(null);
+    setPickupPin(ride.pickupOtp ?? null);
     setCaptainRoute([]);
   }, [ride.id]);
   useEffect(() => {
@@ -1084,15 +1108,18 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
       if (updatedRide.captain_id) {
         void rideDispatchService.getAssignedCaptain(updatedRide.id).then(setCaptainDetails).catch(() => setCaptainDetails(null));
       }
-      if (updatedRide.status === 'arrived' && pickupOtpIssuedForRide.current !== updatedRide.id) {
+      if (updatedRide.status === 'arrived' && !ride.pickupOtp && pickupOtpIssuedForRide.current !== updatedRide.id) {
         pickupOtpIssuedForRide.current = updatedRide.id;
-        void rideDispatchService.issueCustomerPickupOtp(updatedRide.id).then(setPickupPin).catch(() => {
+        void rideDispatchService.issueCustomerPickupOtp(updatedRide.id).then((pickupOtp) => {
+          setPickupPin(pickupOtp);
+          if (pickupOtp) onPickupOtpIssued(pickupOtp);
+        }).catch(() => {
           pickupOtpIssuedForRide.current = null;
           setPickupPin(null);
         });
       }
     });
-  }, [onFareQuoteCancelled, onHome, ride.id]);
+  }, [onFareQuoteCancelled, onHome, onPickupOtpIssued, ride.id, ride.pickupOtp]);
   useEffect(() => {
     if (!ride.id || ride.id.startsWith('local-')) return;
     const rideId = ride.id;
@@ -1357,15 +1384,18 @@ const styles = StyleSheet.create({
   locationNoticeText: { color: colors.accent, fontFamily, fontSize: fontSize.xs, fontWeight: '700', textAlign: 'center' },
   homeSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, bottom: 76, left: 0, overflow: 'hidden', position: 'absolute', right: 0, zIndex: 6 },
   homeSheetLayer: { elevation: 6 },
-  homeSheetBackdrop: { ...StyleSheet.absoluteFillObject, height: '100%', opacity: 0.22, width: '100%' },
   sheetHandleArea: { alignItems: 'center', minHeight: 52, paddingBottom: 14, paddingTop: 15 },
   sheetHandle: { backgroundColor: '#CBC5BB', borderRadius: radii.pill, height: 5, width: 46 },
   homeSheetScroll: { flex: 1 },
-  homeSheetContent: { gap: 14, paddingBottom: 24, paddingHorizontal: 16 },
+  homeSheetContent: { paddingBottom: 24 },
+  homeSheetDynamicContent: { gap: 14, paddingHorizontal: 16, paddingBottom: 14 },
+  homeSheetBrandWallpaper: { aspectRatio: 1152 / 928, backgroundColor: colors.bg, overflow: 'hidden', width: '100%' },
+  homeSheetBrandArtwork: { ...StyleSheet.absoluteFillObject, height: '100%', opacity: 0.22, width: '100%' },
   promotionCard: { backgroundColor: colors.successLight, borderColor: colors.success, borderRadius: radii.md, borderWidth: 1, gap: 3, padding: 12 },
   promotionCardCompact: { padding: 10 },
   promotionTitle: { color: colors.success, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   promotionDetail: { color: colors.textPrimary, fontFamily, fontSize: fontSize.xs, lineHeight: 18 },
+  offersEmpty: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, marginTop: 32, textAlign: 'center' },
   destinationAction: { alignItems: 'center', backgroundColor: colors.primaryDark, borderRadius: radii.lg, flexDirection: 'row', minHeight: 74, paddingHorizontal: 16, ...shadows.button },
   destinationPin: { color: colors.bgAlt, fontSize: 28, marginRight: 12 },
   destinationTextWrap: { flex: 1 },
@@ -1459,6 +1489,7 @@ const styles = StyleSheet.create({
   rideFareHeading: { color: colors.textMuted, fontFamily, fontSize: fontSize.xs, fontWeight: '800', textTransform: 'uppercase' },
   rideOptionList: { gap: 2 },
   rideOptionsExtras: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', height: 48, justifyContent: 'space-around' },
+  rideOffersButton: { alignItems: 'center', alignSelf: 'stretch', justifyContent: 'center', paddingHorizontal: 16 },
   rideOptionsExtra: { color: colors.textPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '700' },
   rideFareHeadingError: { color: '#B42318' },
   promotionUnavailable: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, lineHeight: 18 },

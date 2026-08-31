@@ -1,13 +1,9 @@
-import type { ExpoConfig } from 'expo/config';
-
-type AppVariant = 'customer' | 'captain' | 'chooser';
-
 const configuredVariant = process.env.APP_VARIANT ?? process.env.EXPO_PUBLIC_APP_MODE ?? 'customer';
 if (configuredVariant !== 'customer' && configuredVariant !== 'captain' && configuredVariant !== 'chooser') {
   throw new Error('APP_VARIANT must be customer, captain, or chooser.');
 }
 
-const variant: AppVariant = configuredVariant;
+const variant = configuredVariant;
 const isCaptain = variant === 'captain';
 const isChooser = variant === 'chooser';
 const name = isCaptain ? 'Nandyal Ride Captain' : isChooser ? 'Nandyal Ride Demo' : 'Nandyal Ride';
@@ -27,7 +23,7 @@ if (process.env.EAS_BUILD === 'true' && !googleMapsApiKey) {
   throw new Error(`A Google Maps API key must be set for the ${variant} EAS build.`);
 }
 
-const config: ExpoConfig = {
+const config = {
   name, slug, scheme, version: '1.0.0', orientation: 'portrait', userInterfaceStyle: 'light',
   splash: { resizeMode: 'contain', backgroundColor: '#FFFFFF' }, assetBundlePatterns: ['**/*'],
   android: {

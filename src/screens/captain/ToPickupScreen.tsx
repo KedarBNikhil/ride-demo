@@ -12,6 +12,7 @@ import { decodeGooglePolyline } from '../../utils/polyline';
 import { colors, fontFamily, fontSize, radii, shadows } from '../../theme';
 import { openGoogleMapsNavigation } from '../../utils/googleNavigation';
 import { hasMovedSignificantly } from '../../utils/location';
+import { selectionHaptic } from '../../utils/haptics';
 
 const routeFallback: LiveCoordinate = { latitude: 15.4889, longitude: 78.4836 };
 
@@ -68,7 +69,6 @@ export function ToPickupScreen({ request, arrived, onPrimaryAction, onBack, onOp
 
   const canContactCustomer = Boolean(request.maskedCustomerNumber);
   const callCustomer = () => { if (canContactCustomer) void Linking.openURL(`tel:${request.maskedCustomerNumber}`); };
-  const messageCustomer = () => { if (canContactCustomer) void Linking.openURL(`sms:${request.maskedCustomerNumber}`); };
   const waitingForFareApproval = fareApprovalStatus === 'pending';
   const controlsEnabled = fareApprovalStatus === 'approved';
 
@@ -82,10 +82,9 @@ export function ToPickupScreen({ request, arrived, onPrimaryAction, onBack, onOp
       <Text style={styles.eyebrow}>{t(arrived ? 'captain.startRideTitle' : 'captain.toPickup')}</Text><Text style={styles.name}>{request.customerName}</Text><Text style={styles.area}>{request.pickupArea}</Text>
       {waitingForFareApproval && <Text style={styles.waitingFare}>Waiting for customer to confirm fare</Text>}
       <View style={styles.contact}>
-        <Pressable disabled={!canContactCustomer} onPress={callCustomer} style={[styles.contactButton, !canContactCustomer && styles.contactDisabled]}><Text style={styles.contactText}>☎ {t('captain.call')}</Text></Pressable>
-        <Pressable disabled={!canContactCustomer} onPress={messageCustomer} style={[styles.contactButton, !canContactCustomer && styles.contactDisabled]}><Text style={styles.contactText}>✉ {t('captain.message')}</Text></Pressable>
+        <Pressable disabled={!canContactCustomer} onPress={() => { selectionHaptic(); callCustomer(); }} style={[styles.contactButton, !canContactCustomer && styles.contactDisabled]}><Text style={styles.contactText}>☎ {t('captain.call')}</Text></Pressable>
       </View>
-      <Pressable onPress={onOpenChat} accessibilityRole="button" style={styles.chatButton}><Text style={styles.chatButtonText}>💬 {t('captain.message')}</Text></Pressable>
+      <Pressable onPress={() => { selectionHaptic(); onOpenChat(); }} accessibilityRole="button" style={styles.chatButton}><Text style={styles.chatButtonText}>💬 {t('captain.message')}</Text></Pressable>
       <PrimaryButton label={t('captain.navigate')} onPress={() => openGoogleMapsNavigation(request.pickup)} secondary disabled={!controlsEnabled} />
       <PrimaryButton label={t(arrived ? 'captain.startRideTitle' : 'captain.arrivedAtPickup')} onPress={onPrimaryAction} disabled={!controlsEnabled} />
     </View>
