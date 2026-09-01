@@ -7,7 +7,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>Nandyal Ride Captain</string>
+    <string>Nandyal Ride</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -27,8 +27,8 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>exp+nandyal-ride-captain</string>
-          <string>com.nandyalride.captain</string>
+          <string>exp+nandyal-ride-customer</string>
+          <string>com.nandyalride.customer</string>
         </array>
       </dict>
     </array>
@@ -46,9 +46,9 @@
       <true/>
     </dict>
     <key>NSCameraUsageDescription</key>
-    <string>Allow Nandyal Ride Captain to use your camera for documents.</string>
+    <string>Allow $(PRODUCT_NAME) to access your camera</string>
     <key>NSContactsUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your contacts</string>
+    <string>Allow Nandyal Ride to access your contacts so you can add emergency contacts.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your location</string>
     <key>NSLocationAlwaysUsageDescription</key>
@@ -58,7 +58,7 @@
     <key>NSMicrophoneUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your microphone</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>Allow Nandyal Ride Captain to access document photos.</string>
+    <string>Allow $(PRODUCT_NAME) to access your photos</string>
     <key>RCTNewArchEnabled</key>
     <true/>
     <key>UILaunchStoryboardName</key>

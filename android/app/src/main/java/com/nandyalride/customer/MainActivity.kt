@@ -1,4 +1,4 @@
-package com.nandyalride.captain
+package com.nandyalride.customer
 
 import android.os.Build
 import android.os.Bundle
