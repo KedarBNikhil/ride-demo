@@ -42,6 +42,8 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
   const [captainProfile, setCaptainProfile] = useState<CaptainProfile>({ name: '', language: 'en', vehicleType: null });
   const [captainOnboardingComplete, setCaptainOnboardingComplete] = useState<boolean | null>(mode === 'captain' ? null : false);
   const [captainOnboardingSubmitted, setCaptainOnboardingSubmitted] = useState<boolean | null>(mode === 'captain' ? null : false);
+  const [customerSessionReady, setCustomerSessionReady] = useState(mode !== 'customer');
+  const [hasCustomerSession, setHasCustomerSession] = useState(false);
   const storageKey = `nandyal-ride-demo.${mode}.language`;
 
   useEffect(() => {
@@ -86,6 +88,34 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
       else setHasLanguage(false);
     });
   }, [i18n, storageKey]);
+
+  // Do not send an already signed-in customer through the OTP flow again on
+  // launch. Supabase restores the persisted session from AsyncStorage here.
+  useEffect(() => {
+    if (mode !== 'customer') return;
+    if (!supabase) {
+      setHasCustomerSession(false);
+      setCustomerSessionReady(true);
+      return;
+    }
+
+    let mounted = true;
+    const applySession = (session: unknown) => {
+      if (!mounted) return;
+      setHasCustomerSession(Boolean(session));
+      setCustomerSessionReady(true);
+    };
+
+    void supabase.auth.getSession()
+      .then(({ data: { session } }) => applySession(session))
+      .catch(() => applySession(null));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => applySession(session));
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [mode]);
 
   useEffect(() => {
     if (mode !== 'captain') return;
@@ -171,12 +201,12 @@ export function AppNavigator({ mode, onExit }: { mode: AppMode; onExit: () => vo
 
   const submitCaptainOnboarding = async () => { setCaptainOnboardingSubmitted(true); };
   const completeCaptainOnboarding = async () => { setCaptainOnboardingSubmitted(false); setCaptainOnboardingComplete(true); };
-  if (hasLanguage === null || (mode === 'captain' && (captainOnboardingComplete === null || captainOnboardingSubmitted === null))) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
+  if (hasLanguage === null || !customerSessionReady || (mode === 'captain' && (captainOnboardingComplete === null || captainOnboardingSubmitted === null))) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
   return <I18nextProvider i18n={i18n}>
     <DialogProvider>
     <GestureHandlerRootView style={{ flex: 1 }}>
     <NavigationContainer ref={navigationRef}>
-      <Stack.Navigator screenOptions={{ headerShown: false, animation: Platform.OS === 'ios' ? 'slide_from_right' : 'slide_from_right', animationDuration: 260 }}>
+      <Stack.Navigator initialRouteName={mode === 'customer' && hasCustomerSession ? 'CustomerHome' : undefined} screenOptions={{ headerShown: false, animation: Platform.OS === 'ios' ? 'slide_from_right' : 'slide_from_right', animationDuration: 260 }}>
         {!hasLanguage && mode !== 'customer' && <Stack.Screen name="LanguageSelect">{() => <LanguageSelectScreen onChoose={chooseLanguage} />}</Stack.Screen>}
         {mode === 'customer' ? <>
           <Stack.Screen name="CustomerIntro" options={{ animation: 'fade' }}>{({ navigation }) => <CustomerIntroScreen onComplete={() => navigation.replace('CustomerAuthChoice')} />}</Stack.Screen>
