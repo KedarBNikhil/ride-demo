@@ -22,12 +22,17 @@
       "distribution": "internal"
     },
     "production-customer": {
+      "environment": "production",
+      "channel": "production-customer",
       "env": {
         "APP_VARIANT": "customer",
-        "EXPO_PUBLIC_APP_MODE": "customer"
+        "EXPO_PUBLIC_APP_MODE": "customer",
+        "EXPO_PUBLIC_AUTH_MODE": "production"
       }
     },
     "production-captain": {
+      "environment": "production",
+      "channel": "production-captain",
       "env": {
         "APP_VARIANT": "captain",
         "EXPO_PUBLIC_APP_MODE": "captain"
