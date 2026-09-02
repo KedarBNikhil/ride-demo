@@ -37,7 +37,7 @@ const config = {
     checkAutomatically: 'ON_LOAD',
     fallbackToCacheTimeout: 0,
   },
-  runtimeVersion: { policy: 'appVersion' },
+  runtimeVersion: version,
   android: {
     package: androidPackage,
     versionCode: androidVersionCode,
