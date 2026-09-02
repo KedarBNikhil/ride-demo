@@ -12,7 +12,7 @@
     "dashboard:typecheck": "npm run typecheck --workspace dashboard",
     "start": "expo start",
     "start:customer": "APP_VARIANT=customer EXPO_PUBLIC_APP_MODE=customer expo start --clear",
-    "start:captain": "APP_VARIANT=captain EXPO_PUBLIC_APP_MODE=captain expo start --clear",
+    "start:captain": "APP_VARIANT=captain EXPO_PUBLIC_APP_MODE=captain expo start --dev-client --clear --scheme exp+nandyal-ride-captain",
     "start:demo": "APP_VARIANT=chooser EXPO_PUBLIC_APP_MODE=chooser expo start --clear",
     "android": "expo run:android",
     "android:customer": "APP_VARIANT=customer EXPO_PUBLIC_APP_MODE=customer expo start --android --clear",
