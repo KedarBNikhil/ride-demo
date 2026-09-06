@@ -258,8 +258,12 @@ export function resolvePayoutDispute(disputeId: string, status: 'resolved' | 're
   );
 }
 
-export function resolveCaptainIssue(issueId: string) {
-  return unwrap(() => supabase!.rpc('operator_resolve_captain_payment_issue', { p_issue_id: issueId }));
+export function resolveCaptainIssue(issueId: string, resolutionNote: string) {
+  return unwrap(() => supabase!.rpc('operator_resolve_captain_payment_issue', { p_issue_id: issueId, p_resolution_note: resolutionNote }));
+}
+
+export function resolveCustomerIssue(issueId: string, resolutionNote: string) {
+  return unwrap(() => supabase!.rpc('operator_resolve_customer_payment_issue', { p_issue_id: issueId, p_resolution_note: resolutionNote }));
 }
 
 // ---------------------------------------------------- Captain settlements
@@ -402,6 +406,30 @@ export async function fetchCustomerIssues(): Promise<EnrichedCustomerIssue[]> {
     paymentMethod: facts.get(issue.ride_id)?.payment_method ?? null,
     finalFare: facts.get(issue.ride_id)?.final_fare ?? null,
   }));
+}
+
+export type UnifiedDisputeSource = 'customer' | 'captain' | 'payout';
+export interface UnifiedDispute {
+  id: string;
+  source: UnifiedDisputeSource;
+  ride_id: string | null;
+  reason: string;
+  status: string;
+  opened_at: string;
+  resolved_at: string | null;
+  operator_note: string | null;
+  paymentStatus: string | null;
+  paymentMethod: string | null;
+  finalFare: number | null;
+}
+
+export async function fetchAllDisputes(): Promise<UnifiedDispute[]> {
+  const [payouts, captains, customers] = await Promise.all([fetchPayoutDisputes(), fetchCaptainIssues(), fetchCustomerIssues()]);
+  return [
+    ...payouts.map((issue) => ({ ...issue, source: 'payout' as const, operator_note: issue.operator_note, paymentStatus: null, paymentMethod: null, finalFare: null })),
+    ...captains.map((issue) => ({ ...issue, source: 'captain' as const, operator_note: issue.resolution_note, paymentStatus: issue.paymentStatus, paymentMethod: issue.paymentMethod, finalFare: issue.finalFare })),
+    ...customers.map((issue) => ({ ...issue, source: 'customer' as const, operator_note: issue.resolution_note, paymentStatus: issue.paymentStatus, paymentMethod: issue.paymentMethod, finalFare: issue.finalFare })),
+  ].sort((a, b) => b.opened_at.localeCompare(a.opened_at));
 }
 
 // ------------------------------------------------------------------- Fraud

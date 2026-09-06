@@ -3,7 +3,6 @@ import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { AppLanguage } from '../i18n/createI18n';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
-import { NandyalBackdrop } from '../components/NandyalBackdrop';
 
 type Props = { onChoose: (language: AppLanguage) => void };
 
@@ -58,7 +57,6 @@ export function LanguageSelectScreen({ onChoose }: Props) {
   const { t } = useTranslation();
   return (
     <View style={styles.page}>
-      <NandyalBackdrop />
       {/* Top accent strip */}
       <View style={styles.strip}>
         <Text style={styles.stripEmoji}>🌐</Text>

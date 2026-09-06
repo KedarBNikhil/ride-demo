@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     borderColor: colors.error,
   },
   disabled: {
-    backgroundColor: '#C8C8D4',
+    backgroundColor: colors.disabled,
   },
   label: {
     color: colors.textOnPrimary,
@@ -109,6 +109,6 @@ const styles = StyleSheet.create({
     color: colors.error,
   },
   disabledLabel: {
-    color: '#888',
+    color: colors.textDisabled,
   },
 });

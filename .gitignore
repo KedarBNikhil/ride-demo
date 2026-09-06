@@ -1,4 +1,6 @@
 node_modules
+.npm-cache
+.expo
 .env
 .env.local
 dashboard/dist

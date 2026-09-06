@@ -16,12 +16,13 @@ type Props = {
   onVerifyOtp: (phone: string, otp: string) => Promise<unknown>;
   initialPhone?: string;
   phoneStepContent?: React.ReactNode;
+  phoneStepLabel?: string;
   canSendOtp?: boolean;
   children?: React.ReactNode;
 };
 
 /** Shared native phone and OTP entry used by both customer and captain flows. */
-export function PhoneOtpAuth({ title, subtitle, emoji, onBack, onSendOtp, onVerifyOtp, initialPhone = '', phoneStepContent, canSendOtp = true, children }: Props) {
+export function PhoneOtpAuth({ title, subtitle, emoji, onBack, onSendOtp, onVerifyOtp, initialPhone = '', phoneStepContent, phoneStepLabel, canSendOtp = true, children }: Props) {
   const { t } = useTranslation();
   const [phone, setPhone] = useState(initialPhone);
   const [otp, setOtp] = useState('');
@@ -43,7 +44,7 @@ export function PhoneOtpAuth({ title, subtitle, emoji, onBack, onSendOtp, onVeri
     if (step === 'otp' && !/^\d{6}$/.test(otp)) return setError(t('login.invalidOtp'));
     setError(''); setLoading(true);
     try {
-      if (step === 'phone') { await onSendOtp(phone); setStep('otp'); }
+      if (step === 'phone') { const result = await onSendOtp(phone); if (result !== false) setStep('otp'); }
       else await onVerifyOtp(phone, otp);
     } catch (caught) {
       setError(t('login.tryAgain'));
@@ -52,8 +53,8 @@ export function PhoneOtpAuth({ title, subtitle, emoji, onBack, onSendOtp, onVeri
 
   return <ScreenShell back={onBack} title={step === 'phone' ? title : t('login.otpTitle')}>
     {step === 'phone' && children}
-    <View style={styles.hero}><Text style={styles.emoji}>{emoji}</Text><Text style={styles.subtitle}>{step === 'phone' ? subtitle : t('login.otpSubtitle')}</Text></View>
-    <View style={styles.card}><Text style={styles.label}>{step === 'phone' ? t('login.phoneLabel') : t('login.otpLabel')}</Text>
+    <View style={styles.hero}>{emoji ? <Text style={styles.emoji}>{emoji}</Text> : null}<Text style={styles.subtitle}>{step === 'phone' ? subtitle : t('login.otpSubtitle')}</Text></View>
+    <View style={styles.card}>{(step === 'phone' ? phoneStepLabel ?? t('login.phoneLabel') : t('login.otpLabel')) ? <Text style={styles.label}>{step === 'phone' ? phoneStepLabel ?? t('login.phoneLabel') : t('login.otpLabel')}</Text> : null}
       {step === 'otp' ? <NumericCodeInput value={otp} length={limit} placeholder={t('login.otpPlaceholder')} onChangeText={(next) => { setOtp(next); setError(''); }} /> : phoneStepContent ?? <NumericCodeInput value={phone} length={limit} phone placeholder={t('login.phonePlaceholder')} onChangeText={(next) => { setPhone(next); setError(''); }} />}
     </View>
     {!!error && <Text style={styles.error}>{error}</Text>}

@@ -53,6 +53,10 @@ const FARE_RULES: Record<FareRideType, FareRule> = {
 };
 
 const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+export const roundFareHalfDown = (value: number) => {
+  const cents = Math.round((roundMoney(value) + Number.EPSILON) * 100);
+  return Math.floor(cents / 100) + (cents % 100 > 50 ? 1 : 0);
+};
 const blocksOver = (distanceMeters: number, includedMeters: number, blockMeters: number) =>
   Math.ceil(Math.max(0, distanceMeters - includedMeters) / blockMeters);
 
@@ -79,6 +83,6 @@ export function calculateFare(input: FareInput): FareBreakdown {
     baseFare,
     distanceSurcharge,
     pickupSurcharge,
-    total: roundMoney(baseFare + distanceSurcharge + pickupSurcharge),
+    total: roundFareHalfDown(baseFare + distanceSurcharge + pickupSurcharge),
   };
 }

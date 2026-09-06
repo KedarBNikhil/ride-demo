@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { AppLanguage } from '../i18n/createI18n';
@@ -13,13 +14,15 @@ import { RateCustomerScreen } from '../screens/captain/RateCustomerScreen';
 import { CaptainRideChat } from '../components/CaptainRideChat';
 import type { CaptainRideRequest, DispatchRide } from '../services/rideDispatch';
 import { rideDispatchService } from '../services/rideDispatch';
-import { subscribeToCaptainOfferNotificationResponses } from '../services/pushNotifications';
+import { dismissCaptainOfferNotification, subscribeToCaptainOfferNotificationResponses } from '../services/pushNotifications';
+import { incomingRideAlertService } from '../services/incomingRideAlert';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { AboutScreen } from '../screens/AboutScreen';
 import { useDialog } from '../components/ThemedDialog';
 import { useTranslation } from 'react-i18next';
 import { colors, fontFamily, radii } from '../theme';
 import { selectionHaptic } from '../utils/haptics';
+import { useBottomTabBarMetrics } from '../utils/safeAreaLayout';
 
 const Stack = createNativeStackNavigator();
 
@@ -65,13 +68,14 @@ function CaptainRideCancellationFlow({ rideId, onDone, onSurchargeTimeout, child
 
 function CaptainActiveTabBar({ onHome, onBookings, onEarnings, onSettings }: { onHome: () => void; onBookings: () => void; onEarnings: () => void; onSettings: () => void }) {
   const { t } = useTranslation();
-  return <View style={activeTabStyles.bar}><CaptainActiveTab icon="⌂" label={t('captain.tabHome')} onPress={onHome} /><CaptainActiveTab icon="▤" label={t('captain.tabBookings')} active onPress={onBookings} /><CaptainActiveTab icon="₹" label={t('captain.tabEarnings')} onPress={onEarnings} /><CaptainActiveTab icon="♙" label={t('captain.tabProfile')} onPress={onSettings} /></View>;
+  const { bottomInset, tabBarHeight } = useBottomTabBarMetrics();
+  return <View style={[activeTabStyles.bar, { minHeight: tabBarHeight, paddingBottom: 11 + bottomInset }]}><CaptainActiveTab icon="⌂" label={t('captain.tabHome')} onPress={onHome} /><CaptainActiveTab icon="▤" label={t('captain.tabBookings')} active onPress={onBookings} /><CaptainActiveTab icon="₹" label={t('captain.tabEarnings')} onPress={onEarnings} /><CaptainActiveTab icon="♙" label={t('captain.tabProfile')} onPress={onSettings} /></View>;
 }
 function CaptainActiveTab({ icon, label, active, onPress }: { icon: string; label: string; active?: boolean; onPress: () => void }) {
   return <Pressable onPress={() => { selectionHaptic(); onPress(); }} accessibilityRole="button" accessibilityState={{ selected: active }} style={activeTabStyles.tab}><Text style={[activeTabStyles.icon, active && activeTabStyles.active]}>{icon}</Text><Text style={[activeTabStyles.label, active && activeTabStyles.activeLabel]} numberOfLines={1}>{label}</Text></Pressable>;
 }
-const activeTabStyles = StyleSheet.create({ bar: { backgroundColor: colors.surface, borderColor: colors.border, borderTopWidth: 1, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', left: 0, minHeight: 76, paddingBottom: 11, paddingTop: 9, position: 'absolute', right: 0, zIndex: 30 }, tab: { alignItems: 'center', flex: 1, gap: 2, minWidth: 0 }, icon: { color: colors.textMuted, fontSize: 23, lineHeight: 25 }, active: { color: colors.primary }, label: { color: colors.textMuted, fontFamily, fontSize: 11 }, activeLabel: { color: colors.primaryDark, fontWeight: '800' } });
-const cancellationStyles = StyleSheet.create({ overlay: { alignItems: 'center', backgroundColor: 'rgba(19, 39, 35, 0.52)', bottom: 0, justifyContent: 'flex-end', left: 0, position: 'absolute', right: 0, top: 0, zIndex: 60 }, sheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, gap: 14, padding: 22, paddingBottom: 34, width: '100%' }, handle: { alignSelf: 'center', backgroundColor: colors.border, borderRadius: radii.pill, height: 5, marginBottom: 4, width: 46 }, icon: { alignSelf: 'center', backgroundColor: '#FDE9E6', borderRadius: radii.pill, color: colors.accent, fontSize: 25, fontWeight: '900', height: 52, lineHeight: 52, overflow: 'hidden', textAlign: 'center', width: 52 }, title: { color: colors.textPrimary, fontFamily, fontSize: 22, fontWeight: '800', textAlign: 'center' }, message: { color: colors.textSecondary, fontFamily, fontSize: 15, lineHeight: 22, textAlign: 'center' }, reasonCard: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, gap: 4, padding: 14 }, reasonLabel: { color: colors.textSecondary, fontFamily, fontSize: 12, fontWeight: '700' }, reasonText: { color: colors.textPrimary, fontFamily, fontSize: 16, fontWeight: '800' }, charge: { color: colors.accent, fontFamily, fontSize: 14, fontWeight: '700', textAlign: 'center' }, doneButton: { alignItems: 'center', backgroundColor: colors.primaryDark, borderRadius: radii.md, minHeight: 52, justifyContent: 'center', marginTop: 4 }, doneButtonText: { color: colors.bg, fontFamily, fontSize: 16, fontWeight: '800' } });
+const activeTabStyles = StyleSheet.create({ bar: { backgroundColor: colors.surface, borderColor: colors.border, borderTopWidth: 1, bottom: 0, flexDirection: 'row', justifyContent: 'space-around', left: 0, paddingTop: 9, position: 'absolute', right: 0, zIndex: 30 }, tab: { alignItems: 'center', flex: 1, gap: 2, justifyContent: 'center', minWidth: 0 }, icon: { color: colors.textMuted, fontSize: 23, lineHeight: 25 }, active: { color: colors.primary }, label: { color: colors.textMuted, fontFamily, fontSize: 11 }, activeLabel: { color: colors.primaryDark, fontWeight: '800' } });
+const cancellationStyles = StyleSheet.create({ overlay: { alignItems: 'center', backgroundColor: 'rgba(23, 26, 24, 0.52)', bottom: 0, justifyContent: 'flex-end', left: 0, position: 'absolute', right: 0, top: 0, zIndex: 60 }, sheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, gap: 14, padding: 22, paddingBottom: 34, width: '100%' }, handle: { alignSelf: 'center', backgroundColor: colors.border, borderRadius: radii.pill, height: 5, marginBottom: 4, width: 46 }, icon: { alignSelf: 'center', backgroundColor: colors.errorLight, borderRadius: radii.pill, color: colors.error, fontSize: 25, fontWeight: '900', height: 52, lineHeight: 52, overflow: 'hidden', textAlign: 'center', width: 52 }, title: { color: colors.textPrimary, fontFamily, fontSize: 22, fontWeight: '800', textAlign: 'center' }, message: { color: colors.textSecondary, fontFamily, fontSize: 15, lineHeight: 22, textAlign: 'center' }, reasonCard: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, gap: 4, padding: 14 }, reasonLabel: { color: colors.textSecondary, fontFamily, fontSize: 12, fontWeight: '700' }, reasonText: { color: colors.textPrimary, fontFamily, fontSize: 16, fontWeight: '800' }, charge: { color: colors.accent, fontFamily, fontSize: 14, fontWeight: '700', textAlign: 'center' }, doneButton: { alignItems: 'center', backgroundColor: colors.primaryDark, borderRadius: radii.md, minHeight: 52, justifyContent: 'center', marginTop: 4 }, doneButtonText: { color: colors.textOnPrimary, fontFamily, fontSize: 16, fontWeight: '800' } });
 
 export function CaptainMainStack({ online, onToggle, onLanguageChange, onTripComplete, onAccountDeleted }: { online: boolean; onToggle: () => void; onLanguageChange: (language: AppLanguage) => Promise<void>; onTripComplete: () => void; onAccountDeleted: () => void }) {
   const { t } = useTranslation();
@@ -80,7 +84,27 @@ export function CaptainMainStack({ online, onToggle, onLanguageChange, onTripCom
   const [requestCycle, setRequestCycle] = useState(0);
   const [surchargeTimeoutNotice, setSurchargeTimeoutNotice] = useState<string | null>(null);
   const acceptingOfferId = useRef<string | null>(null);
-  const dismissRequest = useCallback(() => { setRequest(null); setRequestCycle((cycle) => cycle + 1); }, []);
+  const suppressedOfferIds = useRef(new Set<string>());
+  const dismissRequest = useCallback((offer = request) => {
+    if (offer) {
+      suppressedOfferIds.current.add(offer.offerId);
+      incomingRideAlertService.stop(offer.offerId);
+      void dismissCaptainOfferNotification({ rideId: offer.rideId, offerId: offer.offerId }).catch(() => undefined);
+    }
+    setRequest(null); setRequestCycle((cycle) => cycle + 1);
+  }, [request]);
+  const presentRequest = useCallback((next: CaptainRideRequest | null) => {
+    if (!next) {
+      if (request) dismissRequest(request);
+      return;
+    }
+    if (suppressedOfferIds.current.has(next.offerId)) return;
+    if (new Date(next.expiresAt).getTime() <= Date.now()) {
+      dismissRequest(next);
+      return;
+    }
+    setRequest((current) => current?.offerId === next.offerId ? current : next);
+  }, [dismissRequest, request]);
   const releaseAfterSurchargeTimeout = useCallback(() => { onTripComplete(); setSurchargeTimeoutNotice(t('captain.surchargeNotAccepted')); }, [onTripComplete, t]);
   useEffect(() => {
     if (!surchargeTimeoutNotice) return;
@@ -89,11 +113,30 @@ export function CaptainMainStack({ online, onToggle, onLanguageChange, onTripCom
   }, [surchargeTimeoutNotice]);
   useEffect(() => subscribeToCaptainOfferNotificationResponses(({ rideId, offerId }) => {
     void rideDispatchService.getCaptainPendingOffer(rideId, offerId).then((offer) => {
-      if (offer) setRequest(offer);
+      if (offer) presentRequest(offer);
+      else void dismissCaptainOfferNotification({ rideId, offerId }).catch(() => undefined);
     }).catch(() => undefined);
-  }), []);
+  }), [presentRequest]);
+  useEffect(() => {
+    if (request && online && AppState.currentState === 'active') incomingRideAlertService.start(request.offerId);
+    else incomingRideAlertService.stop();
+    return () => incomingRideAlertService.stop(request?.offerId);
+  }, [online, request]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      incomingRideAlertService.onAppStateChange(nextState);
+      if (nextState === 'active' && request) {
+        void rideDispatchService.getCaptainPendingOffer(request.rideId, request.offerId).then(presentRequest).catch(() => presentRequest(null));
+      }
+    });
+    return () => subscription.remove();
+  }, [presentRequest, request]);
+  useEffect(() => () => incomingRideAlertService.stop(), []);
+  useEffect(() => {
+    if (!online && request) dismissRequest(request);
+  }, [dismissRequest, online, request]);
   return <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', animationDuration: 260 }}>
-    <Stack.Screen name="CaptainHome">{({ navigation }) => <CaptainDashboardScreen online={online} timeoutNotice={surchargeTimeoutNotice} onToggle={onToggle} onSettings={() => navigation.navigate('Settings')} onBookings={() => navigation.navigate('CaptainBookings')} onEarnings={() => navigation.navigate('CaptainEarnings')} onRequest={setRequest} request={request} requestCycle={requestCycle} onResumeRide={(ride) => { if (ride.status === 'accepted') navigation.navigate('ToPickup', { request: ride }); else if (ride.status === 'arrived') navigation.navigate('StartRide', { request: ride }); else navigation.navigate('TripInProgress', { request: ride }); }} onReject={() => { const active = request; dismissRequest(); if (active) void rideDispatchService.respondToOffer(active.offerId, false); }} onAccept={async () => { const active = request; if (!active || acceptingOfferId.current) return; acceptingOfferId.current = active.offerId; try { await rideDispatchService.respondToOffer(active.offerId, true); dismissRequest(); navigation.navigate('ToPickup', { request: active }); } catch (error) { const message = error instanceof Error ? error.message : ''; const unavailable = message.includes('Ride was already accepted') || message.includes('Offer is no longer available'); if (unavailable) { dismissRequest(); dialog({ title: 'Ride already accepted', message: 'Ride already accepted by another captain.', buttons: [{ text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'CaptainHome' }] }) }] }); } else dialog({ title: t('login.tryAgain') }); } finally { acceptingOfferId.current = null; } }} />}</Stack.Screen>
+    <Stack.Screen name="CaptainHome">{({ navigation }) => <CaptainDashboardScreen online={online} timeoutNotice={surchargeTimeoutNotice} onToggle={onToggle} onSettings={() => navigation.navigate('Settings')} onBookings={() => navigation.navigate('CaptainBookings')} onEarnings={() => navigation.navigate('CaptainEarnings')} onRequest={presentRequest} request={request} requestCycle={requestCycle} onResumeRide={(ride) => { if (ride.status === 'accepted') navigation.navigate('ToPickup', { request: ride }); else if (ride.status === 'arrived') navigation.navigate('StartRide', { request: ride }); else navigation.navigate('TripInProgress', { request: ride }); }} onReject={() => { const active = request; dismissRequest(active); if (active) void rideDispatchService.respondToOffer(active.offerId, false); }} onAccept={async () => { const active = request; if (!active || acceptingOfferId.current) return; acceptingOfferId.current = active.offerId; incomingRideAlertService.stop(active.offerId); void dismissCaptainOfferNotification({ rideId: active.rideId, offerId: active.offerId }).catch(() => undefined); try { await rideDispatchService.respondToOffer(active.offerId, true); dismissRequest(active); navigation.navigate('ToPickup', { request: active }); } catch (error) { const message = error instanceof Error ? error.message : ''; const unavailable = message.includes('Ride was already accepted') || message.includes('Offer is no longer available'); const pickupTooClose = message.includes('CAPTAIN_TOO_CLOSE_TO_PICKUP'); if (unavailable) { dismissRequest(active); dialog({ title: 'Ride already accepted', message: 'Ride already accepted by another captain.', buttons: [{ text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'CaptainHome' }] }) }] }); } else if (pickupTooClose) { dismissRequest(active); dialog({ title: t('captain.pickupTooCloseTitle'), message: t('captain.pickupTooCloseMessage') }); } else dialog({ title: t('login.tryAgain') }); } finally { acceptingOfferId.current = null; } }} />}</Stack.Screen>
     <Stack.Screen name="CaptainBookings">{({ navigation }) => <CaptainBookingsScreen onHome={() => navigation.navigate('CaptainHome')} onSettings={() => navigation.navigate('Settings')} onEarnings={() => navigation.navigate('CaptainEarnings')} onOpenRideDetails={(rideId) => navigation.navigate('CaptainRideDetails', { rideId })} onResumeRide={(ride) => { if (ride.status === 'accepted') navigation.navigate('ToPickup', { request: ride }); else if (ride.status === 'arrived') navigation.navigate('StartRide', { request: ride }); else navigation.navigate('TripInProgress', { request: ride }); }} />}</Stack.Screen>
     <Stack.Screen name="CaptainRideDetails">{({ navigation, route }) => <CaptainRideDetailsScreen rideId={(route.params as { rideId: string }).rideId} onBack={() => navigation.goBack()} />}</Stack.Screen>
     <Stack.Screen name="CaptainEarnings">{({ navigation }) => <CaptainEarningsScreen onHome={() => navigation.navigate('CaptainHome')} onBookings={() => navigation.navigate('CaptainBookings')} onSettings={() => navigation.navigate('Settings')} />}</Stack.Screen>

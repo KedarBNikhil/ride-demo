@@ -58,7 +58,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
 }
 
 const styles = StyleSheet.create({
-  overlay: { alignItems: 'center', backgroundColor: 'rgba(6, 78, 69, 0.55)', flex: 1, justifyContent: 'center', paddingHorizontal: 28 },
+  overlay: { alignItems: 'center', backgroundColor: 'rgba(23, 26, 24, 0.55)', flex: 1, justifyContent: 'center', paddingHorizontal: 28 },
   card: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.xl, borderWidth: 1, overflow: 'hidden', width: '100%' },
   title: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '900', paddingHorizontal: 22, paddingTop: 22 },
   message: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 20, paddingHorizontal: 22, paddingTop: 8 },

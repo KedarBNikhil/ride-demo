@@ -1,9 +1,11 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import type { Coordinate, RideKind } from '../screens/CustomerScreens';
 
 let rideSubscriptionSequence = 0;
 const pickupOtpRequests = new Map<string, Promise<string | null>>();
+const pickupOtpStorageKey = (rideId: string) => `nandyal-ride-demo.customer.pickupOtp.${rideId}`;
 
 export type RideStatus = 'requested' | 'searching' | 'accepted' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
 export type DispatchRide = {
@@ -309,16 +311,30 @@ export const rideDispatchService = {
   async issueCustomerPickupOtp(rideId: string) {
     const inFlight = pickupOtpRequests.get(rideId);
     if (inFlight) return inFlight;
-    const request = Promise.resolve(requireClient().rpc('issue_customer_pickup_otp', { p_ride_id: rideId }))
-      .then(({ data, error }) => {
+    const request = AsyncStorage.getItem(pickupOtpStorageKey(rideId)).then((storedOtp) => {
+      if (storedOtp) return storedOtp;
+      return requireClient().rpc('issue_customer_pickup_otp', { p_ride_id: rideId }).then(({ data, error }) => {
         if (error) throw error;
         return data as string | null;
+      })
+    })
+      .then(async (pickupOtp) => {
+        if (pickupOtp) await AsyncStorage.setItem(pickupOtpStorageKey(rideId), pickupOtp);
+        return pickupOtp;
       })
       .finally(() => {
         if (pickupOtpRequests.get(rideId) === request) pickupOtpRequests.delete(rideId);
       });
     pickupOtpRequests.set(rideId, request);
     return request;
+  },
+
+  async getStoredCustomerPickupOtp(rideId: string) {
+    return AsyncStorage.getItem(pickupOtpStorageKey(rideId));
+  },
+
+  async clearStoredCustomerPickupOtp(rideId: string) {
+    await AsyncStorage.removeItem(pickupOtpStorageKey(rideId));
   },
 
   async getCaptainActiveRide(): Promise<CaptainActiveRide | null> {
@@ -464,6 +480,7 @@ export const rideDispatchService = {
   async startRide(rideId: string, pickupOtp: string) {
     const { data, error } = await requireClient().rpc('captain_start_ride', { p_ride_id: rideId, p_pickup_otp: pickupOtp });
     if (error || !data) throw error ?? new Error('Pickup OTP could not be verified');
+    await this.clearStoredCustomerPickupOtp(rideId);
     return data as DispatchRide;
   },
 

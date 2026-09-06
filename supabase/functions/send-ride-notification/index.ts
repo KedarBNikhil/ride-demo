@@ -15,12 +15,16 @@ type RideNotification = {
   title: string;
   body: string;
   data: Record<string, unknown>;
+  channelId?: string;
+  collapseId?: string;
 };
+
+const incomingRideChannel = 'incoming-ride-requests-v1';
 
 function notificationsFor(payload: WebhookPayload): RideNotification[] {
   const record = payload.record ?? {};
   if (payload.table === 'ride_offers' && payload.type === 'INSERT' && record.status === 'offered' && typeof record.captain_id === 'string') {
-    return [{ userId: record.captain_id, variant: 'captain', title: 'New ride request', body: 'A nearby ride is available.', data: { rideId: record.ride_id, offerId: record.id, type: 'ride_offer' } }];
+    return [{ userId: record.captain_id, variant: 'captain', title: 'New ride request', body: 'A nearby ride is available.', data: { rideId: record.ride_id, offerId: record.id, type: 'ride_offer' }, channelId: incomingRideChannel, collapseId: `ride-offer-${record.id}` }];
   }
   if (payload.table !== 'rides') return [];
 
@@ -52,7 +56,7 @@ async function sendToTokens(notification: RideNotification, tokens: string[]) {
     const chunk = tokens.slice(start, start + 100);
     const result = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(chunk.map((to) => ({ to, sound: 'default', title: notification.title, body: notification.body, data: notification.data, channelId: 'ride-updates', priority: 'high' }))),
+      body: JSON.stringify(chunk.map((to) => ({ to, sound: 'default', title: notification.title, body: notification.body, data: notification.data, channelId: notification.channelId ?? 'ride-updates', collapseId: notification.collapseId, priority: 'high' }))),
     });
     if (!result.ok) throw new Error('Expo push delivery failed');
     const response = await result.json() as { data?: Array<{ status?: string; details?: { error?: string } }> };

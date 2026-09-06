@@ -249,7 +249,7 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 12, marginBottom: 14, padding: 16 },
+  card: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, gap: 10, marginBottom: 10, padding: 14 },
   cardTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '800' },
   cardText: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 20 },
   input: { backgroundColor: colors.bg, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, color: colors.textPrimary, fontFamily, fontSize: fontSize.md, minHeight: 48, paddingHorizontal: 12 },

@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { colors } from '../theme';
 
 type Props = { titleKey: string; onNext: () => void; onSettings: () => void; isLast?: boolean; onExit?: () => void };
 
@@ -15,4 +16,4 @@ export function PlaceholderScreen({ titleKey, onNext, onSettings, isLast, onExit
     </View>
   </View>;
 }
-const styles = StyleSheet.create({ page: { flex: 1, alignItems: 'center', backgroundColor: '#FFFDF8', justifyContent: 'center', padding: 24 }, title: { color: '#172B26', fontFamily: 'NotoSansTelugu', fontSize: 31, fontWeight: '800', textAlign: 'center' }, note: { color: '#52706A', fontFamily: 'NotoSansTelugu', fontSize: 17, marginTop: 10 }, actions: { alignSelf: 'stretch', gap: 16, marginTop: 32 } });
+const styles = StyleSheet.create({ page: { flex: 1, alignItems: 'center', backgroundColor: colors.bg, justifyContent: 'center', padding: 24 }, title: { color: colors.textPrimary, fontFamily: 'NotoSansTelugu', fontSize: 31, fontWeight: '800', textAlign: 'center' }, note: { color: colors.textSecondary, fontFamily: 'NotoSansTelugu', fontSize: 17, marginTop: 10 }, actions: { alignSelf: 'stretch', gap: 16, marginTop: 32 } });

@@ -8,8 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { colors, fontFamily, fontSize, radii, shadows } from '../theme';
-import { NandyalBackdrop } from './NandyalBackdrop';
+import { colors, fontFamily, fontSize, layout, shadows } from '../theme';
 
 type Props = {
   children: React.ReactNode;
@@ -22,7 +21,6 @@ export function ScreenShell({ children, back, title, noHeader = false }: Props) 
   const { t } = useTranslation();
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <NandyalBackdrop />
       {!noHeader && (
         <View style={styles.header}>
           {back ? (
@@ -63,13 +61,14 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.surface,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
     minHeight: 52,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    ...shadows.soft,
+    paddingHorizontal: layout.screenHorizontalPadding,
+    paddingVertical: 6,
   },
   backBtn: {
     alignItems: 'center',
@@ -78,7 +77,7 @@ const styles = StyleSheet.create({
     minWidth: 64,
   },
   backText: {
-    color: colors.textOnPrimary,
+    color: colors.textPrimary,
     fontFamily,
     fontSize: fontSize.sm,
     fontWeight: '700',
@@ -87,7 +86,7 @@ const styles = StyleSheet.create({
     minWidth: 64,
   },
   headerTitle: {
-    color: colors.textOnPrimary,
+    color: colors.textPrimary,
     flex: 1,
     fontFamily,
     fontSize: fontSize.md,
@@ -96,8 +95,8 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flexGrow: 1,
-    gap: 18,
-    padding: 20,
-    paddingBottom: 40,
+    gap: layout.sectionGap,
+    padding: layout.screenHorizontalPadding,
+    paddingBottom: 28,
   },
 });

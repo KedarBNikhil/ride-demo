@@ -7,6 +7,8 @@ const isExpoGo = Constants.executionEnvironment === 'storeClient' || Constants.a
 
 export type CaptainOfferNotification = { rideId: string; offerId: string };
 export type CustomerRideNotification = { rideId: string };
+export const INCOMING_RIDE_NOTIFICATION_CHANNEL = 'incoming-ride-requests-v1';
+export const INCOMING_RIDE_NOTIFICATION_SOUND = 'default';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -34,6 +36,18 @@ export function captainOfferNotificationFromData(data: unknown): CaptainOfferNot
   if (type !== 'ride_offer' || typeof rideId !== 'string' || typeof offerId !== 'string') return null;
   if (!uuidPattern.test(rideId) || !uuidPattern.test(offerId)) return null;
   return { rideId, offerId };
+}
+
+export async function dismissCaptainOfferNotification(offer: CaptainOfferNotification) {
+  if (isExpoGo) return;
+  const Notifications = require('expo-notifications') as typeof import('expo-notifications');
+  const notifications = await Notifications.getPresentedNotificationsAsync();
+  await Promise.all(notifications
+    .filter((notification) => {
+      const data = captainOfferNotificationFromData(notification.request.content.data);
+      return data?.rideId === offer.rideId && data.offerId === offer.offerId;
+    })
+    .map((notification) => Notifications.dismissNotificationAsync(notification.request.identifier)));
 }
 
 export function customerRideNotificationFromData(data: unknown): CustomerRideNotification | null {
@@ -107,6 +121,19 @@ export async function registerPushNotifications(appVariant: 'customer' | 'captai
     vibrationPattern: [0, 250, 180, 250],
     sound: 'default',
   });
+  if (appVariant === 'captain') {
+    // This is versioned because Android retains a channel's sound/importance
+    // after first creation; changing the shipped generic channel is unsafe.
+    await Notifications.setNotificationChannelAsync(INCOMING_RIDE_NOTIFICATION_CHANNEL, {
+      name: 'Incoming ride requests',
+      description: 'Urgent alerts for ride requests that still need a response.',
+      importance: Notifications.AndroidImportance.MAX,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      vibrationPattern: [0, 500, 250, 500, 250, 500],
+      enableVibrate: true,
+      sound: INCOMING_RIDE_NOTIFICATION_SOUND,
+    });
+  }
 
   const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
   if (!projectId) throw new Error('EAS_PROJECT_ID_MISSING');

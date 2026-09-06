@@ -3,7 +3,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ScreenShell } from '../components/ScreenShell';
 import { useDialog } from '../components/ThemedDialog';
 import { LEGAL_URLS } from '../legal/legalUrls';
-import { colors, fontFamily, fontSize, radii, shadows } from '../theme';
+import { colors, fontFamily, fontSize, layout, radii } from '../theme';
 
 export function AboutScreen({ onBack }: { onBack: () => void }) {
   const dialog = useDialog();
@@ -24,15 +24,15 @@ export function AboutScreen({ onBack }: { onBack: () => void }) {
 }
 
 function LegalRow({ title, onPress }: { title: string; onPress: () => void }) {
-  return <Pressable accessibilityRole="button" onPress={onPress} style={[styles.row, shadows.soft]}>
+  return <Pressable accessibilityRole="button" onPress={onPress} style={styles.row}>
     <Text style={styles.title}>{title}</Text>
     <Text style={styles.chevron}>›</Text>
   </Pressable>;
 }
 
 const styles = StyleSheet.create({
-  rows: { gap: 10 },
-  row: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1.5, flexDirection: 'row', padding: 16 },
-  title: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.lg, fontWeight: '800' },
+  rows: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, overflow: 'hidden' },
+  row: { alignItems: 'center', borderBottomColor: colors.divider, borderBottomWidth: 1, flexDirection: 'row', minHeight: layout.rowMinHeight, paddingHorizontal: layout.cardPaddingHorizontal },
+  title: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.md, fontWeight: '800' },
   chevron: { color: colors.textMuted, fontSize: 26 },
 });

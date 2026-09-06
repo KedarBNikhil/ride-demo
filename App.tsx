@@ -7,7 +7,6 @@ import { useState } from 'react';
 import { AppNavigator, type AppMode } from './src/navigation/AppNavigator';
 import { appVariant, isSeparateApp } from './src/config/appVariant';
 import { colors, radii, shadows, fontFamily, fontSize } from './src/theme';
-import { NandyalBackdrop } from './src/components/NandyalBackdrop';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -77,7 +76,6 @@ function ModeLauncher({ onChoose }: { onChoose: (mode: AppMode) => void }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={styles.page}>
-      <NandyalBackdrop />
       {/* Hero gradient strip */}
       <View style={[styles.hero, { paddingTop: 56 + (insets?.top ?? 0) }]}>
         <View style={styles.heroBadge}>

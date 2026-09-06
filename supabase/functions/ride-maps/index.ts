@@ -4,6 +4,15 @@ import { finishGoogleRoutesCall, GoogleRoutesDailyCapError, reserveGoogleRoutesC
 type Coordinate = { latitude: number; longitude: number };
 type Route = { distanceMeters: number; durationSeconds: number; encodedPolyline: string };
 
+const MINIMUM_CAPTAIN_PICKUP_DISTANCE_METERS = 10;
+
+class CaptainTooCloseToPickupError extends Error {
+  constructor() {
+    super('CAPTAIN_TOO_CLOSE_TO_PICKUP');
+    this.name = 'CaptainTooCloseToPickupError';
+  }
+}
+
 const url = Deno.env.get('SUPABASE_URL')!;
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const googleKey = Deno.env.get('GOOGLE_ROUTING_API_KEY');
@@ -64,6 +73,13 @@ async function computeRoute(origin: Coordinate, destination: Coordinate, routeKi
     });
     const item = (body.routes as Array<Record<string, unknown>> | undefined)?.[0];
     const route = { distanceMeters: Number(item?.distanceMeters), durationSeconds: durationSeconds(item?.duration), encodedPolyline: String((item?.polyline as Record<string, unknown> | undefined)?.encodedPolyline ?? '') };
+    // Do this before requiring duration/polyline: Google can legitimately omit
+    // those fields for a zero-length route. Captain acceptance is deliberately
+    // refused for nearby pickups rather than accepting a potentially collusive
+    // ride without a meaningful Captain-to-pickup journey.
+    if (routeKind === 'captain_to_pickup' && Number.isInteger(route.distanceMeters) && route.distanceMeters >= 0 && route.distanceMeters < MINIMUM_CAPTAIN_PICKUP_DISTANCE_METERS) {
+      throw new CaptainTooCloseToPickupError();
+    }
     if (!Number.isInteger(route.distanceMeters) || route.distanceMeters < 1 || route.durationSeconds < 1 || !route.encodedPolyline) throw new Error('Google returned an incomplete route');
     await finishGoogleRoutesCall(callId, true, 200);
     return { route, callId };
@@ -220,6 +236,6 @@ Deno.serve(async (request) => {
     return fail('Unsupported action');
   } catch (error) {
     const message = error instanceof GoogleRoutesDailyCapError ? error.message : error instanceof Error ? error.message : 'Google Maps request failed';
-    return fail(message, message.includes('Daily Google') ? 429 : 502);
+    return fail(message, error instanceof CaptainTooCloseToPickupError ? 422 : message.includes('Daily Google') ? 429 : 502);
   }
 });

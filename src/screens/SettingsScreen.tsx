@@ -1,9 +1,10 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Alert, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import Constants from 'expo-constants';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import type { AppLanguage } from '../i18n/createI18n';
-import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
+import { colors, layout, radii, fontFamily, fontSize } from '../theme';
 import { ScreenShell } from '../components/ScreenShell';
 import { useDialog } from '../components/ThemedDialog';
 import { rideDispatchService, type ReceivedRating } from '../services/rideDispatch';
@@ -36,6 +37,7 @@ function LangChip({
   return (
     <Pressable
       onPress={() => { selectionHaptic(); onPress(value); }}
+      style={({ pressed }) => pressed && styles.chipPressed}
       onPressIn={() =>
         Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 50 }).start()
       }
@@ -47,7 +49,6 @@ function LangChip({
         style={[
           styles.chip,
           active && styles.chipActive,
-          shadows.soft,
           { transform: [{ scale }] },
         ]}
       >
@@ -86,6 +87,9 @@ export function SettingsScreen({
   const [receivedRating, setReceivedRating] = useState<ReceivedRating | null>(null);
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [languageOpen, setLanguageOpen] = useState(false);
+  const appName = Constants.expoConfig?.name ?? t('app.name');
+  const appVersion = Constants.expoConfig?.version;
   const profileText = i18n.language === 'te'
     ? { rating: 'రేటింగ్', noRatings: 'ఇంకా రేటింగ్‌లు లేవు', ratingCount: (count: number) => `${count} రేటింగ్‌లు` }
     : { rating: 'Rating', noRatings: 'No ratings yet', ratingCount: (count: number) => `${count} ratings` };
@@ -120,6 +124,25 @@ export function SettingsScreen({
       ],
     });
   };
+  if (!profile) {
+    return <ScreenShell back={onBack} title={t('screens.settings')}>
+      <View style={styles.settingsGroup}>
+        <Pressable accessibilityRole="button" onPress={() => { selectionHaptic(); setLanguageOpen((open) => !open); }} style={({ pressed }) => [styles.settingsRow, pressed && styles.rowPressed]}>
+          <Text style={styles.settingsTitle}>{t('language.change')}</Text><Text style={styles.rowChevron}>{languageOpen ? '⌃' : '›'}</Text>
+        </Pressable>
+        {languageOpen && <View style={styles.languageRows}>
+          <LangChip symbol="త" name="తెలుగు" sub="" value="te" onPress={onLanguageChange} active={i18n.language === 'te'} />
+          <LangChip symbol="E" name="English" sub="" value="en" onPress={onLanguageChange} active={i18n.language === 'en'} />
+        </View>}
+        <Pressable accessibilityRole="button" onPress={onAbout} style={({ pressed }) => [styles.settingsRow, pressed && styles.rowPressed]}>
+          <Text style={styles.settingsTitle}>{t('profile.about')}</Text><Text style={styles.rowChevron}>›</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => dialog({ title: t('home.helpTitle'), message: t('profile.helpComingSoon') })} style={({ pressed }) => [styles.settingsRow, pressed && styles.rowPressed]}>
+          <Text style={styles.settingsTitle}>{t('profile.help')}</Text><Text style={styles.rowChevron}>›</Text>
+        </Pressable>
+      </View>
+    </ScreenShell>;
+  }
   return (
     <ScreenShell back={onBack} title={t(profile ? 'screens.profile' : 'screens.settings')}>
       {/* Section: Language */}
@@ -152,7 +175,9 @@ export function SettingsScreen({
         </View>
       </View>
 
-      {profile && ratingRole === 'customer' && <Pressable
+      {profile && ratingRole === 'customer' && <View style={styles.section}>
+        <Text style={styles.sectionLabel}>{t('profile.safety')}</Text>
+        <Pressable
         onPress={() => {
           if (onSafety) {
             onSafety();
@@ -168,7 +193,7 @@ export function SettingsScreen({
             ],
           });
         }}
-        style={[styles.chip, shadows.soft]}
+        style={styles.menuRow}
         accessibilityRole="button"
       >
         <View style={styles.safetyMark}>
@@ -179,20 +204,24 @@ export function SettingsScreen({
           <Text style={styles.chipSub}>{t('home.safetySubtitle')}</Text>
         </View>
         <Text style={styles.rowChevron}>›</Text>
-      </Pressable>}
+        </Pressable>
+      </View>}
 
       {ratingRole && <View style={styles.ratingCard}>
         <Text style={styles.ratingLabel}>{t('profile.rating', { defaultValue: profileText.rating })}</Text>
         <Text style={styles.ratingValue}>{receivedRating?.average == null ? '—' : `★ ${receivedRating.average.toFixed(2)}`}</Text>
-        {receivedRating?.count ? <Text style={styles.ratingCount}>{t('profile.ratingCount', { count: receivedRating.count, defaultValue: profileText.ratingCount(receivedRating.count) })}</Text> : <Text style={styles.ratingCount}>{t('profile.noRatings', { defaultValue: profileText.noRatings })}</Text>}
+        <Text style={styles.ratingCount}>{receivedRating?.count ? t('profile.ratingCount', { count: receivedRating.count, defaultValue: profileText.ratingCount(receivedRating.count) }) : t('profile.noRatings', { defaultValue: profileText.noRatings })}</Text>
       </View>}
 
-      {profile && <Pressable onPress={onAbout} accessibilityRole="button" style={[styles.chip, shadows.soft]}>
-        <View style={styles.chipText}>
-          <Text style={styles.chipName}>About</Text>
+      {profile && <View style={styles.section}>
+        <Text style={styles.sectionLabel}>{t('profile.account')}</Text>
+        <View style={styles.groupedRows}>
+          <Pressable onPress={onAbout} accessibilityRole="button" style={styles.groupedRow}>
+            <Text style={styles.chipName}>{t('profile.about')}</Text>
+            <Text style={styles.rowChevron}>›</Text>
+          </Pressable>
         </View>
-        <Text style={styles.rowChevron}>›</Text>
-      </Pressable>}
+      </View>}
 
       {profile && ratingRole && <Pressable onPress={confirmDeleteAccount} disabled={deletingAccount} accessibilityRole="button" style={[styles.deleteAccountButton, deletingAccount && styles.deleteAccountButtonDisabled]}>
         <Text style={styles.deleteAccountText}>{deletingAccount ? t('login.pleaseWait') : t('profile.deleteAccountAction')}</Text>
@@ -200,24 +229,27 @@ export function SettingsScreen({
 
       {/* App info */}
       <View style={styles.infoCard}>
-        <Text style={styles.infoTitle}>{t('app.name')}</Text>
-        <Text style={styles.infoSub}>{t('app.demoVersion')}</Text>
+        <Text style={styles.infoTitle}>{appName}</Text>
+        {appVersion ? <Text style={styles.infoSub}>v{appVersion}</Text> : null}
       </View>
     </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  section: {
-    gap: 12,
-  },
-  profileCard: { alignItems: 'center', backgroundColor: colors.primaryLight, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', gap: 12, padding: 16 },
-  profileAvatar: { alignItems: 'center', backgroundColor: '#B7BCC4', borderRadius: radii.pill, height: 52, justifyContent: 'center', width: 52 },
+  section: { gap: layout.compactGap },
+  settingsGroup: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, overflow: 'hidden' },
+  settingsRow: { alignItems: 'center', borderBottomColor: colors.divider, borderBottomWidth: 1, flexDirection: 'row', minHeight: layout.rowMinHeight, paddingHorizontal: layout.cardPaddingHorizontal },
+  settingsTitle: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.md, fontWeight: '800' },
+  languageRows: { backgroundColor: colors.surfaceSecondary, gap: 1, paddingVertical: 4 },
+  rowPressed: { backgroundColor: colors.surfaceSecondary },
+  profileCard: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', gap: 12, paddingHorizontal: layout.cardPaddingHorizontal, paddingVertical: layout.cardPaddingVertical },
+  profileAvatar: { alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: radii.pill, height: 48, justifyContent: 'center', width: 48 },
   profileAvatarHead: { backgroundColor: '#66717D', borderRadius: radii.pill, height: 16, width: 16 },
   profileAvatarBody: { backgroundColor: '#66717D', borderTopLeftRadius: radii.pill, borderTopRightRadius: radii.pill, height: 14, marginTop: 4, width: 28 },
-  profileDetails: { flex: 1, gap: 4 },
-  profileName: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '900' },
-  profilePhone: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md },
+  profileDetails: { flex: 1, gap: 2 },
+  profileName: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
+  profilePhone: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm },
   sectionLabel: {
     color: colors.textSecondary,
     fontFamily,
@@ -226,37 +258,39 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
-  chips: { gap: 10 },
+  chips: { gap: layout.compactGap },
   chip: {
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: radii.lg,
-    borderWidth: 1.5,
+    borderRadius: radii.md,
+    borderWidth: 1,
     flexDirection: 'row',
-    gap: 14,
-    padding: 16,
+    gap: 12,
+    minHeight: layout.rowMinHeight,
+    paddingHorizontal: layout.cardPaddingHorizontal,
   },
   chipActive: {
     backgroundColor: colors.primaryLight,
     borderColor: colors.primary,
   },
+  chipPressed: { opacity: 0.76 },
   languageMark: {
     alignItems: 'center',
     backgroundColor: colors.bgAlt,
     borderRadius: radii.pill,
-    height: 42,
+    height: 36,
     justifyContent: 'center',
-    width: 42,
+    width: 36,
   },
   languageMarkActive: { backgroundColor: colors.primary },
-  languageMarkText: { color: colors.accent, fontFamily, fontSize: 21, fontWeight: '900' },
+  languageMarkText: { color: colors.primaryDark, fontFamily, fontSize: 18, fontWeight: '900' },
   languageMarkTextActive: { color: colors.textOnPrimary },
   chipText: { flex: 1, gap: 2 },
   chipName: {
     color: colors.textPrimary,
     fontFamily,
-    fontSize: fontSize.lg,
+    fontSize: fontSize.md,
     fontWeight: '800',
   },
   chipNameActive: { color: colors.primary },
@@ -267,13 +301,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
   },
+  menuRow: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', gap: 12, minHeight: layout.rowMinHeight, paddingHorizontal: layout.cardPaddingHorizontal },
   safetyMark: {
     alignItems: 'center',
     backgroundColor: colors.accent,
     borderRadius: radii.pill,
-    height: 42,
+    height: 36,
     justifyContent: 'center',
-    width: 42,
+    width: 36,
   },
   safetyShield: {
     backgroundColor: colors.textOnAccent,
@@ -285,7 +320,9 @@ const styles = StyleSheet.create({
     width: 16,
   },
   rowChevron: { alignSelf: 'center', color: colors.textMuted, fontSize: 26 },
-  deleteAccountButton: { alignItems: 'center', borderColor: colors.error, borderRadius: radii.md, borderWidth: 1, justifyContent: 'center', minHeight: 52, paddingHorizontal: 16 },
+  groupedRows: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, overflow: 'hidden' },
+  groupedRow: { alignItems: 'center', flexDirection: 'row', minHeight: layout.rowMinHeight, paddingHorizontal: layout.cardPaddingHorizontal },
+  deleteAccountButton: { alignItems: 'center', borderColor: colors.error, borderRadius: radii.md, borderWidth: 1, justifyContent: 'center', minHeight: layout.rowMinHeight, paddingHorizontal: layout.cardPaddingHorizontal },
   deleteAccountButtonDisabled: { opacity: 0.6 },
   deleteAccountText: { color: colors.error, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
 
@@ -293,20 +330,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
     borderWidth: 1,
-    gap: 4,
-    marginTop: 8,
-    padding: 20,
+    gap: 1,
+    marginTop: 0,
+    padding: 12,
   },
-  ratingCard: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 4, marginTop: 8, padding: 20 },
+  ratingCard: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', gap: 10, minHeight: layout.rowMinHeight, paddingHorizontal: layout.cardPaddingHorizontal },
   ratingLabel: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, fontWeight: '700', textTransform: 'uppercase' },
-  ratingValue: { color: colors.primaryDark, fontFamily, fontSize: fontSize['2xl'], fontWeight: '900' },
-  ratingCount: { color: colors.textMuted, fontFamily, fontSize: fontSize.sm },
+  ratingValue: { color: '#F59E0B', fontFamily, fontSize: fontSize.md, fontWeight: '900' },
+  ratingCount: { color: colors.textMuted, flex: 1, fontFamily, fontSize: fontSize.sm, textAlign: 'right' },
   infoTitle: {
     color: colors.textPrimary,
     fontFamily,
-    fontSize: fontSize.lg,
+    fontSize: fontSize.sm,
     fontWeight: '800',
   },
   infoSub: {

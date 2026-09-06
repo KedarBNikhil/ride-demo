@@ -255,6 +255,7 @@ export interface CaptainPaymentIssue {
   opened_at: string;
   resolved_at: string | null;
   resolved_by: string | null;
+  resolution_note: string | null;
 }
 
 export interface CustomerPaymentIssue {
@@ -262,7 +263,11 @@ export interface CustomerPaymentIssue {
   ride_id: string;
   customer_id: string;
   reason: CustomerIssueReason;
+  status: 'open' | 'resolved';
   opened_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  resolution_note: string | null;
 }
 
 export interface EarningsLedgerEntry {

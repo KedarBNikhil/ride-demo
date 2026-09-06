@@ -9,9 +9,11 @@ const isChooser = variant === 'chooser';
 const name = isCaptain ? 'Sawaari Captain' : isChooser ? 'Nandyal Ride Demo' : 'Sawaari';
 const slug = isCaptain ? 'nandyal-ride-captain' : isChooser ? 'nandyal-ride-demo' : 'nandyal-ride-customer';
 const scheme = isCaptain ? 'exp+nandyal-ride-captain' : isChooser ? 'exp+nandyal-ride-demo' : 'exp+nandyal-ride-customer';
-const version = isCaptain || isChooser ? '1.0.0' : '1.0.1';
+// Captain 1.0.1 introduces expo-audio. runtimeVersion follows this value, so
+// Captain 1.0.0 binaries cannot receive an update that requires that module.
+const version = isCaptain ? '1.0.1' : isChooser ? '1.0.0' : '1.0.1';
 const androidPackage = isCaptain ? 'com.nandyalride.captain' : isChooser ? 'com.nandyalride.demo' : 'com.nandyalride.customer';
-const androidVersionCode = isCaptain ? 1 : isChooser ? 1 : 2;
+const androidVersionCode = isCaptain ? 2 : isChooser ? 1 : 2;
 const iosBundleIdentifier = isCaptain ? 'com.nandyalride.captain' : isChooser ? 'com.nandyalride.demo' : 'com.nandyalride.customer';
 const easProjectId = isCaptain
   ? '6acc15fd-28b0-4f3a-b825-7e8e5d05cc13'
@@ -61,6 +63,9 @@ const config = {
   },
   plugins: [
     'expo-notifications',
+    // Foreground-only looping dispatch alert. No background-audio service is
+    // enabled: Android should use the notification channel when suspended.
+    ...(isCaptain ? [['expo-audio', { recordAudioAndroid: false }]] : []),
     'expo-location',
     ...(isCaptain ? [] : [['expo-contacts', { contactsPermission: 'Allow Nandyal Ride to access your contacts so you can add emergency contacts.' }]]),
     ...(isCaptain ? [['expo-image-picker', { cameraPermission: 'Allow Nandyal Ride Captain to use your camera for documents.', photosPermission: 'Allow Nandyal Ride Captain to access document photos.' }]] : []),

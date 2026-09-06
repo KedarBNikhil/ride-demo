@@ -1,32 +1,30 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge, Card, ErrorBlock, LoadingBlock, PageHeader, StatusBadge } from '@/components/ui';
 import { DataTable } from '@/components/DataTable';
 import {
-  fetchCaptainIssues,
-  fetchCustomerIssues,
-  fetchPayoutDisputes,
+  fetchAllDisputes,
   fetchPayoutQueue,
   fetchSettlementQueue,
   holdPayout,
   resolveCaptainIssue,
+  resolveCustomerIssue,
   resolvePayoutDispute,
   reviewSettlement,
   updatePayout,
 } from '@/lib/api';
 import type { SettlementStatusFilter } from '@/lib/api';
 import type { PayoutQueueRow, SettlementQueueRow } from '@/lib/types';
-import type { DisputeListRow, EnrichedCaptainIssue, EnrichedCustomerIssue } from '@/lib/api';
+import type { UnifiedDispute } from '@/lib/api';
 import { formatDateTime, formatFare, titleize } from '@/lib/format';
 
-type Tab = 'settlements' | 'payouts' | 'disputes' | 'issues';
+type Tab = 'settlements' | 'payouts' | 'disputes';
 
 const TABS: Array<[Tab, string]> = [
   ['settlements', 'Settlement queue'],
   ['payouts', 'Payout queue'],
-  ['disputes', 'Disputes'],
-  ['issues', 'Payment issues'],
+  ['disputes', 'Disputes & issues'],
 ];
 
 interface Field {
@@ -140,7 +138,6 @@ export function PaymentsPage() {
       {tab === 'settlements' ? <SettlementsTab /> : null}
       {tab === 'payouts' ? <PayoutsTab /> : null}
       {tab === 'disputes' ? <DisputesTab /> : null}
-      {tab === 'issues' ? <IssuesTab /> : null}
     </>
   );
 }
@@ -390,11 +387,14 @@ function PayoutsTab() {
 
 function DisputesTab() {
   const queryClient = useQueryClient();
-  const [dialog, setDialog] = useState<{ dispute: DisputeListRow; decision: 'resolved' | 'rejected' } | null>(null);
-  const disputes = useQuery({ queryKey: ['disputes'], queryFn: fetchPayoutDisputes });
+  const [dialog, setDialog] = useState<{ dispute: UnifiedDispute; decision: 'resolved' | 'rejected' } | null>(null);
+  const disputes = useQuery({ queryKey: ['disputes'], queryFn: fetchAllDisputes });
   const resolveMutation = useMutation({
-    mutationFn: (args: { disputeId: string; decision: 'resolved' | 'rejected'; note: string }) =>
-      resolvePayoutDispute(args.disputeId, args.decision, args.note),
+    mutationFn: (args: { dispute: UnifiedDispute; decision: 'resolved' | 'rejected'; note: string }) => {
+      if (args.dispute.source === 'payout') return resolvePayoutDispute(args.dispute.id, args.decision, args.note);
+      if (args.dispute.source === 'customer') return resolveCustomerIssue(args.dispute.id, args.note);
+      return resolveCaptainIssue(args.dispute.id, args.note);
+    },
     onSuccess: () => {
       setDialog(null);
       void queryClient.invalidateQueries({ queryKey: ['disputes'] });
@@ -409,14 +409,16 @@ function DisputesTab() {
     <>
       <Card>
         <div className="border-b border-slate-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-700">Payout disputes</h2>
+          <h2 className="text-sm font-semibold text-slate-700">Customer, Captain, and payout disputes</h2>
         </div>
-        <DataTable<DisputeListRow>
+        <DataTable<UnifiedDispute>
           data={disputes.data ?? []}
           columns={[
             { header: 'Opened', accessorFn: (r) => r.opened_at, cell: (c) => formatDateTime(c.getValue<string>()) },
+            { header: 'Source', accessorFn: (r) => r.source, cell: (c) => <Badge tone={c.getValue<string>() === 'customer' ? 'blue' : c.getValue<string>() === 'captain' ? 'amber' : 'red'}>{titleize(c.getValue<string>())}</Badge> },
             { header: 'Ride', accessorFn: (r) => r.ride_id ?? '—', cell: (c) => <code className="rounded bg-slate-100 px-1 text-xs">{String(c.getValue()).slice(0, 8)}</code> },
             { header: 'Reason', accessorFn: (r) => r.reason },
+            { header: 'Ride payment', accessorFn: (r) => r.paymentStatus ? `${r.paymentMethod ?? '—'} / ${r.paymentStatus}` : '—' },
             { header: 'Operator note', accessorFn: (r) => r.operator_note ?? '—' },
             { header: 'Status', accessorKey: 'status', cell: (c) => <StatusBadge value={c.getValue<string>()} /> },
             { header: 'Resolved', accessorFn: (r) => r.resolved_at, cell: (c) => (c.getValue<string>() ? formatDateTime(c.getValue<string>()) : '—') },
@@ -427,6 +429,7 @@ function DisputesTab() {
               cell: (c) => {
                 const row = c.row.original;
                 if (!['open', 'under_review'].includes(row.status)) return null;
+                if (row.source !== 'payout') return <button onClick={() => setDialog({ dispute: row, decision: 'resolved' })} className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500">Resolve</button>;
                 return (
                   <div className="flex justify-end gap-1.5">
                     <button
@@ -446,7 +449,7 @@ function DisputesTab() {
               },
             },
           ]}
-          emptyMessage="No payout disputes."
+          emptyMessage="No customer, Captain, or payout disputes."
         />
       </Card>
 
@@ -459,93 +462,9 @@ function DisputesTab() {
           busy={resolveMutation.isPending}
           error={resolveMutation.error instanceof Error ? resolveMutation.error.message : null}
           onCancel={() => setDialog(null)}
-          onSubmit={(values) => resolveMutation.mutate({ disputeId: dialog.dispute.id, decision: dialog.decision, note: values.note })}
+          onSubmit={(values) => resolveMutation.mutate({ dispute: dialog.dispute, decision: dialog.decision, note: values.note })}
         />
       ) : null}
     </>
-  );
-}
-
-// ------------------------------------------------------------------- issues
-
-function IssuesTab() {
-  const queryClient = useQueryClient();
-  const captainIssues = useQuery({ queryKey: ['captain-issues'], queryFn: fetchCaptainIssues });
-  const customerIssues = useQuery({ queryKey: ['customer-issues'], queryFn: fetchCustomerIssues });
-  const resolve = useMutation({
-    mutationFn: (issueId: string) => resolveCaptainIssue(issueId),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['captain-issues'] }),
-  });
-  const openCount = useMemo(() => (captainIssues.data ?? []).filter((i) => i.status === 'open').length, [captainIssues.data]);
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-700">Reported by captains ({captainIssues.data?.length ?? 0}) · {openCount} open</h2>
-        </div>
-        {captainIssues.isLoading ? (
-          <LoadingBlock />
-        ) : captainIssues.error ? (
-          <ErrorBlock error={captainIssues.error} />
-        ) : (
-          <DataTable<EnrichedCaptainIssue>
-            data={captainIssues.data ?? []}
-            columns={[
-              { header: 'Opened', accessorFn: (r) => r.opened_at, cell: (c) => formatDateTime(c.getValue<string>()) },
-              { header: 'Reason', accessorFn: (r) => titleize(r.reason) },
-              { header: 'Ride', accessorFn: (r) => r.ride_id, cell: (c) => <code className="rounded bg-slate-100 px-1 text-xs">{String(c.getValue()).slice(0, 8)}</code> },
-              { header: 'Fare', accessorFn: (r) => r.finalFare, cell: (c) => formatFare(c.getValue<number | null>()) },
-              { header: 'Ride payment', accessorFn: (r) => `${r.paymentMethod ?? '—'} / ${r.paymentStatus ?? '—'}` },
-              { header: 'Status', accessorFn: (r) => r.status, cell: (c) => <StatusBadge value={c.getValue<string>()} /> },
-              {
-                header: '',
-                id: 'actions',
-                enableSorting: false,
-                cell: (c) =>
-                  c.row.original.status === 'open' ? (
-                    <button
-                      disabled={resolve.isPending}
-                      onClick={() => resolve.mutate(c.row.original.id)}
-                      className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-40"
-                    >
-                      Mark resolved
-                    </button>
-                  ) : (
-                    <span className="text-xs text-slate-400">{formatDateTime(c.row.original.resolved_at)}</span>
-                  ),
-              },
-            ]}
-            emptyMessage="No captain-reported issues."
-          />
-        )}
-      </Card>
-
-      <Card>
-        <div className="border-b border-slate-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-700">Reported by customers ({customerIssues.data?.length ?? 0})</h2>
-        </div>
-        {customerIssues.isLoading ? (
-          <LoadingBlock />
-        ) : customerIssues.error ? (
-          <ErrorBlock error={customerIssues.error} />
-        ) : (
-          <DataTable<EnrichedCustomerIssue>
-            data={customerIssues.data ?? []}
-            columns={[
-              { header: 'Opened', accessorFn: (r) => r.opened_at, cell: (c) => formatDateTime(c.getValue<string>()) },
-              { header: 'Reason', accessorFn: (r) => titleize(r.reason) },
-              { header: 'Ride', accessorFn: (r) => r.ride_id, cell: (c) => <code className="rounded bg-slate-100 px-1 text-xs">{String(c.getValue()).slice(0, 8)}</code> },
-              { header: 'Fare', accessorFn: (r) => r.finalFare, cell: (c) => formatFare(c.getValue<number | null>()) },
-              { header: 'Ride payment', accessorFn: (r) => `${r.paymentMethod ?? '—'} / ${r.paymentStatus ?? '—'}` },
-            ]}
-            emptyMessage="No customer-reported issues."
-          />
-        )}
-        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">
-          Customer reports have no resolution flow in the app schema yet — investigate against the settlement queue above.
-        </p>
-      </Card>
-    </div>
   );
 }

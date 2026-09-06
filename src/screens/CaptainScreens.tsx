@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   input: {
-    backgroundColor: '#F9FCFB',
+    backgroundColor: colors.surfaceSecondary,
     borderColor: colors.primary,
     borderRadius: radii.md,
     borderWidth: 1.5,
