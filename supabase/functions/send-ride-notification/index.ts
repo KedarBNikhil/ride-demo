@@ -19,7 +19,10 @@ type RideNotification = {
   collapseId?: string;
 };
 
-const incomingRideChannel = 'incoming-ride-requests-v1';
+const incomingRideChannel = 'incoming-ride-requests-v2';
+const incomingRideSound = 'incoming_ride_alert.mp3';
+const incomingRideAlertIntervalMs = 2_000;
+const incomingRideAlertMaxDeliveries = 6;
 
 function notificationsFor(payload: WebhookPayload): RideNotification[] {
   const record = payload.record ?? {};
@@ -56,7 +59,7 @@ async function sendToTokens(notification: RideNotification, tokens: string[]) {
     const chunk = tokens.slice(start, start + 100);
     const result = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(chunk.map((to) => ({ to, sound: 'default', title: notification.title, body: notification.body, data: notification.data, channelId: notification.channelId ?? 'ride-updates', collapseId: notification.collapseId, priority: 'high' }))),
+      body: JSON.stringify(chunk.map((to) => ({ to, sound: notification.channelId === incomingRideChannel ? incomingRideSound : 'default', title: notification.title, body: notification.body, data: notification.data, channelId: notification.channelId ?? 'ride-updates', collapseId: notification.collapseId, priority: 'high' }))),
     });
     if (!result.ok) throw new Error('Expo push delivery failed');
     const response = await result.json() as { data?: Array<{ status?: string; details?: { error?: string } }> };
@@ -65,6 +68,35 @@ async function sendToTokens(notification: RideNotification, tokens: string[]) {
     });
   }
   if (invalidTokens.size) await supabase.from('push_device_tokens').delete().in('expo_push_token', [...invalidTokens]);
+}
+
+async function isStillActionableOffer(offerId: string) {
+  const { data, error } = await supabase
+    .from('ride_offers')
+    .select('status, expires_at')
+    .eq('id', offerId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.status === 'offered'
+    && typeof data.expires_at === 'string'
+    && new Date(data.expires_at).getTime() > Date.now();
+}
+
+/**
+ * Remote pushes are handled by Android even when the Captain process is not
+ * running. Re-delivering the same collapsed notification gives an incoming
+ * offer a brief, bounded alert loop without a fragile background JS timer.
+ */
+async function sendIncomingRideAlertLoop(notification: RideNotification, tokens: string[]) {
+  const offerId = notification.data.offerId;
+  if (typeof offerId !== 'string') return;
+  for (let delivery = 0; delivery < incomingRideAlertMaxDeliveries; delivery += 1) {
+    if (!(await isStillActionableOffer(offerId))) return;
+    await sendToTokens(notification, tokens);
+    if (delivery + 1 < incomingRideAlertMaxDeliveries) {
+      await new Promise<void>((resolve) => setTimeout(resolve, incomingRideAlertIntervalMs));
+    }
+  }
 }
 
 Deno.serve(async (request) => {
@@ -80,7 +112,10 @@ Deno.serve(async (request) => {
       .select('expo_push_token').eq('user_id', notification.userId).eq('app_variant', notification.variant);
     if (error) return Response.json({ error: error.message }, { status: 500, headers: corsHeaders });
     const values = tokens?.map(({ expo_push_token }) => expo_push_token) ?? [];
-    if (values.length) await sendToTokens(notification, values);
+    if (values.length) {
+      if (notification.channelId === incomingRideChannel) await sendIncomingRideAlertLoop(notification, values);
+      else await sendToTokens(notification, values);
+    }
     delivered += values.length;
   }
   return Response.json({ delivered }, corsHeaders);

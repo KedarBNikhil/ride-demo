@@ -17,6 +17,7 @@ import type {
   SettlementQueueRow,
   CaptainRideVerificationRow,
   CaptainSettlementRow,
+  RideGpsEvidence,
 } from './types';
 
 type QueryResult<T> = PromiseLike<{ data: T | null; error: { message: string } | null }>;
@@ -273,6 +274,13 @@ export async function fetchCaptainRideVerificationQueue(status: 'PENDING' | 'APP
     supabase!.rpc('operator_captain_ride_verification_queue', { p_status: status === 'all' ? null : status }),
   );
   return (rows ?? []) as CaptainRideVerificationRow[];
+}
+
+export async function fetchRideGpsEvidence(rideId: string): Promise<RideGpsEvidence> {
+  const rows = await unwrap(() => supabase!.rpc('operator_ride_gps_evidence', { p_ride_id: rideId }));
+  const evidence = (rows as RideGpsEvidence[] | null)?.[0];
+  if (!evidence) throw new Error('GPS tracking evidence is unavailable for this ride.');
+  return evidence;
 }
 
 export function verifyCaptainRide(compensationId: string, status: 'APPROVED' | 'REJECTED', rejectionReason?: string) {

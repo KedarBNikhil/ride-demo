@@ -7,8 +7,11 @@ const isExpoGo = Constants.executionEnvironment === 'storeClient' || Constants.a
 
 export type CaptainOfferNotification = { rideId: string; offerId: string };
 export type CustomerRideNotification = { rideId: string };
-export const INCOMING_RIDE_NOTIFICATION_CHANNEL = 'incoming-ride-requests-v1';
-export const INCOMING_RIDE_NOTIFICATION_SOUND = 'default';
+// Android does not let an app change a channel's sound after the channel was
+// first created. Keep this versioned so installed Captain apps receive the
+// supplied tone rather than retaining the earlier system-default channel.
+export const INCOMING_RIDE_NOTIFICATION_CHANNEL = 'incoming-ride-requests-v2';
+export const INCOMING_RIDE_NOTIFICATION_SOUND = 'incoming_ride_alert.mp3';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

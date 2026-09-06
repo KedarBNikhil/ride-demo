@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { AppNavigator, type AppMode } from './src/navigation/AppNavigator';
 import { appVariant, isSeparateApp } from './src/config/appVariant';
 import { colors, radii, shadows, fontFamily, fontSize } from './src/theme';
+import './src/services/activeRideGpsTracking';
 
 export default function App() {
   const [fontsLoaded] = useFonts({

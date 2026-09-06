@@ -193,6 +193,41 @@ export interface CaptainRideVerificationRow {
   payment_method: PaymentMethod | null;
   verification_status: 'PENDING' | 'APPROVED' | 'REJECTED';
   rejection_reason: string | null;
+  gps_tracking_status: 'healthy' | 'incomplete' | 'suspicious';
+  gps_tracking_reasons: string[];
+  gps_sample_count: number;
+  gps_expected_samples: number;
+  gps_coverage_percent: number;
+  gps_largest_gap_seconds: number;
+  gps_tracked_distance_meters: number;
+}
+
+export interface RideGpsSample {
+  latitude: number;
+  longitude: number;
+  accuracy_meters: number;
+  speed_mps: number | null;
+  heading_degrees: number | null;
+  device_recorded_at: string;
+  mocked_location: boolean | null;
+}
+
+export interface RideGpsEvidence {
+  expected_samples: number;
+  sample_count: number;
+  first_sample_at: string | null;
+  last_sample_at: string | null;
+  coverage_percent: number;
+  largest_gap_seconds: number;
+  tracked_distance_meters: number;
+  start_to_end_displacement_meters: number;
+  low_accuracy_sample_count: number;
+  suspicious_jump_count: number;
+  mocked_location_count: number;
+  tracking_interrupted: boolean;
+  tracking_status: 'healthy' | 'incomplete' | 'suspicious';
+  tracking_reasons: string[];
+  samples: RideGpsSample[];
 }
 
 export interface CaptainSettlementRow {

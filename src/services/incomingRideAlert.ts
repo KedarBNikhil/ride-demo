@@ -2,9 +2,9 @@ import { AppState, type AppStateStatus } from 'react-native';
 import type { AudioPlayer } from 'expo-audio';
 
 /**
- * One process-wide foreground-only alert. Android does not permit this JS
- * service to keep playing after the app backgrounds; the incoming-request
- * notification channel is the background/terminated alert mechanism.
+ * One process-wide foreground alert. When Android backgrounds the app, this
+ * player is stopped and the server-driven notification loop continues through
+ * the operating system instead.
  */
 class IncomingRideAlertService {
   private activeOfferId: string | null = null;
@@ -15,13 +15,11 @@ class IncomingRideAlertService {
     this.stop();
     this.activeOfferId = offerId;
     try {
-      // Android's system notification tone is deliberately used until a
-      // product-owned assets/sounds/incoming_ride.wav is supplied.
       // Keep this native require inside the Captain-only lifecycle. The
       // Customer bundle imports shared navigation modules but never loads this
       // native module.
       const { createAudioPlayer } = require('expo-audio') as typeof import('expo-audio');
-      const player = createAudioPlayer('content://settings/system/notification_sound');
+      const player = createAudioPlayer(require('../../assets/sounds/incoming_ride_alert.mp3'));
       player.loop = true;
       player.play();
       this.player = player;

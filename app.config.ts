@@ -9,11 +9,11 @@ const isChooser = variant === 'chooser';
 const name = isCaptain ? 'Sawaari Captain' : isChooser ? 'Nandyal Ride Demo' : 'Sawaari';
 const slug = isCaptain ? 'nandyal-ride-captain' : isChooser ? 'nandyal-ride-demo' : 'nandyal-ride-customer';
 const scheme = isCaptain ? 'exp+nandyal-ride-captain' : isChooser ? 'exp+nandyal-ride-demo' : 'exp+nandyal-ride-customer';
-// Captain 1.0.1 introduces expo-audio. runtimeVersion follows this value, so
-// Captain 1.0.0 binaries cannot receive an update that requires that module.
-const version = isCaptain ? '1.0.1' : isChooser ? '1.0.0' : '1.0.1';
+// Captain 1.0.2 introduces TaskManager-backed background GPS and new native
+// permissions. Older binaries must not receive this JavaScript bundle by OTA.
+const version = isCaptain ? '1.0.2' : isChooser ? '1.0.0' : '1.0.1';
 const androidPackage = isCaptain ? 'com.nandyalride.captain' : isChooser ? 'com.nandyalride.demo' : 'com.nandyalride.customer';
-const androidVersionCode = isCaptain ? 2 : isChooser ? 1 : 2;
+const androidVersionCode = isCaptain ? 3 : isChooser ? 1 : 3;
 const iosBundleIdentifier = isCaptain ? 'com.nandyalride.captain' : isChooser ? 'com.nandyalride.demo' : 'com.nandyalride.customer';
 const easProjectId = isCaptain
   ? '6acc15fd-28b0-4f3a-b825-7e8e5d05cc13'
@@ -47,13 +47,15 @@ const config = {
     versionCode: androidVersionCode,
     googleServicesFile,
     config: { googleMaps: { apiKey: googleMapsApiKey ?? '' } },
-    permissions: isCaptain ? ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'CAMERA', 'POST_NOTIFICATIONS'] : ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'POST_NOTIFICATIONS', 'READ_CONTACTS'],
+    permissions: isCaptain ? ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'ACCESS_BACKGROUND_LOCATION', 'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_LOCATION', 'CAMERA', 'POST_NOTIFICATIONS'] : ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'POST_NOTIFICATIONS', 'READ_CONTACTS'],
   },
   ios: {
     bundleIdentifier: iosBundleIdentifier,
     infoPlist: {
       NSLocationWhenInUseUsageDescription: 'Nandyal Ride uses your location to set your pickup point and show ride progress.',
       ...(isCaptain ? {
+        NSLocationWhenInUseUsageDescription: 'Sawaari Captain uses your location to operate rides and show active ride progress.',
+        NSLocationAlwaysAndWhenInUseUsageDescription: 'Sawaari Captain uses your location only during an active ride for ride tracking and fraud verification.',
         NSCameraUsageDescription: 'Nandyal Ride Captain uses your camera to capture captain documents.',
         NSPhotoLibraryUsageDescription: 'Nandyal Ride Captain lets you select document photos from your library.',
       } : {
@@ -62,11 +64,21 @@ const config = {
     },
   },
   plugins: [
-    'expo-notifications',
-    // Foreground-only looping dispatch alert. No background-audio service is
-    // enabled: Android should use the notification channel when suspended.
+    ['expo-notifications', {
+      // This is copied into Android native resources at build time and is used
+      // by the Captain's incoming-offer notification channel.
+      ...(isCaptain ? { sounds: ['./assets/sounds/incoming_ride_alert.mp3'] } : {}),
+    }],
+    // Foreground-only looping dispatch alert. When suspended, Android's
+    // notification channel receives the server-driven alert loop instead.
     ...(isCaptain ? [['expo-audio', { recordAudioAndroid: false }]] : []),
-    'expo-location',
+    ['expo-location', isCaptain ? {
+      locationWhenInUsePermission: 'Sawaari Captain uses your location to operate rides and show active ride progress.',
+      locationAlwaysAndWhenInUsePermission: 'Sawaari Captain uses your location only during an active ride for ride tracking and fraud verification.',
+      isAndroidBackgroundLocationEnabled: true,
+      isAndroidForegroundServiceEnabled: true,
+      isIosBackgroundLocationEnabled: true,
+    } : {}],
     ...(isCaptain ? [] : [['expo-contacts', { contactsPermission: 'Allow Nandyal Ride to access your contacts so you can add emergency contacts.' }]]),
     ...(isCaptain ? [['expo-image-picker', { cameraPermission: 'Allow Nandyal Ride Captain to use your camera for documents.', photosPermission: 'Allow Nandyal Ride Captain to access document photos.' }]] : []),
   ],
