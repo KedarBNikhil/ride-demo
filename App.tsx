@@ -7,7 +7,12 @@ import { useState } from 'react';
 import { AppNavigator, type AppMode } from './src/navigation/AppNavigator';
 import { appVariant, isSeparateApp } from './src/config/appVariant';
 import { colors, radii, shadows, fontFamily, fontSize } from './src/theme';
-import './src/services/activeRideGpsTracking';
+
+// This module defines Captain's native background-location task at import time.
+// Keep it out of the Customer process entirely.
+if (appVariant === 'captain') {
+  require('./src/services/activeRideGpsTracking');
+}
 
 export default function App() {
   const [fontsLoaded] = useFonts({
