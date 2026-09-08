@@ -33,6 +33,7 @@ import { googleMapsService, type PlaceSuggestion } from '../services/googleMaps'
 import { offlineLocationCatalogue, type OfflineLocation } from '../services/offlineLocationCatalogue';
 import { decodeGooglePolyline } from '../utils/polyline';
 import { calculateFare } from '../services/fareEngine';
+import { legalOperator } from '../legal/legalDocuments';
 import { straightLineDistanceMeters } from '../services/distanceProvider';
 import { LiveLocationMap, LiveLocationMarker } from '../components/LiveLocationMap';
 import { CustomerRideSettlement } from './CustomerRideSettlement';
@@ -42,6 +43,8 @@ import { RideHistoryFilterControl } from '../components/RideHistoryFilter';
 import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
 import { selectionHaptic } from '../utils/haptics';
 import { useBottomTabBarMetrics } from '../utils/safeAreaLayout';
+import { centerCoordinateInVisibleViewport, fitRouteInVisibleViewport, getVisibleMapPadding, HOME_LOCATION_DELTA, isValidMapCoordinate } from '../utils/mapCamera';
+import { DraggableMapSheet } from '../components/DraggableMapSheet';
 
 const sawaariHomeFooter = require('../../assets/images/sawaari-brand-nandyal.png');
 const sawaariBikeIcon = require('../../assets/icons/sawaari-bike.png');
@@ -72,10 +75,17 @@ const SearchingCaptainMarker = React.memo(function SearchingCaptainMarker({ capt
   return <Marker ref={marker} coordinate={captain.coordinate} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}><View style={styles.searchingCaptainMarker}><VehicleIcon kind={captain.vehicleType} size={26} /></View></Marker>;
 });
 
-const SearchingMap = React.memo(function SearchingMap({ pickup, nearbyCaptains = [], heartbeatScale, heartbeatOpacity }: { pickup?: Coordinate; nearbyCaptains?: NearbyCaptainLocation[]; heartbeatScale: Animated.Value; heartbeatOpacity: Animated.Value }) {
+const SearchingMap = React.memo(function SearchingMap({ pickup, searchKey, nearbyCaptains = [], heartbeatScale, heartbeatOpacity }: { pickup?: Coordinate; searchKey?: string; nearbyCaptains?: NearbyCaptainLocation[]; heartbeatScale: Animated.Value; heartbeatOpacity: Animated.Value }) {
   const mapRef = useRef<MapView>(null);
   const [pickupPoint, setPickupPoint] = useState<{ x: number; y: number } | null>(null);
-  const region = useMemo<Region>(() => pickup ? { ...pickup, latitudeDelta: 0.012, longitudeDelta: 0.012 } : NANDYAL, [pickup]);
+  const [mapReady, setMapReady] = useState(false);
+  const region = useMemo<Region>(() => isValidMapCoordinate(pickup) ? { ...pickup, latitudeDelta: HOME_LOCATION_DELTA, longitudeDelta: HOME_LOCATION_DELTA } : NANDYAL, [pickup]);
+  useEffect(() => {
+    if (!mapReady || !isValidMapCoordinate(pickup)) return;
+    // `initialRegion` is intentionally not trusted after a retry: this screen
+    // can stay mounted while a new ride gets a new pickup coordinate.
+    mapRef.current?.animateToRegion({ ...pickup, latitudeDelta: HOME_LOCATION_DELTA, longitudeDelta: HOME_LOCATION_DELTA }, 0);
+  }, [mapReady, pickup?.latitude, pickup?.longitude, searchKey]);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       if (!pickup || !mapRef.current) return setPickupPoint(null);
@@ -84,7 +94,7 @@ const SearchingMap = React.memo(function SearchingMap({ pickup, nearbyCaptains =
     return () => cancelAnimationFrame(frame);
   }, [pickup]);
   return <View style={StyleSheet.absoluteFill}>
-    <MapView ref={mapRef} provider={PROVIDER_GOOGLE} initialRegion={region} scrollEnabled={false} zoomEnabled={false} rotateEnabled={false} onMapReady={() => { if (pickup && mapRef.current) void mapRef.current.pointForCoordinate(pickup).then(setPickupPoint).catch(() => setPickupPoint(null)); }} style={StyleSheet.absoluteFill}>
+    <MapView ref={mapRef} provider={PROVIDER_GOOGLE} initialRegion={region} scrollEnabled={false} zoomEnabled={false} rotateEnabled={false} onMapReady={() => { setMapReady(true); if (isValidMapCoordinate(pickup) && mapRef.current) void mapRef.current.pointForCoordinate(pickup).then(setPickupPoint).catch(() => setPickupPoint(null)); }} style={StyleSheet.absoluteFill}>
       {pickup && <Marker coordinate={pickup} pinColor={colors.success} tracksViewChanges={false} />}
       {nearbyCaptains.slice(0, 3).map((captain) => <SearchingCaptainMarker key={captain.id} captain={captain} />)}
     </MapView>
@@ -310,20 +320,15 @@ export function CustomerHomeScreen({
 
   const recenterMap = useCallback((coordinate: Coordinate, duration: number) => {
     if (!mapRef.current) return;
-    const latitudeDelta = 0.018;
-    const longitudeDelta = 0.018;
+    const latitudeDelta = HOME_LOCATION_DELTA;
+    const longitudeDelta = HOME_LOCATION_DELTA;
     if (!mapViewportHeight) {
       mapRef.current.animateToRegion({ ...coordinate, latitudeDelta, longitudeDelta }, duration);
       return;
     }
     const sheetTop = Math.max(0, mapViewportHeight - tabBarHeight - sheetHeight + sheetPosition);
     const visibleHeight = Math.max(1, Math.min(mapViewportHeight || windowHeight, sheetTop));
-    const viewportHeight = Math.max(visibleHeight, mapViewportHeight || windowHeight);
-    // Region centre maps to the full MapView's centre. Shift it south by the
-    // measured overlay amount so the live marker lands at the centre of the
-    // unobscured map, rather than behind the sheet.
-    const latitude = coordinate.latitude - latitudeDelta * (0.5 - visibleHeight / (2 * viewportHeight));
-    mapRef.current.animateToRegion({ latitude, longitude: coordinate.longitude, latitudeDelta, longitudeDelta }, duration);
+    centerCoordinateInVisibleViewport(mapRef.current, coordinate, { mapHeight: mapViewportHeight || windowHeight, visibleHeight, delta: latitudeDelta, duration });
   }, [mapViewportHeight, sheetHeight, sheetPosition, tabBarHeight, windowHeight]);
 
   useEffect(() => {
@@ -866,9 +871,9 @@ export function RideTypeScreen({
 
   useEffect(() => {
     if (routeCoordinates.length < 2) return;
-    const timer = setTimeout(() => mapRef.current?.fitToCoordinates(routeCoordinates, { animated: true, edgePadding: { top: 34, right: 34, bottom: 34, left: 34 } }), 100);
+    const timer = setTimeout(() => fitRouteInVisibleViewport(mapRef.current, routeCoordinates, getVisibleMapPadding({ top: 64, bottomSheetHeight: rideSheetExpanded ? rideSheetHeight : rideSheetHeight - rideSheetCollapsedOffset, bottomInset })), 100);
     return () => clearTimeout(timer);
-  }, [routeQuote?.id]);
+  }, [bottomInset, rideSheetCollapsedOffset, rideSheetExpanded, rideSheetHeight, routeQuote?.id]);
   useEffect(() => { void rideDispatchService.getCustomerPromotionStatus().then(setPromotion).catch(() => setPromotion(null)); }, []);
   useEffect(() => {
     if (!unavailableMessage) return;
@@ -1230,7 +1235,7 @@ export function SearchingScreen({ rideId, rideKind, pickupCoordinate, nearbyCapt
   }, [rideId, t]);
 
   return <View style={styles.searchingScreen}>
-    <SearchingMap pickup={pickupCoordinate} nearbyCaptains={nearbyCaptains} heartbeatScale={heartbeatScale} heartbeatOpacity={heartbeatOpacity} />
+    <SearchingMap pickup={pickupCoordinate} searchKey={rideId} nearbyCaptains={nearbyCaptains} heartbeatScale={heartbeatScale} heartbeatOpacity={heartbeatOpacity} />
     <View pointerEvents="none" style={styles.searchingMapDim} />
     <SafeAreaView pointerEvents="box-none" style={styles.searchingSafe} edges={['top', 'left', 'right']}>
       <View style={styles.searchingHeader}>
@@ -1302,10 +1307,20 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
     }
   };
 
+  const framedRideState = useRef<string | null>(null);
   useEffect(() => {
-    mapRef.current?.fitToCoordinates([pickup], { animated: true, edgePadding: { top: 120, right: 50, bottom: 300, left: 50 } });
-    return undefined;
-  }, []);
+    const key = `${ride.id ?? 'local'}:${liveStatus}:${captainRoute.length}`;
+    if (framedRideState.current === key) return;
+    const route = captainRoute.length > 1 ? captainRoute : [pickup];
+    const fitted = route.length > 1
+      ? fitRouteInVisibleViewport(mapRef.current, route, getVisibleMapPadding({ top: 72, bottomSheetHeight: 280, bottomInset: tabBarHeight }))
+      : false;
+    if (fitted) framedRideState.current = key;
+    else if (isValidMapCoordinate(pickup)) {
+      mapRef.current?.animateToRegion({ ...pickup, latitudeDelta: HOME_LOCATION_DELTA, longitudeDelta: HOME_LOCATION_DELTA }, 300);
+      framedRideState.current = key;
+    }
+  }, [captainRoute, liveStatus, pickup, ride.id, tabBarHeight]);
   useEffect(() => {
     setLiveRide(null);
     setCaptainDetails(null);
@@ -1452,8 +1467,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
       {displayedCaptainCoordinate && <Marker.Animated coordinate={displayedCaptainCoordinate}><View style={styles.liveCaptainMarker}><VehicleIcon kind={vehicleType ?? ride.kind} size={28} /></View></Marker.Animated>}
     </MapView>
     <Pressable onPress={onHome} accessibilityRole="button" style={[styles.assignedBack, shadows.soft]}><Text style={styles.rideOptionsBackText}>‹</Text></Pressable>
-    <ScrollView style={[styles.assignedSheet, { bottom: tabBarHeight }, shadows.card]} contentContainerStyle={styles.assignedSheetContent} showsVerticalScrollIndicator={false} nestedScrollEnabled bounces={false}>
-      <View style={styles.sheetHandle} />
+    <DraggableMapSheet bottom={tabBarHeight} collapsedHeight={280} style={[styles.assignedSheet, shadows.card]} contentContainerStyle={styles.assignedSheetContent}>
       {!arrived && <Text style={styles.bookingStatus}>{awaitingFareApproval ? t('rides.fareQuoteWaiting') : liveStatus === 'accepted' ? t('rides.bookedMessage') : t('rides.searchingSubtitle')}</Text>}
       <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(inProgress ? 'rides.startedTitle' : arrived ? 'rides.hereTitle' : awaitingFareApproval ? 'rides.fareQuoteTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{inProgress ? t('rides.startedSubtitle') : arrived ? t('rides.hereSubtitle') : awaitingFareApproval ? t('rides.fareQuoteWaiting') : t('rides.arriving')}</Text></View></View>
       {hasCurrentRide && <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{captainName}</Text><Text style={styles.assignedVehicle}>{vehicleType ? t(`rides.${vehicleType}`) : t('rides.captain')}</Text></View><View style={styles.assignedContact}><Pressable onPress={() => { if (ride.id) onOpenChat(ride.id, captainName); }} accessibilityRole="button" accessibilityLabel="Message captain" accessibilityState={{ disabled: !ride.id }} disabled={!ride.id} style={[styles.assignedCall, !ride.id && styles.assignedCallDisabled]}><Text style={styles.assignedCallText}>✉</Text></Pressable><Pressable onPress={() => { void callCaptain(); }} accessibilityRole="button" accessibilityLabel="Call captain" accessibilityState={{ disabled: !captainDetails?.phone }} disabled={!captainDetails?.phone} style={[styles.assignedCall, !captainDetails?.phone && styles.assignedCallDisabled]}><Text style={styles.assignedCallText}>☎</Text></Pressable></View></View>}
@@ -1472,7 +1486,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
       {arrived && !!pickupPin && !inProgress && <View style={styles.pickupPinCard}><Text style={styles.pickupPinLabel}>{t('rides.pickupPinLabel')}</Text><Text style={styles.pickupPin}>{pickupPin}</Text><Text style={styles.pickupPinHint}>{t('rides.pickupPinHint')}</Text></View>}
       {inProgress && <><View style={styles.tripStatRow}><Text style={styles.tripStatLabel}>{t('rides.destinationDistance')}</Text><Text style={styles.tripStatValue}>{liveRide?.trip_distance_meters == null ? '—' : `${formatNumber(Number(liveRide.trip_distance_meters) / 1000, { maximumFractionDigits: 1 })} km`}</Text></View><Pressable onPress={() => { void Linking.openURL('tel:112'); }} accessibilityRole="button" style={styles.sosButton}><Text style={styles.sosText}>{t('rides.sos')}</Text></Pressable><PrimaryButton label="Share live ride status" onPress={() => onShareLiveRide(liveRide?.id ?? ride.id!)} /></>}
       {canCancel && !awaitingFareApproval && <PrimaryButton label={t('rides.cancelRide')} onPress={startCancellation} danger />}
-    </ScrollView>
+    </DraggableMapSheet>
     <CustomerTabBar active="bookings" onHome={onHome} onBookings={onBookings} onProfile={onProfile} />
     {cancelStep !== 'none' && <View style={styles.cancellationOverlay}>
       <Pressable style={StyleSheet.absoluteFill} onPress={() => setCancelStep('none')} />
@@ -1507,14 +1521,17 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
   </SafeAreaView>;
 }
 
-function BookingDetailsSheet({ ride, captain, onClose }: { ride: DispatchRide; captain: AssignedCaptainDetails | null | undefined; onClose: () => void }) {
+function BookingDetailsSheet({ ride, captain, onClose, onOpenSupport }: { ride: DispatchRide; captain: AssignedCaptainDetails | null | undefined; onClose: () => void; onOpenSupport: (rideId: string) => void }) {
   const { t } = useTranslation();
   const { bottomInset } = useBottomTabBarMetrics();
   const progress = useRef(new Animated.Value(0)).current;
   const [closing, setClosing] = useState(false);
+  const [issue, setIssue] = useState<Awaited<ReturnType<typeof rideDispatchService.getCustomerPaymentIssue>> | undefined>(undefined);
+  const [helpOpen, setHelpOpen] = useState(false);
   const fareDisplay = getCustomerFareDisplay({ kind: ride.ride_type, passengerCount: Number(ride.passenger_count ?? 1), backendRide: ride });
   const rating = Number(ride.customer_rating ?? 0);
   useEffect(() => { Animated.timing(progress, { toValue: 1, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(); }, [progress]);
+  useEffect(() => { if (ride.status !== 'completed' || !rideDispatchService.isEnabled) { setIssue(null); return; } void rideDispatchService.getCustomerPaymentIssue(ride.id).then(setIssue).catch(() => setIssue(null)); }, [ride.id, ride.status]);
   const dismiss = () => { if (closing) return; setClosing(true); Animated.timing(progress, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => { if (finished) onClose(); }); };
   return <Animated.View style={[styles.bookingDetailsOverlay, { opacity: progress }]}>
     <Pressable onPress={dismiss} style={StyleSheet.absoluteFill} accessibilityRole="button" />
@@ -1526,13 +1543,14 @@ function BookingDetailsSheet({ ride, captain, onClose }: { ride: DispatchRide; c
         <View style={styles.bookingDetailsSection}><Text style={styles.bookingDetailsSectionTitle}>{t('rides.fareDetails')}</Text><View style={styles.bookingFareGrid}><View style={styles.bookingFareTile}><Text style={styles.bookingDetailLabel}>{t('rides.customerCharge')}</Text><Text style={styles.bookingDetailAmountValue}>{fareDisplay.isFree ? t('rides.freeRideAmount') : formatFare(fareDisplay.customerCharge ?? 0)}</Text></View>{fareDisplay.finalFare != null && <View style={styles.bookingFareTile}><Text style={styles.bookingDetailLabel}>{t('rides.finalFare')}</Text><Text style={styles.bookingDetailAmountValue}>{formatFare(fareDisplay.finalFare)}</Text></View>}</View>{Number(ride.cancellation_charge ?? 0) > 0 && <View style={styles.bookingDetailAmount}><Text style={styles.bookingDetailLabel}>{t('rides.cancellationCharge')}</Text><Text style={styles.bookingDetailAmountValue}>{formatFare(Number(ride.cancellation_charge))}</Text></View>}</View>
         <View style={styles.bookingDetailsSection}><Text style={styles.bookingDetailsSectionTitle}>{t('rides.captainDetails')}</Text><View style={styles.bookingCaptainRow}><View style={styles.bookingCaptainAvatar}><Text style={styles.bookingCaptainAvatarText}>👤</Text></View><View style={styles.bookingDetailText}>{captain === undefined ? <Text style={styles.bookingDetailLoading}>{t('login.pleaseWait')}</Text> : captain ? <><Text style={styles.bookingDetailValue}>{captain.fullName}</Text><Text style={styles.bookingDetailLabel}>{captain.vehicleType ? t(`rides.${captain.vehicleType}`) : t('rides.captain')}</Text></> : <Text style={styles.bookingDetailLabel}>{t('rides.noCaptainAssigned')}</Text>}</View></View></View>
         <View style={styles.bookingDetailsSection}><Text style={styles.bookingDetailsSectionTitle}>{t('rides.ratingGiven')}</Text><View style={styles.bookingRatingRow}>{rating > 0 ? <><Text style={styles.bookingRating}>{'★'.repeat(Math.min(5, rating))}{'☆'.repeat(Math.max(0, 5 - rating))}</Text><Text style={styles.bookingRatingNumber}>{rating}/5</Text></> : <Text style={styles.bookingDetailLabel}>{t('rides.notRatedYet')}</Text>}</View></View>
+        {issue && <View style={styles.bookingDetailsSection}><Text style={styles.bookingDetailsSectionTitle}>{t('rides.yourRaisedIssue')}</Text><Text style={styles.bookingDetailValue}>{t(`rides.paymentIssue${issue.reason.split('_').map((part) => part[0].toUpperCase() + part.slice(1)).join('')}`)}</Text>{issue.customer_note ? <Text style={styles.bookingDetailLabel}>{issue.customer_note}</Text> : null}<Pressable accessibilityRole="button" onPress={() => setHelpOpen((open) => !open)} style={styles.bookingDetailsButton}><Text style={styles.bookingDetailsButtonText}>{t('rides.paymentIssueHelp')}</Text></Pressable>{helpOpen && <View style={styles.bookingHelpActions}><Pressable accessibilityRole="button" onPress={() => onOpenSupport(ride.id)} style={styles.bookingDetailsButton}><Text style={styles.bookingDetailsButtonText}>{t('rides.customerSupportChatAction')}</Text></Pressable><Pressable accessibilityRole="button" onPress={() => { void Linking.openURL(`tel:${legalOperator.phone}`); }} style={styles.bookingDetailsButton}><Text style={styles.bookingDetailsButtonText}>{t('rides.customerSupportCallAction')}</Text></Pressable></View>}</View>}
       </ScrollView>
       <PrimaryButton label={t('actions.done')} onPress={dismiss} />
     </Animated.View>
   </Animated.View>;
 }
 
-export function CustomerBookingsScreen({ ride, onHome, onProfile, onCancelled, onOpenRide }: { ride: CustomerRide; onHome: () => void; onProfile: () => void; onCancelled: () => void; onOpenRide: (ride: CustomerRide, status: RideStatus) => void }) {
+export function CustomerBookingsScreen({ ride, onHome, onProfile, onCancelled, onOpenRide, onOpenSupport }: { ride: CustomerRide; onHome: () => void; onProfile: () => void; onCancelled: () => void; onOpenRide: (ride: CustomerRide, status: RideStatus) => void; onOpenSupport: (rideId: string) => void }) {
   const { t, i18n } = useTranslation();
   const { tabBarHeight } = useBottomTabBarMetrics();
   const dialog = useDialog();
@@ -1553,7 +1571,7 @@ export function CustomerBookingsScreen({ ride, onHome, onProfile, onCancelled, o
   });
   const customerRide = (record: DispatchRide): CustomerRide => ({ id: record.id, kind: record.ride_type, passengerCount: record.ride_type === 'auto' ? Number(record.passenger_count ?? 1) : 1, pickup: record.pickup_address, drop: record.drop_address, ...(record.pickup_latitude != null && record.pickup_longitude != null ? { pickupCoordinate: { latitude: Number(record.pickup_latitude), longitude: Number(record.pickup_longitude) } } : {}), ...(record.drop_latitude != null && record.drop_longitude != null ? { dropCoordinate: { latitude: Number(record.drop_latitude), longitude: Number(record.drop_longitude) } } : {}) });
   const openDetails = (record: DispatchRide) => { setDetailsRide(record); setDetailsCaptain(record.captain_id ? undefined : null); if (record.captain_id && rideDispatchService.isEnabled) void rideDispatchService.getAssignedCaptain(record.id).then(setDetailsCaptain).catch(() => setDetailsCaptain(null)); };
-  return <SafeAreaView style={styles.bookingsSafe} edges={['top', 'left', 'right']}><ScrollView contentContainerStyle={[styles.bookingsContent, { paddingBottom: tabBarHeight + 24 }]} showsVerticalScrollIndicator={false}><Text style={styles.bookingsTitle}>{t('home.bookingsTitle')}</Text><RideHistoryFilterControl value={filter} onChange={setFilter} />{filter !== 'all' && <Text style={styles.bookingsPeriod}>{t('history.showing')} {rideHistoryPeriodLabel(filter, new Date(), i18n.language)}</Text>}{!loaded && <Text style={styles.bookingsEmpty}>{t('login.pleaseWait')}</Text>}{loaded && !rides.length && <Text style={styles.bookingsEmpty}>{filter === 'all' ? t('home.bookingsMessage') : t('history.empty')}</Text>}{rides.map((record) => { const canCancel = record.status === 'searching' || record.status === 'accepted'; const actionLabel = record.status === 'cancelled' || record.status === 'completed' ? t('rides.bookThisRoute') : t('rides.viewRideStatus'); const isCancelling = cancellingRideId === record.id; return <View key={record.id} style={[styles.bookingCard, shadows.card]}><Text style={styles.bookingCardStatus}>{t(`rides.status${record.status}`)}</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.pickup_address}</Text><Text style={styles.bookingCardArrow}>→</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.drop_address}</Text><View style={styles.bookingCardActions}><Pressable onPress={() => openDetails(record)} accessibilityRole="button" style={styles.bookingDetailsButton}><Text style={styles.bookingDetailsButtonText}>{t('rides.rideDetails')}</Text></Pressable><Pressable onPress={() => onOpenRide(customerRide(record), record.status)} accessibilityRole="button" style={styles.bookingRouteButton}><Text style={styles.bookingRouteButtonText}>{actionLabel}</Text></Pressable></View>{canCancel && <PrimaryButton label={isCancelling ? t('login.pleaseWait') : t('rides.cancelRide')} onPress={() => cancel(record.id)} disabled={isCancelling} danger />}</View>; })}</ScrollView><CustomerTabBar active="bookings" onHome={onHome} onBookings={() => undefined} onProfile={onProfile} />{detailsRide && <BookingDetailsSheet ride={detailsRide} captain={detailsCaptain} onClose={() => setDetailsRide(null)} />}</SafeAreaView>;
+  return <SafeAreaView style={styles.bookingsSafe} edges={['top', 'left', 'right']}><ScrollView contentContainerStyle={[styles.bookingsContent, { paddingBottom: tabBarHeight + 24 }]} showsVerticalScrollIndicator={false}><Text style={styles.bookingsTitle}>{t('home.bookingsTitle')}</Text><RideHistoryFilterControl value={filter} onChange={setFilter} />{filter !== 'all' && <Text style={styles.bookingsPeriod}>{t('history.showing')} {rideHistoryPeriodLabel(filter, new Date(), i18n.language)}</Text>}{!loaded && <Text style={styles.bookingsEmpty}>{t('login.pleaseWait')}</Text>}{loaded && !rides.length && <Text style={styles.bookingsEmpty}>{filter === 'all' ? t('home.bookingsMessage') : t('history.empty')}</Text>}{rides.map((record) => { const canCancel = record.status === 'searching' || record.status === 'accepted'; const actionLabel = record.status === 'cancelled' || record.status === 'completed' ? t('rides.bookThisRoute') : t('rides.viewRideStatus'); const isCancelling = cancellingRideId === record.id; return <View key={record.id} style={[styles.bookingCard, shadows.card]}><Text style={styles.bookingCardStatus}>{t(`rides.status${record.status}`)}</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.pickup_address}</Text><Text style={styles.bookingCardArrow}>→</Text><Text style={styles.bookingCardRoute} numberOfLines={1}>{record.drop_address}</Text><View style={styles.bookingCardActions}><Pressable onPress={() => openDetails(record)} accessibilityRole="button" style={styles.bookingDetailsButton}><Text style={styles.bookingDetailsButtonText}>{t('rides.rideDetails')}</Text></Pressable><Pressable onPress={() => onOpenRide(customerRide(record), record.status)} accessibilityRole="button" style={styles.bookingRouteButton}><Text style={styles.bookingRouteButtonText}>{actionLabel}</Text></Pressable></View>{canCancel && <PrimaryButton label={isCancelling ? t('login.pleaseWait') : t('rides.cancelRide')} onPress={() => cancel(record.id)} disabled={isCancelling} danger />}</View>; })}</ScrollView><CustomerTabBar active="bookings" onHome={onHome} onBookings={() => undefined} onProfile={onProfile} />{detailsRide && <BookingDetailsSheet ride={detailsRide} captain={detailsCaptain} onClose={() => setDetailsRide(null)} onOpenSupport={onOpenSupport} />}</SafeAreaView>;
 }
 
 export function CustomerTabBar({ active, onHome, onBookings, onProfile }: { active: 'home' | 'bookings' | 'profile'; onHome: () => void; onBookings: () => void; onProfile: () => void }) {
@@ -2031,7 +2049,7 @@ const styles = StyleSheet.create({
   sosText: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
   assignedPickupDot: { backgroundColor: colors.success, borderRadius: radii.pill, height: 10, marginTop: 6, width: 10 },
   assignedPickupText: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.md, fontWeight: '800', lineHeight: 23 }, assignedDropDot: { backgroundColor: colors.accent }, editLocation: { color: colors.primary, fontSize: 28, fontWeight: '800' },
-  bookingsSafe: { backgroundColor: colors.bg, flex: 1 }, bookingsContent: { gap: 16, padding: 20 }, bookingsTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize['2xl'], fontWeight: '900' }, bookingsPeriod: { color: colors.primaryDark, fontFamily, fontSize: fontSize.sm, fontWeight: '800', marginTop: -8 }, bookingsEmpty: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, lineHeight: 24 }, bookingCard: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 8, padding: 18 }, bookingCardStatus: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '900' }, bookingCardRoute: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '800' }, bookingCardArrow: { color: colors.textMuted, fontSize: 20 }, bookingCardActions: { flexDirection: 'row', gap: 10, marginTop: 8 }, bookingDetailsButton: { alignItems: 'center', borderColor: colors.primary, borderRadius: radii.md, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 46, paddingHorizontal: 8 }, bookingDetailsButtonText: { color: colors.primaryDark, fontFamily, fontSize: fontSize.sm, fontWeight: '800', textAlign: 'center' }, bookingRouteButton: { alignItems: 'center', backgroundColor: colors.primaryDark, borderRadius: radii.md, flex: 1, justifyContent: 'center', minHeight: 46, paddingHorizontal: 8 }, bookingRouteButtonText: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '800', textAlign: 'center' }, bookingDetailsOverlay: { backgroundColor: 'rgba(23, 26, 24, 0.58)', bottom: 0, justifyContent: 'flex-end', left: 0, position: 'absolute', right: 0, top: 0, zIndex: 20 }, bookingDetailsSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, gap: 16, maxHeight: '90%', paddingHorizontal: 20, paddingTop: 14 }, bookingDetailsHero: { alignItems: 'center', backgroundColor: colors.primaryDark, borderRadius: radii.lg, flexDirection: 'row', gap: 11, padding: 14 }, bookingDetailsHeroIcon: { alignItems: 'center', backgroundColor: colors.surfaceMint, borderRadius: radii.pill, height: 46, justifyContent: 'center', width: 46 }, bookingDetailsHeroIconText: { fontSize: 23 }, bookingDetailsHeroText: { flex: 1, gap: 3 }, bookingDetailsTitle: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '900' }, bookingDetailsClose: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: radii.pill, height: 34, justifyContent: 'center', width: 34 }, bookingDetailsCloseText: { color: colors.textOnPrimary, fontSize: 27, lineHeight: 30 }, bookingDetailsContent: { gap: 12, paddingBottom: 2 }, bookingDetailsStatus: { alignSelf: 'flex-start', backgroundColor: colors.surfaceMint, borderRadius: radii.pill, color: colors.primaryDark, fontFamily, fontSize: fontSize.xs, fontWeight: '800', overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4 }, bookingDetailsSection: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, gap: 10, padding: 14 }, bookingDetailsSectionTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' }, bookingDetailRow: { alignItems: 'flex-start', flexDirection: 'row', gap: 10 }, bookingDetailDivider: { backgroundColor: colors.divider, height: 1, marginLeft: 20 }, bookingDetailText: { flex: 1 }, bookingDetailLabel: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 20 }, bookingDetailValue: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '800', lineHeight: 22 }, bookingDetailAmount: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }, bookingFareGrid: { flexDirection: 'row', gap: 10 }, bookingFareTile: { backgroundColor: colors.primaryLight, borderRadius: radii.sm, flex: 1, gap: 3, padding: 11 }, bookingDetailAmountValue: { color: colors.primaryDark, fontFamily, fontSize: fontSize.md, fontWeight: '900' }, bookingCaptainRow: { alignItems: 'center', flexDirection: 'row', gap: 10 }, bookingCaptainAvatar: { alignItems: 'center', backgroundColor: colors.accentLight, borderRadius: radii.pill, height: 42, justifyContent: 'center', width: 42 }, bookingCaptainAvatarText: { fontSize: 20 }, bookingDetailLoading: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm }, bookingRatingRow: { alignItems: 'center', flexDirection: 'row', gap: 10 }, bookingRating: { color: '#F59E0B', fontSize: 27, letterSpacing: 2 }, bookingRatingNumber: { color: colors.primaryDark, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
+  bookingsSafe: { backgroundColor: colors.bg, flex: 1 }, bookingsContent: { gap: 16, padding: 20 }, bookingsTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize['2xl'], fontWeight: '900' }, bookingsPeriod: { color: colors.primaryDark, fontFamily, fontSize: fontSize.sm, fontWeight: '800', marginTop: -8 }, bookingsEmpty: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, lineHeight: 24 }, bookingCard: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 8, padding: 18 }, bookingCardStatus: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '900' }, bookingCardRoute: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '800' }, bookingCardArrow: { color: colors.textMuted, fontSize: 20 }, bookingCardActions: { flexDirection: 'row', gap: 10, marginTop: 8 }, bookingDetailsButton: { alignItems: 'center', borderColor: colors.primary, borderRadius: radii.md, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 46, paddingHorizontal: 8 }, bookingDetailsButtonText: { color: colors.primaryDark, fontFamily, fontSize: fontSize.sm, fontWeight: '800', textAlign: 'center' }, bookingRouteButton: { alignItems: 'center', backgroundColor: colors.primaryDark, borderRadius: radii.md, flex: 1, justifyContent: 'center', minHeight: 46, paddingHorizontal: 8 }, bookingRouteButtonText: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '800', textAlign: 'center' }, bookingDetailsOverlay: { backgroundColor: 'rgba(23, 26, 24, 0.58)', bottom: 0, justifyContent: 'flex-end', left: 0, position: 'absolute', right: 0, top: 0, zIndex: 20 }, bookingDetailsSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, gap: 16, maxHeight: '90%', paddingHorizontal: 20, paddingTop: 14 }, bookingDetailsHero: { alignItems: 'center', backgroundColor: colors.primaryDark, borderRadius: radii.lg, flexDirection: 'row', gap: 11, padding: 14 }, bookingDetailsHeroIcon: { alignItems: 'center', backgroundColor: colors.surfaceMint, borderRadius: radii.pill, height: 46, justifyContent: 'center', width: 46 }, bookingDetailsHeroIconText: { fontSize: 23 }, bookingDetailsHeroText: { flex: 1, gap: 3 }, bookingDetailsTitle: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '900' }, bookingDetailsClose: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: radii.pill, height: 34, justifyContent: 'center', width: 34 }, bookingDetailsCloseText: { color: colors.textOnPrimary, fontSize: 27, lineHeight: 30 }, bookingDetailsContent: { gap: 12, paddingBottom: 2 }, bookingDetailsStatus: { alignSelf: 'flex-start', backgroundColor: colors.surfaceMint, borderRadius: radii.pill, color: colors.primaryDark, fontFamily, fontSize: fontSize.xs, fontWeight: '800', overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4 }, bookingDetailsSection: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, gap: 10, padding: 14 }, bookingHelpActions: { flexDirection: 'row', gap: 10 }, bookingDetailsSectionTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' }, bookingDetailRow: { alignItems: 'flex-start', flexDirection: 'row', gap: 10 }, bookingDetailDivider: { backgroundColor: colors.divider, height: 1, marginLeft: 20 }, bookingDetailText: { flex: 1 }, bookingDetailLabel: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 20 }, bookingDetailValue: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '800', lineHeight: 22 }, bookingDetailAmount: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }, bookingFareGrid: { flexDirection: 'row', gap: 10 }, bookingFareTile: { backgroundColor: colors.primaryLight, borderRadius: radii.sm, flex: 1, gap: 3, padding: 11 }, bookingDetailAmountValue: { color: colors.primaryDark, fontFamily, fontSize: fontSize.md, fontWeight: '900' }, bookingCaptainRow: { alignItems: 'center', flexDirection: 'row', gap: 10 }, bookingCaptainAvatar: { alignItems: 'center', backgroundColor: colors.accentLight, borderRadius: radii.pill, height: 42, justifyContent: 'center', width: 42 }, bookingCaptainAvatarText: { fontSize: 20 }, bookingDetailLoading: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm }, bookingRatingRow: { alignItems: 'center', flexDirection: 'row', gap: 10 }, bookingRating: { color: '#F59E0B', fontSize: 27, letterSpacing: 2 }, bookingRatingNumber: { color: colors.primaryDark, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
   cancellationOverlay: { backgroundColor: 'rgba(35, 29, 24, 0.52)', bottom: 0, justifyContent: 'flex-end', left: 0, position: 'absolute', right: 0, top: 0, zIndex: 10 },
   cancellationSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, maxHeight: '88%', paddingBottom: 28, paddingHorizontal: 20, paddingTop: 14 },
   cancellationContent: { gap: 14 },

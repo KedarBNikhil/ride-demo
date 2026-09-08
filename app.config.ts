@@ -9,11 +9,11 @@ const isChooser = variant === 'chooser';
 const name = isCaptain ? 'Sawaari Captain' : isChooser ? 'Nandyal Ride Demo' : 'Sawaari';
 const slug = isCaptain ? 'nandyal-ride-captain' : isChooser ? 'nandyal-ride-demo' : 'nandyal-ride-customer';
 const scheme = isCaptain ? 'exp+nandyal-ride-captain' : isChooser ? 'exp+nandyal-ride-demo' : 'exp+nandyal-ride-customer';
-// Captain 1.0.2 introduces TaskManager-backed background GPS and new native
+// Captain 1.0.3 introduces TaskManager-backed background GPS and new native
 // permissions. Older binaries must not receive this JavaScript bundle by OTA.
-const version = isCaptain ? '1.0.2' : isChooser ? '1.0.0' : '1.0.2';
+const version = isCaptain ? '1.0.3' : isChooser ? '1.0.0' : '1.0.2';
 const androidPackage = isCaptain ? 'com.nandyalride.captain' : isChooser ? 'com.nandyalride.demo' : 'com.nandyalride.customer';
-const androidVersionCode = isCaptain ? 3 : isChooser ? 1 : 4;
+const androidVersionCode = isCaptain ? 4 : isChooser ? 1 : 4;
 const iosBundleIdentifier = isCaptain ? 'com.nandyalride.captain' : isChooser ? 'com.nandyalride.demo' : 'com.nandyalride.customer';
 const easProjectId = isCaptain
   ? '6acc15fd-28b0-4f3a-b825-7e8e5d05cc13'

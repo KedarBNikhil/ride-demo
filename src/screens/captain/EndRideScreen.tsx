@@ -8,7 +8,7 @@ import { colors, fontFamily, fontSize, radii, shadows } from '../../theme';
 import { rideDispatchService, type CaptainRidePayout, type DispatchRide } from '../../services/rideDispatch';
 import { CaptainPaymentIssueFlow } from './CaptainPaymentIssueFlow';
 
-export function EndRideScreen({ rideId, onConfirmed }: { rideId: string; onConfirmed: () => void }) {
+export function EndRideScreen({ rideId, onConfirmed, onIssueDone }: { rideId: string; onConfirmed: () => void; onIssueDone: () => void }) {
   const { t } = useTranslation();
   const [saving, setSaving] = useState(false); const [ride, setRide] = useState<DispatchRide | null>(null); const [payout, setPayout] = useState<CaptainRidePayout | null>(null); const [error, setError] = useState('');
   const refresh = useCallback(async () => { const [nextRide, nextPayout] = await Promise.all([rideDispatchService.getRide(rideId), rideDispatchService.getCaptainRidePayout(rideId)]); setRide(nextRide); setPayout(nextPayout); return nextRide; }, [rideId]);
@@ -26,7 +26,7 @@ export function EndRideScreen({ rideId, onConfirmed }: { rideId: string; onConfi
     <View style={[styles.card, shadows.card]}><View style={styles.stats}><Stat label={t('captain.totalDuration')} value={duration} /><Stat label={t('captain.totalDistance')} value={ride?.travelled_distance_km == null ? '—' : `${formatNumber(Number(ride.travelled_distance_km), { maximumFractionDigits: 1 })} km`} /></View><View style={styles.divider} /><Row label={t('captain.baseFare')} value={formatFare(baseFare)} /><Row label={t('captain.adjustment')} value={formatFare(adjustment)} /><View style={styles.divider} /><Row label={t('captain.entitledEarning')} value={formatFare(total)} total /></View>
     {(isFreeRide || paymentConfirmed) && <View style={styles.cash}><Text style={styles.cashIcon}>✓</Text><View style={styles.cashText}><Text style={styles.cashTitle}>{t('captain.receivedEarning', { amount: formatFare(total) })}</Text><Text style={styles.cashDetail}>{payout?.is_held ? t('captain.payoutHeld') : t('captain.bankPayoutEndOfDay')}</Text>{payout && <Text style={styles.cashDetail}>{t(`captain.payoutStatus${payout.payout_status}`)}</Text>}</View></View>}
     {!!error && <Text style={styles.error}>{error}</Text>}
-    {needsPaymentIssue && <CaptainPaymentIssueFlow rideId={rideId} available />}
+    {needsPaymentIssue && <CaptainPaymentIssueFlow rideId={rideId} available onDone={onIssueDone} />}
     <PrimaryButton label={saving ? t('login.pleaseWait') : isFreeRide || paymentConfirmed ? t('actions.continue') : t('captain.paymentReceived')} onPress={() => { void continueAfterReceipt(); }} disabled={saving} />
   </ScreenShell>;
 }

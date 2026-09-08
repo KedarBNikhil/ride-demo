@@ -16,6 +16,8 @@ import { filterAndSortRideHistory, rideHistoryPeriodLabel, type RideHistoryFilte
 import { RideHistoryFilterControl } from '../../components/RideHistoryFilter';
 import { selectionHaptic } from '../../utils/haptics';
 import { useBottomTabBarMetrics } from '../../utils/safeAreaLayout';
+import { HOME_LOCATION_DELTA } from '../../utils/mapCamera';
+import { DraggableMapSheet } from '../../components/DraggableMapSheet';
 export function CaptainDashboardScreen({ online, timeoutNotice, onToggle, onSettings, onBookings, onEarnings, onRequest, request, onAccept, onReject, requestCycle, onResumeRide }: { online: boolean; timeoutNotice?: string | null; onToggle: () => void; onSettings: () => void; onBookings?: () => void; onEarnings?: () => void; onRequest: (request: CaptainRideRequest | null) => void; request: CaptainRideRequest | null; onAccept: () => Promise<void>; onReject: () => void; requestCycle: number; onResumeRide?: (ride: CaptainActiveRide) => void }) {
   const { t } = useTranslation(); const { bottomInset, tabBarHeight } = useBottomTabBarMetrics(); const mapRef = useRef<MapView>(null); const [location, setLocation] = useState<LiveCoordinate | null>(null); const [locationUnavailable, setLocationUnavailable] = useState(false); const [availabilitySaving, setAvailabilitySaving] = useState(false); const [availabilityError, setAvailabilityError] = useState(false); const [today, setToday] = useState({ earnings: 0, trips: 0 });
   const freshLocationRequest = useRef<Promise<Location.LocationObject> | null>(null);
@@ -53,6 +55,12 @@ export function CaptainDashboardScreen({ online, timeoutNotice, onToggle, onSett
     return () => { active = false; subscription?.remove(); };
   }, [online]);
   useEffect(() => { void registerPushNotifications('captain').catch(() => undefined); }, []);
+  const initialCameraSet = useRef(false);
+  useEffect(() => {
+    if (!location || initialCameraSet.current) return;
+    initialCameraSet.current = true;
+    mapRef.current?.animateToRegion({ ...location, latitudeDelta: HOME_LOCATION_DELTA, longitudeDelta: HOME_LOCATION_DELTA }, 350);
+  }, [location]);
   const refreshToday = useCallback(() => { void captainEarningsService.getToday().then((overview) => setToday({ earnings: overview.totalEarnings, trips: overview.tripCount })).catch(() => undefined); }, []);
   useFocusEffect(refreshToday);
   useEffect(() => rideDispatchService.subscribeToCaptainRides(refreshToday), [refreshToday]);
@@ -90,7 +98,7 @@ export function CaptainDashboardScreen({ online, timeoutNotice, onToggle, onSett
   };
   const showBookings = () => onBookings?.();
   const showEarnings = () => onEarnings?.();
-  const recenterOnLocation = () => { if (location) mapRef.current?.animateToRegion({ ...location, latitudeDelta: 0.012, longitudeDelta: 0.012 }, 350); };
+  const recenterOnLocation = () => { if (location) mapRef.current?.animateToRegion({ ...location, latitudeDelta: HOME_LOCATION_DELTA, longitudeDelta: HOME_LOCATION_DELTA }, 350); };
   return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
     <LiveLocationMap mapRef={mapRef} location={location} />
     <View style={styles.header}>
@@ -99,9 +107,7 @@ export function CaptainDashboardScreen({ online, timeoutNotice, onToggle, onSett
     {!!timeoutNotice && <View style={[styles.locationNotice, shadows.card]}><Text style={styles.locationText}>{timeoutNotice}</Text></View>}
     <Pressable accessibilityRole="button" accessibilityLabel={t('home.recenter')} disabled={!location} onPress={() => { selectionHaptic(); recenterOnLocation(); }} style={[styles.recenterButton, shadows.card, !location && { opacity: 0.5 }]}><Text style={styles.recenterIcon}>⌖</Text></Pressable>
     {locationUnavailable && <View style={[styles.locationNotice, shadows.card]}><Text style={styles.locationText}>{t('home.locationUnavailable')}</Text></View>}
-    {request ? <IncomingRideRequestSheet request={request} onAccept={onAccept} onReject={onReject} bottomOffset={tabBarHeight} /> : <View style={[styles.sheet, { bottom: tabBarHeight }, shadows.card]}>
-      <View style={styles.handle} />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.sheetContent, { paddingBottom: 20 + bottomInset }]}>
+    {request ? <IncomingRideRequestSheet request={request} onAccept={onAccept} onReject={onReject} bottomOffset={tabBarHeight} /> : <DraggableMapSheet bottom={tabBarHeight} collapsedHeight={238} style={shadows.card} contentContainerStyle={[styles.sheetContent, { paddingBottom: 20 + bottomInset }]}>
         <Text style={styles.bottomTitle}>{t(online ? 'captain.online' : 'captain.offline')}</Text>
         <Text style={styles.bottomDetail}>{t(online ? 'captain.onlineWaiting' : 'captain.offlineDetail')}</Text>
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: online, disabled: availabilitySaving }} disabled={availabilitySaving} onPress={() => { selectionHaptic(); void toggleAvailability(); }} style={[styles.toggle, online ? styles.toggleOnline : styles.toggleOffline, availabilitySaving && styles.toggleDisabled]}><View style={[styles.knob, online && styles.knobOnline]} /><Text style={styles.toggleText}>{t(availabilitySaving ? 'captain.updatingAvailability' : online ? 'captain.goOffline' : 'captain.goOnline')}</Text></Pressable>
@@ -111,8 +117,7 @@ export function CaptainDashboardScreen({ online, timeoutNotice, onToggle, onSett
           <View style={styles.summaryCard}><Text style={styles.summaryValue}>{today.trips}</Text><Text style={styles.summaryLabel}>{t('captain.todayTrips')}</Text></View>
         </View>
         <Text style={styles.sheetHint}>{t('captain.homeSheetHint')}</Text>
-      </ScrollView>
-    </View>}
+    </DraggableMapSheet>}
     <View style={[styles.tabBar, { minHeight: tabBarHeight, paddingBottom: 11 + bottomInset }]}>
       <CaptainTab icon="⌂" label={t('captain.tabHome')} active />
       <CaptainTab icon="▤" label={t('captain.tabBookings')} onPress={showBookings} />

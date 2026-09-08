@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge, Card, ErrorBlock, LoadingBlock, PageHeader, StatusBadge } from '@/components/ui';
 import { DataTable } from '@/components/DataTable';
 import {
   fetchAllDisputes,
+  fetchCaptainPaymentIssueMessages,
+  fetchCustomerPaymentIssueMessages,
   fetchPayoutQueue,
   fetchSettlementQueue,
   holdPayout,
@@ -12,11 +14,15 @@ import {
   resolveCustomerIssue,
   resolvePayoutDispute,
   reviewSettlement,
+  sendCaptainPaymentIssueMessage,
+  sendCustomerPaymentIssueMessage,
   updatePayout,
 } from '@/lib/api';
 import type { SettlementStatusFilter } from '@/lib/api';
 import type { PayoutQueueRow, SettlementQueueRow } from '@/lib/types';
 import type { UnifiedDispute } from '@/lib/api';
+import type { CaptainPaymentIssueMessage } from '@/lib/api';
+import type { CustomerPaymentIssueMessage } from '@/lib/api';
 import { formatDateTime, formatFare, titleize } from '@/lib/format';
 
 type Tab = 'settlements' | 'payouts' | 'disputes';
@@ -385,9 +391,33 @@ function PayoutsTab() {
 
 // ----------------------------------------------------------------- disputes
 
+function CaptainSupportChatDialog({ issue, onClose }: { issue: UnifiedDispute; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [body, setBody] = useState('');
+  const messages = useQuery({ queryKey: ['captain-payment-issue-messages', issue.id], queryFn: () => fetchCaptainPaymentIssueMessages(issue.id), refetchInterval: 10_000 });
+  const send = useMutation({
+    mutationFn: () => sendCaptainPaymentIssueMessage(issue.id, body.trim()),
+    onSuccess: () => { setBody(''); void queryClient.invalidateQueries({ queryKey: ['captain-payment-issue-messages', issue.id] }); },
+  });
+  useEffect(() => { setBody(''); }, [issue.id]);
+  const rows = (messages.data ?? []) as CaptainPaymentIssueMessage[];
+  return <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-900/50 px-4" onClick={onClose}><div className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}><div className="flex items-start justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-900">Captain support chat</h3><p className="mt-1 text-xs text-slate-500">Ride {issue.ride_id?.slice(0, 8) ?? '—'} · {issue.reason}</p></div><button onClick={onClose} className="rounded px-2 py-1 text-sm text-slate-500">Close</button></div><div className="mt-4 min-h-32 flex-1 space-y-2 overflow-y-auto rounded-lg bg-slate-50 p-3">{messages.isLoading ? <p className="text-sm text-slate-500">Loading messages…</p> : messages.error ? <p className="text-sm text-rose-600">Could not load messages.</p> : rows.length ? rows.map((message) => <div key={message.id} className={message.sender_type === 'support' ? 'ml-8 rounded-lg bg-indigo-100 p-2.5 text-sm' : 'mr-8 rounded-lg bg-white p-2.5 text-sm shadow-sm'}><p className="mb-1 text-xs font-semibold text-slate-500">{message.sender_type === 'support' ? 'Support' : 'Captain'} · {formatDateTime(message.created_at)}</p><p className="whitespace-pre-wrap text-slate-800">{message.body}</p></div>) : <p className="text-sm text-slate-500">No messages yet.</p>}</div><textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={500} rows={3} placeholder="Write a reply to the Captain" className="mt-3 w-full rounded-lg border border-slate-300 p-2 text-sm" /><div className="mt-3 flex justify-end gap-2"><button onClick={onClose} className="rounded-lg px-3 py-1.5 text-sm">Cancel</button><button disabled={send.isPending || !body.trim()} onClick={() => send.mutate()} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40">{send.isPending ? 'Sending…' : 'Send reply'}</button></div>{send.error ? <p className="mt-2 text-sm text-rose-600">{send.error instanceof Error ? send.error.message : 'Could not send reply.'}</p> : null}</div></div>;
+}
+
+function CustomerSupportChatDialog({ issue, onClose }: { issue: UnifiedDispute; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [body, setBody] = useState('');
+  const messages = useQuery({ queryKey: ['customer-payment-issue-messages', issue.id], queryFn: () => fetchCustomerPaymentIssueMessages(issue.id), refetchInterval: 10_000 });
+  const send = useMutation({ mutationFn: () => sendCustomerPaymentIssueMessage(issue.id, body.trim()), onSuccess: () => { setBody(''); void queryClient.invalidateQueries({ queryKey: ['customer-payment-issue-messages', issue.id] }); } });
+  useEffect(() => { setBody(''); }, [issue.id]);
+  const rows = (messages.data ?? []) as CustomerPaymentIssueMessage[];
+  return <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-900/50 px-4" onClick={onClose}><div className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}><div className="flex items-start justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-900">Customer support chat</h3><p className="mt-1 text-xs text-slate-500">The first reply assigns this issue to you · Ride {issue.ride_id?.slice(0, 8) ?? '—'} · {issue.reason}</p></div><button onClick={onClose} className="rounded px-2 py-1 text-sm text-slate-500">Close</button></div><div className="mt-4 min-h-32 flex-1 space-y-2 overflow-y-auto rounded-lg bg-slate-50 p-3">{messages.isLoading ? <p className="text-sm text-slate-500">Loading messages…</p> : messages.error ? <p className="text-sm text-rose-600">Could not load messages.</p> : rows.length ? rows.map((message) => <div key={message.id} className={message.sender_type === 'support' ? 'ml-8 rounded-lg bg-indigo-100 p-2.5 text-sm' : 'mr-8 rounded-lg bg-white p-2.5 text-sm shadow-sm'}><p className="mb-1 text-xs font-semibold text-slate-500">{message.sender_type === 'support' ? 'Support' : 'Customer'} · {formatDateTime(message.created_at)}</p><p className="whitespace-pre-wrap text-slate-800">{message.body}</p></div>) : <p className="text-sm text-slate-500">No messages yet.</p>}</div><textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={500} rows={3} placeholder="Write a reply to the Customer" className="mt-3 w-full rounded-lg border border-slate-300 p-2 text-sm" /><div className="mt-3 flex justify-end gap-2"><button onClick={onClose} className="rounded-lg px-3 py-1.5 text-sm">Cancel</button><button disabled={send.isPending || !body.trim()} onClick={() => send.mutate()} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40">{send.isPending ? 'Sending…' : 'Send reply'}</button></div>{send.error ? <p className="mt-2 text-sm text-rose-600">{send.error instanceof Error ? send.error.message : 'Could not send reply.'}</p> : null}</div></div>;
+}
+
 function DisputesTab() {
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState<{ dispute: UnifiedDispute; decision: 'resolved' | 'rejected' } | null>(null);
+  const [chatIssue, setChatIssue] = useState<UnifiedDispute | null>(null);
   const disputes = useQuery({ queryKey: ['disputes'], queryFn: fetchAllDisputes });
   const resolveMutation = useMutation({
     mutationFn: (args: { dispute: UnifiedDispute; decision: 'resolved' | 'rejected'; note: string }) => {
@@ -429,7 +459,7 @@ function DisputesTab() {
               cell: (c) => {
                 const row = c.row.original;
                 if (!['open', 'under_review'].includes(row.status)) return null;
-                if (row.source !== 'payout') return <button onClick={() => setDialog({ dispute: row, decision: 'resolved' })} className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500">Resolve</button>;
+                if (row.source !== 'payout') return <div className="flex justify-end gap-1.5">{row.source === 'captain' || row.source === 'customer' ? <button onClick={() => setChatIssue(row)} className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-500">Chat</button> : null}<button onClick={() => setDialog({ dispute: row, decision: 'resolved' })} className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500">Resolve</button></div>;
                 return (
                   <div className="flex justify-end gap-1.5">
                     <button
@@ -465,6 +495,8 @@ function DisputesTab() {
           onSubmit={(values) => resolveMutation.mutate({ dispute: dialog.dispute, decision: dialog.decision, note: values.note })}
         />
       ) : null}
+      {chatIssue?.source === 'captain' ? <CaptainSupportChatDialog issue={chatIssue} onClose={() => setChatIssue(null)} /> : null}
+      {chatIssue?.source === 'customer' ? <CustomerSupportChatDialog issue={chatIssue} onClose={() => setChatIssue(null)} /> : null}
     </>
   );
 }

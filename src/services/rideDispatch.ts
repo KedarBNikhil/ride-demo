@@ -85,10 +85,41 @@ export type CaptainRidePayout = {
   is_held: boolean;
 };
 
+export type CaptainPaymentIssue = {
+  id: string;
+  reason: 'customer_did_not_pay' | 'payment_method_mismatch' | 'upi_not_received' | 'cash_not_received' | 'other';
+  status: 'open' | 'resolved';
+  opened_at: string;
+};
+
+export type CaptainPaymentIssueMessage = {
+  id: string;
+  sender_type: 'captain' | 'support';
+  body: string;
+  created_at: string;
+};
+
+export type CustomerPaymentIssue = {
+  id: string;
+  reason: 'paid_but_not_received' | 'incorrect_fare' | 'upi_problem' | 'cash_dispute' | 'other';
+  customer_note: string | null;
+  status: 'open' | 'resolved';
+  opened_at: string;
+  assigned_support_id: string | null;
+};
+
+export type CustomerPaymentIssueMessage = {
+  id: string;
+  sender_type: 'customer' | 'support';
+  body: string;
+  created_at: string;
+};
+
 export type CaptainRideDetails = {
   ride: DispatchRide;
   customerName: string | null;
   payout: CaptainRidePayout | null;
+  paymentIssue: CaptainPaymentIssue | null;
 };
 
 export type CustomerPromotionStatus = {
@@ -371,13 +402,14 @@ export const rideDispatchService = {
   },
 
   async getCaptainRideDetails(rideId: string): Promise<CaptainRideDetails> {
-    const [ride, detail, payout] = await Promise.all([
+    const [ride, detail, payout, paymentIssue] = await Promise.all([
       this.getRide(rideId),
       requireClient().rpc('captain_ride_detail', { p_ride_id: rideId }).maybeSingle(),
       this.getCaptainRidePayout(rideId).catch(() => null),
+      this.getCaptainPaymentIssue(rideId).catch(() => null),
     ]);
     if (detail.error || !detail.data) throw detail.error ?? new Error('Captain ride detail is unavailable');
-    return { ride, customerName: typeof (detail.data as { customer_name?: unknown }).customer_name === 'string' ? (detail.data as { customer_name: string }).customer_name : null, payout };
+    return { ride, customerName: typeof (detail.data as { customer_name?: unknown }).customer_name === 'string' ? (detail.data as { customer_name: string }).customer_name : null, payout, paymentIssue };
   },
 
   async getCaptainPendingOffer(rideId: string, offerId: string): Promise<CaptainRideRequest | null> {
@@ -539,8 +571,42 @@ export const rideDispatchService = {
     if (error) throw error;
   },
 
-  async raiseCustomerPaymentIssue(rideId: string, reason: string) {
-    const { error } = await requireClient().rpc('customer_raise_payment_issue', { p_ride_id: rideId, p_reason: reason });
+  async getCaptainPaymentIssue(rideId: string): Promise<CaptainPaymentIssue | null> {
+    const { data, error } = await requireClient().rpc('captain_payment_issue_for_ride', { p_ride_id: rideId }).maybeSingle();
+    if (error) throw error;
+    return data as CaptainPaymentIssue | null;
+  },
+
+  async getCaptainPaymentIssueMessages(rideId: string): Promise<CaptainPaymentIssueMessage[]> {
+    const { data, error } = await requireClient().rpc('captain_payment_issue_messages', { p_ride_id: rideId });
+    if (error) throw error;
+    return (data ?? []) as CaptainPaymentIssueMessage[];
+  },
+
+  async sendCaptainPaymentIssueMessage(rideId: string, body: string) {
+    const { error } = await requireClient().rpc('captain_send_payment_issue_message', { p_ride_id: rideId, p_body: body.trim() });
+    if (error) throw error;
+  },
+
+  async raiseCustomerPaymentIssue(rideId: string, reason: string, note?: string) {
+    const { error } = await requireClient().rpc('customer_raise_payment_issue', { p_ride_id: rideId, p_reason: reason, p_note: note?.trim() || null });
+    if (error) throw error;
+  },
+
+  async getCustomerPaymentIssue(rideId: string): Promise<CustomerPaymentIssue | null> {
+    const { data, error } = await requireClient().rpc('customer_payment_issue_for_ride', { p_ride_id: rideId }).maybeSingle();
+    if (error) throw error;
+    return data as CustomerPaymentIssue | null;
+  },
+
+  async getCustomerPaymentIssueMessages(rideId: string): Promise<CustomerPaymentIssueMessage[]> {
+    const { data, error } = await requireClient().rpc('customer_payment_issue_messages', { p_ride_id: rideId });
+    if (error) throw error;
+    return (data ?? []) as CustomerPaymentIssueMessage[];
+  },
+
+  async sendCustomerPaymentIssueMessage(rideId: string, body: string) {
+    const { error } = await requireClient().rpc('customer_send_payment_issue_message', { p_ride_id: rideId, p_body: body.trim() });
     if (error) throw error;
   },
 

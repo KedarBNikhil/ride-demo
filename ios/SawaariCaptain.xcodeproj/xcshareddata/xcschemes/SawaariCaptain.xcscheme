@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "Sawaari.app"
-               BlueprintName = "Sawaari"
-               ReferencedContainer = "container:Sawaari.xcodeproj">
+               BuildableName = "SawaariCaptain.app"
+               BlueprintName = "SawaariCaptain"
+               ReferencedContainer = "container:SawaariCaptain.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "SawaariTests.xctest"
-               BlueprintName = "SawaariTests"
-               ReferencedContainer = "container:Sawaari.xcodeproj">
+               BuildableName = "SawaariCaptainTests.xctest"
+               BlueprintName = "SawaariCaptainTests"
+               ReferencedContainer = "container:SawaariCaptain.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "Sawaari.app"
-            BlueprintName = "Sawaari"
-            ReferencedContainer = "container:Sawaari.xcodeproj">
+            BuildableName = "SawaariCaptain.app"
+            BlueprintName = "SawaariCaptain"
+            ReferencedContainer = "container:SawaariCaptain.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "Sawaari.app"
-            BlueprintName = "Sawaari"
-            ReferencedContainer = "container:Sawaari.xcodeproj">
+            BuildableName = "SawaariCaptain.app"
+            BlueprintName = "SawaariCaptain"
+            ReferencedContainer = "container:SawaariCaptain.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

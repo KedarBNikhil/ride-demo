@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert, Platform } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
@@ -91,9 +91,9 @@ async function requestBackgroundPermission(): Promise<boolean> {
   const background = await Location.getBackgroundPermissionsAsync();
   if (background.status === 'granted') return true;
   return new Promise((resolve) => Alert.alert(
-    'Location during active rides',
-    'Sawaari uses your location during an active ride to provide ride tracking and help prevent fraudulent rides. It stops when the ride ends.',
-    [{ text: 'Not now', style: 'cancel', onPress: () => resolve(false) }, { text: 'Continue', onPress: () => { void Location.requestBackgroundPermissionsAsync().then((result) => resolve(result.status === 'granted')).catch(() => resolve(false)); } }],
+    'Allow location all the time',
+    'To track an active ride while Sawaari Captain is minimized, open Settings, then tap Permissions → Location → Allow all the time. Tracking is used only during an active ride and stops when it ends.',
+    [{ text: 'Not now', style: 'cancel', onPress: () => resolve(false) }, { text: 'Open Settings', onPress: () => { void Linking.openSettings().finally(() => resolve(false)); } }],
   ));
 }
 

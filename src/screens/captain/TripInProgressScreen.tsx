@@ -14,6 +14,8 @@ import { openGoogleMapsNavigation } from '../../utils/googleNavigation';
 import { colors, fontFamily, fontSize, radii, shadows } from '../../theme';
 import { hasMovedSignificantly } from '../../utils/location';
 import { useBottomTabBarMetrics } from '../../utils/safeAreaLayout';
+import { DraggableMapSheet } from '../../components/DraggableMapSheet';
+import { fitRouteInVisibleViewport, getVisibleMapPadding } from '../../utils/mapCamera';
 
 const routeFallback: LiveCoordinate = { latitude: 15.4889, longitude: 78.4836 };
 
@@ -27,6 +29,7 @@ export function TripInProgressScreen({ request, onBack, onEndRide, onOpenChat }:
   const [tripRoute, setTripRoute] = useState<LiveCoordinate[]>([]);
   const [tripState, setTripState] = useState({ startedAt: request.startedAt ?? null, travelledDistanceKm: request.travelledDistanceKm ?? null, status: 'in_progress' });
   const [now, setNow] = useState(Date.now);
+  const hasFramedRoute = useRef(false);
   const routeStart = location ?? request.pickup ?? routeFallback;
 
   useEffect(() => rideDispatchService.subscribeToRide(request.rideId, (ride) => setTripState({ startedAt: ride.started_at ?? null, travelledDistanceKm: ride.travelled_distance_km == null ? null : Number(ride.travelled_distance_km), status: ride.status })), [request.rideId]);
@@ -67,9 +70,9 @@ export function TripInProgressScreen({ request, onBack, onEndRide, onOpenChat }:
     return () => { active = false; };
   }, [request.rideId]);
   useEffect(() => {
-    if (!mapReady) return;
-    mapRef.current?.fitToCoordinates([routeStart, request.drop], { animated: true, edgePadding: { top: 100, right: 70, bottom: 270, left: 70 } });
-  }, [mapReady, request.drop, routeStart.latitude, routeStart.longitude]);
+    if (!mapReady || hasFramedRoute.current || (!location && tripRoute.length < 2)) return;
+    hasFramedRoute.current = fitRouteInVisibleViewport(mapRef.current, tripRoute.length > 1 ? tripRoute : [routeStart, request.drop], getVisibleMapPadding({ top: 72, bottomSheetHeight: 250, bottomInset: tabBarHeight }));
+  }, [location, mapReady, request.drop, routeStart, tabBarHeight, tripRoute]);
 
   const elapsed = useMemo(() => {
     if (!tripState.startedAt) return '—';
@@ -82,7 +85,7 @@ export function TripInProgressScreen({ request, onBack, onEndRide, onOpenChat }:
       <Polyline coordinates={tripRoute.length > 1 ? tripRoute : [routeStart, request.drop]} strokeColor={colors.primary} strokeWidth={5} />
     </LiveLocationMap>
     <Pressable onPress={onBack} style={[styles.back, shadows.card]}><Text style={styles.backText}>‹</Text></Pressable>
-    <View style={[styles.sheet, { bottom: tabBarHeight }, shadows.card]}><Text style={styles.eyebrow}>{t('captain.tripInProgress')}</Text><Text style={styles.destination}>{request.destinationArea}</Text><View style={styles.stats}><Stat label={t('captain.elapsedTime')} value={elapsed} /><Stat label={t('captain.tripDistance')} value={tripState.travelledDistanceKm == null ? '—' : `${formatNumber(tripState.travelledDistanceKm, { maximumFractionDigits: 1 })} km`} /></View><Pressable onPress={onOpenChat} accessibilityRole="button" style={styles.chatButton}><Text style={styles.chatButtonText}>💬 {t('captain.message')}</Text></Pressable><PrimaryButton label={t('captain.navigate')} onPress={() => openGoogleMapsNavigation(request.drop)} secondary /><PrimaryButton label={t('captain.endRide')} onPress={onEndRide} /></View>
+    <DraggableMapSheet bottom={tabBarHeight} collapsedHeight={240} style={shadows.card}><Text style={styles.eyebrow}>{t('captain.tripInProgress')}</Text><Text style={styles.destination}>{request.destinationArea}</Text><View style={styles.stats}><Stat label={t('captain.elapsedTime')} value={elapsed} /><Stat label={t('captain.tripDistance')} value={tripState.travelledDistanceKm == null ? '—' : `${formatNumber(tripState.travelledDistanceKm, { maximumFractionDigits: 1 })} km`} /></View><Pressable onPress={onOpenChat} accessibilityRole="button" style={styles.chatButton}><Text style={styles.chatButtonText}>💬 {t('captain.message')}</Text></Pressable><PrimaryButton label={t('captain.navigate')} onPress={() => openGoogleMapsNavigation(request.drop)} secondary /><PrimaryButton label={t('captain.endRide')} onPress={onEndRide} /></DraggableMapSheet>
   </SafeAreaView>;
 }
 function Stat({ label, value }: { label: string; value: string }) { return <View style={styles.stat}><Text style={styles.statLabel}>{label}</Text><Text style={styles.statValue}>{value}</Text></View>; }

@@ -263,6 +263,36 @@ export function resolveCaptainIssue(issueId: string, resolutionNote: string) {
   return unwrap(() => supabase!.rpc('operator_resolve_captain_payment_issue', { p_issue_id: issueId, p_resolution_note: resolutionNote }));
 }
 
+export interface CaptainPaymentIssueMessage {
+  id: string;
+  sender_type: 'captain' | 'support';
+  body: string;
+  created_at: string;
+}
+
+export async function fetchCaptainPaymentIssueMessages(issueId: string): Promise<CaptainPaymentIssueMessage[]> {
+  return unwrap(() => supabase!.rpc('operator_captain_payment_issue_messages', { p_issue_id: issueId })) as Promise<CaptainPaymentIssueMessage[]>;
+}
+
+export function sendCaptainPaymentIssueMessage(issueId: string, body: string) {
+  return unwrap(() => supabase!.rpc('operator_send_captain_payment_issue_message', { p_issue_id: issueId, p_body: body }));
+}
+
+export interface CustomerPaymentIssueMessage {
+  id: string;
+  sender_type: 'customer' | 'support';
+  body: string;
+  created_at: string;
+}
+
+export async function fetchCustomerPaymentIssueMessages(issueId: string): Promise<CustomerPaymentIssueMessage[]> {
+  return unwrap(() => supabase!.rpc('operator_customer_payment_issue_messages', { p_issue_id: issueId })) as Promise<CustomerPaymentIssueMessage[]>;
+}
+
+export function sendCustomerPaymentIssueMessage(issueId: string, body: string) {
+  return unwrap(() => supabase!.rpc('operator_send_customer_payment_issue_message', { p_issue_id: issueId, p_body: body }));
+}
+
 export function resolveCustomerIssue(issueId: string, resolutionNote: string) {
   return unwrap(() => supabase!.rpc('operator_resolve_customer_payment_issue', { p_issue_id: issueId, p_resolution_note: resolutionNote }));
 }

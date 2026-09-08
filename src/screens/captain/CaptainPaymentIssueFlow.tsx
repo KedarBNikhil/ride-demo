@@ -15,7 +15,7 @@ const paymentIssueLabelKeys: Record<PaymentIssueReason, string> = {
   other: 'captain.paymentIssueOther',
 };
 
-export function CaptainPaymentIssueFlow({ rideId, available }: { rideId: string; available: boolean }) {
+export function CaptainPaymentIssueFlow({ rideId, available, onDone }: { rideId: string; available: boolean; onDone?: () => void }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false); const [saving, setSaving] = useState(false); const [reason, setReason] = useState<PaymentIssueReason | null>(null); const [noted, setNoted] = useState(false); const [error, setError] = useState('');
   const submit = async () => { if (!reason) return setError(t('captain.paymentIssueRequired')); setSaving(true); setError(''); try { await rideDispatchService.raiseCaptainPaymentIssue(rideId, reason); setNoted(true); setOpen(false); } catch { setError(t('captain.paymentIssueSaveFailed')); } finally { setSaving(false); } };
@@ -24,7 +24,7 @@ export function CaptainPaymentIssueFlow({ rideId, available }: { rideId: string;
     {!available && !noted && <Text style={styles.unavailable}>{t('captain.paymentIssueUnavailable')}</Text>}
     {!!error && <Text style={styles.error}>{error}</Text>}
     {open && <View style={[styles.issueCard, shadows.soft]}><Text style={styles.issueTitle}>{t('captain.paymentIssueTitle')}</Text>{paymentIssueReasons.map((option) => <Pressable key={option} onPress={() => { setReason(option); setError(''); }} accessibilityRole="radio" accessibilityState={{ selected: reason === option }} style={[styles.issueOption, reason === option && styles.issueOptionSelected]}><Text style={styles.issueRadio}>{reason === option ? '◉' : '○'}</Text><Text style={styles.issueOptionText}>{t(paymentIssueLabelKeys[option])}</Text></Pressable>)}<PrimaryButton label={saving ? t('login.pleaseWait') : t('captain.submitPaymentIssue')} onPress={() => { void submit(); }} disabled={saving} /></View>}
-    {noted && <Text style={styles.noted}>{t('captain.paymentIssueNoted')}</Text>}
+    {noted && <><Text style={styles.noted}>{t('captain.paymentIssueNoted')}</Text>{onDone && <PrimaryButton label={t('actions.done')} onPress={onDone} />}</>}
   </View>;
 }
 
