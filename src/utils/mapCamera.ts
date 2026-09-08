@@ -4,7 +4,7 @@ export type MapCoordinate = { latitude: number; longitude: number };
 
 // A local street/neighbourhood view. Keep this semantic constant shared so the
 // two apps do not slowly diverge through unrelated magic region values.
-export const HOME_LOCATION_DELTA = 0.014;
+export const HOME_LOCATION_DELTA = 0.01;
 
 export function isValidMapCoordinate(value: unknown): value is MapCoordinate {
   if (!value || typeof value !== 'object') return false;
