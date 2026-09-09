@@ -1,0 +1,68 @@
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { PrimaryButton } from './PrimaryButton';
+import { ScreenShell } from './ScreenShell';
+import { NumericCodeInput } from './NumericCodeInput';
+import { colors, fontFamily, fontSize, radii, shadows } from '../theme';
+import { toIndianE164 } from '../services/authMode';
+
+type Props = {
+  title: string;
+  subtitle: string;
+  emoji: string;
+  onBack?: () => void;
+  onSendOtp: (phone: string) => Promise<unknown>;
+  onVerifyOtp: (phone: string, otp: string) => Promise<unknown>;
+  initialPhone?: string;
+  phoneStepContent?: React.ReactNode;
+  phoneStepLabel?: string;
+  canSendOtp?: boolean;
+  children?: React.ReactNode;
+};
+
+/** Shared native phone and OTP entry used by both customer and captain flows. */
+export function PhoneOtpAuth({ title, subtitle, emoji, onBack, onSendOtp, onVerifyOtp, initialPhone = '', phoneStepContent, phoneStepLabel, canSendOtp = true, children }: Props) {
+  const { t } = useTranslation();
+  const [phone, setPhone] = useState(initialPhone);
+  const [otp, setOtp] = useState('');
+  const [step, setStep] = useState<'phone' | 'otp'>('phone');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const value = step === 'phone' ? phone : otp;
+  const limit = step === 'phone' ? 13 : 6;
+  const phoneIsValid = () => {
+    try { toIndianE164(phone); return true; } catch { return false; }
+  };
+
+  useEffect(() => {
+    if (step === 'phone') setPhone(initialPhone);
+  }, [initialPhone, step]);
+
+  const submit = async () => {
+    if (step === 'phone' && !phoneIsValid()) return setError(t('login.invalidPhone'));
+    if (step === 'otp' && !/^\d{6}$/.test(otp)) return setError(t('login.invalidOtp'));
+    setError(''); setLoading(true);
+    try {
+      if (step === 'phone') { const result = await onSendOtp(phone); if (result !== false) setStep('otp'); }
+      else await onVerifyOtp(phone, otp);
+    } catch (caught) {
+      setError(t('login.tryAgain'));
+    } finally { setLoading(false); }
+  };
+
+  return <ScreenShell back={onBack} title={step === 'phone' ? title : t('login.otpTitle')}>
+    {step === 'phone' && children}
+    <View style={styles.hero}>{emoji ? <Text style={styles.emoji}>{emoji}</Text> : null}<Text style={styles.subtitle}>{step === 'phone' ? subtitle : t('login.otpSubtitle')}</Text></View>
+    <View style={styles.card}>{(step === 'phone' ? phoneStepLabel ?? t('login.phoneLabel') : t('login.otpLabel')) ? <Text style={styles.label}>{step === 'phone' ? phoneStepLabel ?? t('login.phoneLabel') : t('login.otpLabel')}</Text> : null}
+      {step === 'otp' ? <NumericCodeInput value={otp} length={limit} placeholder={t('login.otpPlaceholder')} onChangeText={(next) => { setOtp(next); setError(''); }} /> : phoneStepContent ?? <NumericCodeInput value={phone} length={limit} phone placeholder={t('login.phonePlaceholder')} onChangeText={(next) => { setPhone(next); setError(''); }} />}
+    </View>
+    {!!error && <Text style={styles.error}>{error}</Text>}
+    <PrimaryButton label={loading ? t('login.pleaseWait') : step === 'phone' ? t('login.sendOtp') : t('login.verify')} onPress={() => { void submit(); }} disabled={loading || (step === 'phone' && (!phoneIsValid() || !canSendOtp))} />
+  </ScreenShell>;
+}
+
+const styles = StyleSheet.create({
+  hero: { alignItems: 'center', gap: 10, paddingTop: 8 }, emoji: { fontSize: 48 }, subtitle: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, lineHeight: 25, textAlign: 'center' },
+  card: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 8, padding: 18, ...shadows.soft }, label: { color: colors.textPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' }, error: { color: colors.error, fontFamily, fontSize: fontSize.sm, fontWeight: '700', textAlign: 'center' },
+});

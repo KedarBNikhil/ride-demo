@@ -1,3 +1,14 @@
+# Sawaari workspace
+
+This repository now contains two independent Expo applications:
+
+- `apps/customer` — Customer-only source, native projects, EAS configuration, and OTA channel.
+- `apps/captain` — Captain-only source, native projects, EAS configuration, and OTA channel.
+
+Run `npm run start:customer` or `npm run start:captain` from the workspace root. Run EAS from the relevant app directory only; the root is not an Expo application. Customer and Captain must never use each other's app configuration, native folder, update URL, runtime, or release command.
+
+The material below describes the pre-separation single-app layout and is retained only as historical context; do not use its commands.
+
 # Nandyal Ride Demo — Stage 1
 
 Expo foundation for independent Customer and Captain flows in English and Telugu.

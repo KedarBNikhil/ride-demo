@@ -23,15 +23,20 @@ const incomingRideChannel = 'incoming-ride-requests-v2';
 const incomingRideSound = 'incoming_ride_alert.mp3';
 const incomingRideAlertIntervalMs = 2_000;
 const incomingRideAlertMaxDeliveries = 6;
+type FirebaseServiceAccount = { client_email: string; private_key: string; project_id: string };
+let firebaseToken: { value: string; expiresAt: number } | null = null;
 
 function notificationsFor(payload: WebhookPayload): RideNotification[] {
   const record = payload.record ?? {};
+  const oldRecord = payload.old_record ?? {};
   if (payload.table === 'ride_offers' && payload.type === 'INSERT' && record.status === 'offered' && typeof record.captain_id === 'string') {
-    return [{ userId: record.captain_id, variant: 'captain', title: 'New ride request', body: 'A nearby ride is available.', data: { rideId: record.ride_id, offerId: record.id, type: 'ride_offer' }, channelId: incomingRideChannel, collapseId: `ride-offer-${record.id}` }];
+    return [{ userId: record.captain_id, variant: 'captain', title: 'New ride request', body: 'A nearby ride is available.', data: { rideId: record.ride_id, offerId: record.id, expiresAt: record.expires_at, type: 'ride_offer' }, channelId: incomingRideChannel, collapseId: `ride-offer-${record.id}` }];
+  }
+  if (payload.table === 'ride_offers' && payload.type === 'UPDATE' && typeof record.captain_id === 'string' && typeof record.id === 'string' && oldRecord.status === 'offered' && record.status !== 'offered') {
+    return [{ userId: record.captain_id, variant: 'captain', title: '', body: '', data: { offerId: record.id, type: 'ride_offer_closed' }, channelId: incomingRideChannel, collapseId: `ride-offer-${record.id}` }];
   }
   if (payload.table !== 'rides') return [];
 
-  const oldRecord = payload.old_record ?? {};
   const notifications: RideNotification[] = [];
   if (typeof record.customer_id === 'string' && record.status !== oldRecord.status) {
     const messages: Record<string, [string, string]> = {
@@ -82,6 +87,57 @@ async function isStillActionableOffer(offerId: string) {
     && new Date(data.expires_at).getTime() > Date.now();
 }
 
+function base64Url(value: string | Uint8Array) {
+  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value;
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+}
+
+function privateKeyBytes(pem: string) {
+  const base64 = pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, '');
+  const binary = atob(base64);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+async function firebaseAccessToken() {
+  if (firebaseToken && firebaseToken.expiresAt > Date.now() + 60_000) return firebaseToken.value;
+  const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON');
+  if (!raw) return null;
+  let account: FirebaseServiceAccount;
+  try { account = JSON.parse(raw) as FirebaseServiceAccount; } catch { return null; }
+  if (!account.client_email || !account.private_key || !account.project_id) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const unsigned = `${base64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))}.${base64Url(JSON.stringify({ iss: account.client_email, scope: 'https://www.googleapis.com/auth/firebase.messaging', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 }))}`;
+  const key = await crypto.subtle.importKey('pkcs8', privateKeyBytes(account.private_key), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(unsigned));
+  const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${unsigned}.${base64Url(new Uint8Array(signature))}` }) });
+  if (!response.ok) return null;
+  const body = await response.json() as { access_token?: string; expires_in?: number };
+  if (!body.access_token) return null;
+  firebaseToken = { value: body.access_token, expiresAt: Date.now() + Math.max(60, body.expires_in ?? 3600) * 1000 };
+  return firebaseToken.value;
+}
+
+async function sendDirectCaptainOfferSignal(notification: RideNotification, tokens: string[]) {
+  const accessToken = await firebaseAccessToken();
+  if (!accessToken || !tokens.length) return false;
+  const offerId = notification.data.offerId;
+  const isOffer = notification.data.type === 'ride_offer';
+  if (typeof offerId !== 'string' || (isOffer && !(await isStillActionableOffer(offerId)))) return false;
+  const raw = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON')!) as FirebaseServiceAccount;
+  const expiresAt = typeof notification.data.expiresAt === 'string' ? notification.data.expiresAt : '';
+  const ttlMs = Math.max(0, new Date(expiresAt).getTime() - Date.now());
+  let sent = false;
+  for (const token of tokens) {
+    const response = await fetch(`https://fcm.googleapis.com/v1/projects/${raw.project_id}/messages:send`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: { token, data: isOffer ? { type: 'ride_offer', rideId: String(notification.data.rideId), offerId, expiresAt } : { type: 'ride_offer_closed', offerId }, android: { priority: 'high', ttl: `${isOffer ? ttlMs : 10_000}ms` } } }) });
+    if (response.ok) { sent = true; continue; }
+    const error = await response.text();
+    if (error.includes('UNREGISTERED') || error.includes('INVALID_ARGUMENT')) await supabase.from('captain_fcm_device_tokens').delete().eq('fcm_token', token);
+  }
+  return sent;
+}
+
 /**
  * Remote pushes are handled by Android even when the Captain process is not
  * running. Re-delivering the same collapsed notification gives an incoming
@@ -112,9 +168,15 @@ Deno.serve(async (request) => {
       .select('expo_push_token').eq('user_id', notification.userId).eq('app_variant', notification.variant);
     if (error) return Response.json({ error: error.message }, { status: 500, headers: corsHeaders });
     const values = tokens?.map(({ expo_push_token }) => expo_push_token) ?? [];
-    if (values.length) {
-      if (notification.channelId === incomingRideChannel) await sendIncomingRideAlertLoop(notification, values);
-      else await sendToTokens(notification, values);
+    if (notification.channelId === incomingRideChannel) {
+      const { data: fcmTokens, error: fcmError } = await supabase.from('captain_fcm_device_tokens').select('fcm_token').eq('user_id', notification.userId);
+      if (fcmError) return Response.json({ error: fcmError.message }, { status: 500, headers: corsHeaders });
+      const directDelivered = await sendDirectCaptainOfferSignal(notification, fcmTokens?.map(({ fcm_token }) => fcm_token) ?? []);
+      // Expo's bounded delivery loop remains the compatibility fallback for
+      // legacy builds, unregistered devices, or unavailable FCM credentials.
+      if (!directDelivered && notification.data.type === 'ride_offer' && values.length) await sendIncomingRideAlertLoop(notification, values);
+    } else if (values.length) {
+      await sendToTokens(notification, values);
     }
     delivered += values.length;
   }
