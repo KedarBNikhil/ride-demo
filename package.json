@@ -22,7 +22,11 @@
     "ios:captain": "APP_VARIANT=captain EXPO_PUBLIC_APP_MODE=captain expo start --ios --clear",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "eas-build-post-install": "expo prebuild --clean --no-install --non-interactive"
+    "ota:customer:preflight": "bash scripts/ota-release.sh customer --preflight",
+    "ota:customer:publish": "bash scripts/ota-release.sh customer --publish",
+    "ota:captain:preflight": "bash scripts/ota-release.sh captain --preflight",
+    "ota:captain:publish": "bash scripts/ota-release.sh captain --publish",
+    "eas-build-post-install": "CI=1 expo prebuild --clean --no-install"
   },
   "dependencies": {
     "@expo-google-fonts/noto-sans-telugu": "^0.2.3",
@@ -31,6 +35,7 @@
     "@react-navigation/native-stack": "^7.3.26",
     "@supabase/supabase-js": "^2.112.3",
     "expo": "~54.0.37",
+    "expo-application": "~7.0.8",
     "expo-asset": "~12.0.13",
     "expo-audio": "~1.1.1",
     "expo-constants": "~18.0.14",

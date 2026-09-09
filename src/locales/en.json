@@ -283,6 +283,7 @@
     "paymentIssueDetailsRequired": "Describe the issue to continue.",
     "paymentIssueDetailsPlaceholder": "Describe what happened",
     "paymentIssueSaveFailed": "We could not submit the payment issue. Please try again.",
+    "paymentIssueNoted": "Your issue has been noted. Our representative will connect with you to help resolve it.",
     "submitPaymentIssue": "Submit issue",
     "paymentIssuePaidButNotReceived": "Paid but captain says payment not received",
     "paymentIssueIncorrectFare": "Charged incorrect fare",

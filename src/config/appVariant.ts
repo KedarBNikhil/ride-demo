@@ -1,17 +1,43 @@
 import Constants from 'expo-constants';
+import { applicationId } from 'expo-application';
 import type { AppMode } from '../navigation/AppNavigator';
 
 export type AppVariant = AppMode | 'chooser';
 
-// Expo/Metro's transform cache is not a safe source of truth for a variant
-// switch: a cached public environment replacement can otherwise carry the
-// previous app's mode into an OTA bundle. The manifest is generated together
-// with the native app/update and is the authoritative variant identity.
+type SeparateAppIdentity = {
+  mode: Extract<AppVariant, 'customer' | 'captain'>;
+  projectId: string;
+};
+
+const nativeIdentities: Record<string, SeparateAppIdentity> = {
+  'com.nandyalride.customer': {
+    mode: 'customer',
+    projectId: '1158ff7e-1da5-4a6a-9080-14791394da7a',
+  },
+  'com.nandyalride.captain': {
+    mode: 'captain',
+    projectId: '6acc15fd-28b0-4f3a-b825-7e8e5d05cc13',
+  },
+};
+
+// `applicationId`/bundle ID is compiled into the installed native binary and
+// cannot be changed by an OTA. Expo config and EXPO_PUBLIC_* values are part
+// of the update manifest/bundle and must therefore be treated as untrusted at
+// startup. A mismatch deliberately prevents either app flow from rendering.
+const nativeIdentity = applicationId ? nativeIdentities[applicationId] : undefined;
 const manifestVariant = Constants.expoConfig?.extra?.appMode;
-const configuredVariant = typeof manifestVariant === 'string' ? manifestVariant : process.env.EXPO_PUBLIC_APP_MODE;
+const manifestProjectId = Constants.expoConfig?.extra?.eas?.projectId;
 
-export const appVariant: AppVariant = configuredVariant === 'captain' || configuredVariant === 'operator' || configuredVariant === 'chooser'
-  ? configuredVariant
-  : 'customer';
+if (!nativeIdentity) {
+  throw new Error(`Unsupported native application identity: ${applicationId ?? 'unavailable'}.`);
+}
+if (manifestVariant !== nativeIdentity.mode || manifestProjectId !== nativeIdentity.projectId) {
+  throw new Error(
+    `Application identity mismatch: native ${applicationId} requires ${nativeIdentity.mode}/${nativeIdentity.projectId}, ` +
+    `but the loaded update declares ${String(manifestVariant)}/${String(manifestProjectId)}.`
+  );
+}
 
-export const isSeparateApp = appVariant !== 'chooser';
+export const appVariant: AppVariant = nativeIdentity.mode;
+
+export const isSeparateApp = true;

@@ -1,4 +1,17 @@
-const configuredVariant = process.env.APP_VARIANT ?? process.env.EXPO_PUBLIC_APP_MODE ?? 'customer';
+const appVariant = process.env.APP_VARIANT;
+const publicAppMode = process.env.EXPO_PUBLIC_APP_MODE;
+
+// A release command must state both identities. Choosing Customer when either
+// value is absent can produce a Customer bundle from an intended Captain
+// release (or the reverse when Metro reuses public environment replacements).
+if (!appVariant || !publicAppMode) {
+  throw new Error('APP_VARIANT and EXPO_PUBLIC_APP_MODE must both be set explicitly.');
+}
+if (appVariant !== publicAppMode) {
+  throw new Error(`APP_VARIANT (${appVariant}) must match EXPO_PUBLIC_APP_MODE (${publicAppMode}).`);
+}
+
+const configuredVariant = appVariant;
 if (configuredVariant !== 'customer' && configuredVariant !== 'captain' && configuredVariant !== 'chooser') {
   throw new Error('APP_VARIANT must be customer, captain, or chooser.');
 }
