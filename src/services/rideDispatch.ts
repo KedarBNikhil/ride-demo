@@ -8,6 +8,10 @@ const pickupOtpRequests = new Map<string, Promise<string | null>>();
 const pickupOtpStorageKey = (rideId: string) => `nandyal-ride-demo.customer.pickupOtp.${rideId}`;
 
 export type RideStatus = 'requested' | 'searching' | 'accepted' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
+export const customerActiveRideStatuses = ['requested', 'searching', 'accepted', 'arrived', 'in_progress'] as const satisfies readonly RideStatus[];
+export const isCustomerActiveRideStatus = (status: RideStatus | null | undefined): status is typeof customerActiveRideStatuses[number] =>
+  Boolean(status && customerActiveRideStatuses.includes(status as typeof customerActiveRideStatuses[number]));
+export type CustomerRideLifecycle = 'payment' | 'rating' | 'active' | 'none';
 export type DispatchRide = {
   id: string;
   status: RideStatus;
@@ -50,6 +54,20 @@ export type DispatchRide = {
   started_at?: string | null;
   completed_at?: string | null;
 };
+
+// `completed` means the Captain has ended the driving portion of the trip. It
+// does not, by itself, release the Customer to make another booking: payment
+// (and then the existing rating flow) are resolved from persisted ride fields.
+export const customerRideLifecycle = (ride: DispatchRide | null | undefined): CustomerRideLifecycle => {
+  if (!ride) return 'none';
+  if (isCustomerActiveRideStatus(ride.status)) return 'active';
+  if (ride.status !== 'completed') return 'none';
+  if (ride.payment_status === 'pending' || ride.payment_status === 'declared') return 'payment';
+  if ((ride.payment_status === 'confirmed' || ride.payment_status === 'not_required') && ride.customer_rating == null) return 'rating';
+  return 'none';
+};
+
+export const customerRideBlocksBooking = (ride: DispatchRide | null | undefined) => customerRideLifecycle(ride) !== 'none';
 
 export type AssignedCaptainDetails = {
   fullName: string;
@@ -260,7 +278,18 @@ export const rideDispatchService = {
 
   async getCustomerActiveRide(): Promise<DispatchRide | null> {
     const rides = await this.getCustomerRideHistory();
-    return rides.find((ride) => ['requested', 'searching', 'accepted', 'arrived', 'in_progress'].includes(ride.status)) ?? null;
+    return rides.find((ride) => isCustomerActiveRideStatus(ride.status)) ?? null;
+  },
+
+  async getCustomerCurrentRide(): Promise<DispatchRide | null> {
+    const rides = await this.getCustomerRideHistory();
+    // Post-ride obligations deliberately outrank an operational ride if old
+    // data is inconsistent. The create-ride invariant prevents that state,
+    // while this priority keeps the customer out of a new booking flow.
+    return rides.find((ride) => customerRideLifecycle(ride) === 'payment')
+      ?? rides.find((ride) => customerRideLifecycle(ride) === 'rating')
+      ?? rides.find((ride) => customerRideLifecycle(ride) === 'active')
+      ?? null;
   },
 
   async getCustomerPromotionStatus(): Promise<CustomerPromotionStatus | null> {

@@ -28,7 +28,7 @@ import { PhoneOtpAuth } from '../components/PhoneOtpAuth';
 import { customerAuthService } from '../services/customerAuth';
 import { toIndianE164 } from '../services/authMode';
 import { rideCreationService, type CancellationReason } from '../services/rideCreation';
-import { rideDispatchService, type AssignedCaptainDetails, type CustomerPromotionStatus, type DispatchRide, type RideStatus } from '../services/rideDispatch';
+import { isCustomerActiveRideStatus, rideDispatchService, type AssignedCaptainDetails, type CustomerPromotionStatus, type DispatchRide, type RideStatus } from '../services/rideDispatch';
 import { googleMapsService, type PlaceSuggestion } from '../services/googleMaps';
 import { offlineLocationCatalogue, type OfflineLocation } from '../services/offlineLocationCatalogue';
 import { decodeGooglePolyline } from '../utils/polyline';
@@ -1058,10 +1058,12 @@ function CustomerFareValue({ display, t, alignStart = false }: { display: Custom
 
 export function BookingConfirmScreen({
   ride,
+  beforeBook,
   onBook,
   onBack,
 }: {
   ride: CustomerRide;
+  beforeBook: () => Promise<boolean>;
   onBook: (rideId: string) => Promise<void>;
   onBack: () => void;
 }) {
@@ -1069,14 +1071,18 @@ export function BookingConfirmScreen({
   const dialog = useDialog();
   const routeQuote = hasUsableRouteQuote(ride.routeQuote) ? ride.routeQuote : undefined;
   const [booking, setBooking] = useState(false);
+  const bookingRef = useRef(false);
   const [promotion, setPromotion] = useState<CustomerPromotionStatus | null>(null);
   useEffect(() => { void rideDispatchService.getCustomerPromotionStatus().then(setPromotion).catch(() => setPromotion(null)); }, []);
   const fareDisplay = getCustomerFareDisplay({ kind: ride.kind, passengerCount: ride.passengerCount, routeQuote, promotion });
   const book = async () => {
+    if (bookingRef.current) return;
     if (!routeQuote) {
       dialog({ title: t('rides.routeUnavailable') });
       return;
     }
+    if (!await beforeBook()) return;
+    bookingRef.current = true;
     setBooking(true);
     try {
       const createdRide = await rideCreationService.create(ride);
@@ -1092,6 +1098,7 @@ export function BookingConfirmScreen({
       const message = error instanceof Error ? error.message : '';
       dialog({ title: message.includes('Route quote expired') ? 'Route expired. Go back and refresh the route before booking.' : t('login.tryAgain') });
     } finally {
+      bookingRef.current = false;
       setBooking(false);
     }
   };
@@ -1277,7 +1284,8 @@ const cancellationReasons: Array<{ code: CancellationReason; labelKey: string }>
 
 export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCancelled, onBookings, onProfile, onOpenChat, onPickupOtpIssued, onShareLiveRide }: { ride: CustomerRide; onHome: () => void; onCancelled: () => void; onFareQuoteCancelled: () => void; onBookings: () => void; onProfile: () => void; onOpenChat: (rideId: string, captainName: string) => void; onPickupOtpIssued: (pickupOtp: string) => void; onShareLiveRide: (rideId: string) => void }) {
   const { t } = useTranslation();
-  const { tabBarHeight } = useBottomTabBarMetrics();
+  const { bottomInset, tabBarHeight } = useBottomTabBarMetrics();
+  const { height: windowHeight } = useWindowDimensions();
   const dialog = useDialog();
   const mapRef = useRef<MapView>(null);
   const [cancelStep, setCancelStep] = useState<'none' | 'confirm' | 'reason'>('none');
@@ -1384,7 +1392,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
     try {
       const activeRide = await rideDispatchService.getCustomerActiveRide();
       const rideId = activeRide?.id ?? liveRide?.id ?? ride.id;
-      if (!rideId || !activeRide || !['requested', 'searching', 'accepted', 'arrived', 'in_progress'].includes(activeRide.status)) throw new Error('Ride can no longer be cancelled');
+      if (!rideId || !activeRide || !isCustomerActiveRideStatus(activeRide.status)) throw new Error('Ride can no longer be cancelled');
       await rideCreationService.cancel(rideId, cancellationReason, otherReason);
       dialog({ title: t('rides.rideCancelled'), message: cancellationMayIncurCharge ? t('rides.cancellationChargePending') : undefined, buttons: [{ text: t('actions.done'), onPress: onCancelled }] });
     } catch {
@@ -1474,7 +1482,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
       {displayedCaptainCoordinate && <Marker.Animated coordinate={displayedCaptainCoordinate}><View style={styles.liveCaptainMarker}><VehicleIcon kind={vehicleType ?? ride.kind} size={28} /></View></Marker.Animated>}
     </MapView>
     <Pressable onPress={onHome} accessibilityRole="button" style={[styles.assignedBack, shadows.soft]}><Text style={styles.rideOptionsBackText}>‹</Text></Pressable>
-    <DraggableMapSheet bottom={tabBarHeight} collapsedHeight={280} style={[styles.assignedSheet, shadows.card]} contentContainerStyle={styles.assignedSheetContent}>
+    <DraggableMapSheet bottom={tabBarHeight} collapsedHeight={280} maxHeight={windowHeight} style={[styles.assignedSheet, shadows.card]} contentContainerStyle={[styles.assignedSheetContent, { paddingBottom: 24 + bottomInset }]}>
       {!arrived && <Text style={styles.bookingStatus}>{awaitingFareApproval ? t('rides.fareQuoteWaiting') : liveStatus === 'accepted' ? t('rides.bookedMessage') : t('rides.searchingSubtitle')}</Text>}
       <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(inProgress ? 'rides.startedTitle' : arrived ? 'rides.hereTitle' : awaitingFareApproval ? 'rides.fareQuoteTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{inProgress ? t('rides.startedSubtitle') : arrived ? t('rides.hereSubtitle') : awaitingFareApproval ? t('rides.fareQuoteWaiting') : t('rides.arriving')}</Text></View></View>
       {hasCurrentRide && <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{captainName}</Text><Text style={styles.assignedVehicle}>{vehicleType ? t(`rides.${vehicleType}`) : t('rides.captain')}</Text></View><View style={styles.assignedContact}><Pressable onPress={() => { if (ride.id) onOpenChat(ride.id, captainName); }} accessibilityRole="button" accessibilityLabel="Message captain" accessibilityState={{ disabled: !ride.id }} disabled={!ride.id} style={[styles.assignedCall, !ride.id && styles.assignedCallDisabled]}><Text style={styles.assignedCallText}>✉</Text></Pressable><Pressable onPress={() => { void callCaptain(); }} accessibilityRole="button" accessibilityLabel="Call captain" accessibilityState={{ disabled: !captainDetails?.phone }} disabled={!captainDetails?.phone} style={[styles.assignedCall, !captainDetails?.phone && styles.assignedCallDisabled]}><Text style={styles.assignedCallText}>☎</Text></Pressable></View></View>}
@@ -2025,7 +2033,7 @@ const styles = StyleSheet.create({
   // Captain assigned: same seamless map + sheet composition as ride selection.
   assignedSafe: { flex: 1, backgroundColor: colors.primaryLight },
   assignedBack: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 46, justifyContent: 'center', left: 16, position: 'absolute', top: 18, width: 46 },
-  assignedSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, left: 0, maxHeight: '68%', position: 'absolute', right: 0 },
+  assignedSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, left: 0, position: 'absolute', right: 0 },
   assignedSheetContent: { gap: 13, padding: 16, paddingBottom: 22 },
   bookingStatus: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   assignedHeading: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
