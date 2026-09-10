@@ -17,9 +17,16 @@
     "ios:customer": "npm run ios --workspace @sawaari/customer",
     "ios:captain": "npm run ios --workspace @sawaari/captain",
     "typecheck:customer": "npm run typecheck --workspace @sawaari/customer",
-    "typecheck:captain": "npm run typecheck --workspace @sawaari/captain"
+    "typecheck:captain": "npm run typecheck --workspace @sawaari/captain",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "allowScripts": {
     "esbuild@0.28.2": true
+  },
+  "dependencies": {
+    "expo": "~54.0.37",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
   }
 }
