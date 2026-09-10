@@ -2,6 +2,7 @@ package com.nandyalride.captain
 
 import android.app.*
 import android.content.*
+import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
