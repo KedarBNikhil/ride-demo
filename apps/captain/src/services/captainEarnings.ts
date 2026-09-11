@@ -5,7 +5,7 @@ export type CaptainEarningsOverview = { daily: DailyEarnings[]; rideEarnings: nu
 function startOfMonth(date: Date) { return new Date(date.getFullYear(), date.getMonth(), 1); }
 function nextMonth(date: Date) { return new Date(date.getFullYear(), date.getMonth() + 1, 1); }
 function localDateKey(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
-const fare = (value: number | null | undefined) => Number(value ?? 0);
+const fare = (value: unknown) => Number(value ?? 0);
 
 export const captainEarningsService = {
   async getMonth(reference = new Date()): Promise<CaptainEarningsOverview> {
@@ -20,12 +20,13 @@ export const captainEarningsService = {
     for (const row of data ?? []) {
       const date = new Date(`${row.day}T00:00:00`);
       const day = byDay.get(date.getDate());
-      const amount = fare(row.ride_earnings);
+      const amount = fare(row.net_earnings ?? row.ride_earnings);
       const count = Number(row.ride_count ?? 0);
       if (day) { day.earnings = amount; day.tripCount = count; }
-      rideEarnings += amount; heldEarnings += fare(row.held_earnings); tripCount += count;
+      rideEarnings += fare(row.ride_earnings); heldEarnings += fare(row.held_earnings); tripCount += count;
     }
-    return { daily, rideEarnings, heldEarnings, tips: null, bonuses: null, adjustments: null, totalEarnings: rideEarnings, rideMinutes: 0, onlineMinutes: null, tripCount };
+    const adjustments = ((data ?? []) as Array<{ dispute_deductions?: unknown }>).reduce((total: number, row) => total + fare(row.dispute_deductions), 0);
+    return { daily, rideEarnings, heldEarnings, tips: null, bonuses: null, adjustments, totalEarnings: rideEarnings - adjustments, rideMinutes: 0, onlineMinutes: null, tripCount };
   },
   async getToday(reference = new Date()) { const overview = await this.getMonth(reference); const day = overview.daily.find((item) => localDateKey(item.date) === localDateKey(reference)); return { ...overview, daily: day ? [day] : [], rideEarnings: day?.earnings ?? 0, totalEarnings: day?.earnings ?? 0, tripCount: day?.tripCount ?? 0 }; },
 };

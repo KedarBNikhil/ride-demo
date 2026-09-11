@@ -12,6 +12,7 @@ import {
   holdPayout,
   resolveCaptainIssue,
   resolveCustomerIssue,
+  resolveDisputeWithAdjustment,
   resolvePayoutDispute,
   reviewSettlement,
   sendCaptainPaymentIssueMessage,
@@ -420,7 +421,8 @@ function DisputesTab() {
   const [chatIssue, setChatIssue] = useState<UnifiedDispute | null>(null);
   const disputes = useQuery({ queryKey: ['disputes'], queryFn: fetchAllDisputes });
   const resolveMutation = useMutation({
-    mutationFn: (args: { dispute: UnifiedDispute; decision: 'resolved' | 'rejected'; note: string }) => {
+    mutationFn: (args: { dispute: UnifiedDispute; decision: 'resolved' | 'rejected'; note: string; resolution?: 'NO_ACTION' | 'CUSTOMER_LIABLE' | 'CAPTAIN_LIABLE'; amount?: string; reason?: string; internalNotes?: string }) => {
+      if (args.dispute.source !== 'payout' && args.decision === 'resolved') return resolveDisputeWithAdjustment(args.dispute.source, args.dispute.id, args.resolution ?? 'NO_ACTION', args.amount ? Number(args.amount) : undefined, args.reason, args.internalNotes || args.note);
       if (args.dispute.source === 'payout') return resolvePayoutDispute(args.dispute.id, args.decision, args.note);
       if (args.dispute.source === 'customer') return resolveCustomerIssue(args.dispute.id, args.note);
       return resolveCaptainIssue(args.dispute.id, args.note);
@@ -450,6 +452,7 @@ function DisputesTab() {
             { header: 'Reason', accessorFn: (r) => r.reason },
             { header: 'Ride payment', accessorFn: (r) => r.paymentStatus ? `${r.paymentMethod ?? '—'} / ${r.paymentStatus}` : '—' },
             { header: 'Operator note', accessorFn: (r) => r.operator_note ?? '—' },
+            { header: 'Adjustment', accessorFn: (r) => r.financialAdjustment, cell: (c) => { const a = c.getValue<UnifiedDispute['financialAdjustment']>(); return a ? <span>{formatFare(Number(a.original_amount))} · applied {formatFare(Number(a.applied_amount))} · remaining {formatFare(Number(a.remaining_amount))} · {titleize(a.status)}</span> : '—'; } },
             { header: 'Status', accessorKey: 'status', cell: (c) => <StatusBadge value={c.getValue<string>()} /> },
             { header: 'Resolved', accessorFn: (r) => r.resolved_at, cell: (c) => (c.getValue<string>() ? formatDateTime(c.getValue<string>()) : '—') },
             {
@@ -487,12 +490,12 @@ function DisputesTab() {
         <ActionDialog
           title={dialog.decision === 'resolved' ? 'Resolve dispute' : 'Reject dispute'}
           description={dialog.dispute.reason}
-          fields={[{ key: 'note', label: 'Operator note (required)', type: 'textarea', required: true }]}
-          submitLabel="Submit"
+          fields={dialog.decision === 'resolved' && dialog.dispute.source !== 'payout' ? [{ key: 'resolution', label: 'Financial action', type: 'select', required: true, options: [['NO_ACTION', 'No financial adjustment'], ['CUSTOMER_LIABLE', 'Customer liable'], ['CAPTAIN_LIABLE', 'Captain liable']] }, { key: 'amount', label: 'Amount ₹ (required for liability)' }, { key: 'reason', label: 'Reason (required for liability)' }, { key: 'internalNotes', label: 'Internal notes (optional)', type: 'textarea' }] : [{ key: 'note', label: 'Operator note (required)', type: 'textarea', required: true }]}
+          submitLabel={dialog.decision === 'resolved' && dialog.dispute.source !== 'payout' ? 'Resolve dispute & create adjustment' : 'Submit'}
           busy={resolveMutation.isPending}
           error={resolveMutation.error instanceof Error ? resolveMutation.error.message : null}
           onCancel={() => setDialog(null)}
-          onSubmit={(values) => resolveMutation.mutate({ dispute: dialog.dispute, decision: dialog.decision, note: values.note })}
+          onSubmit={(values) => { const liable = values.resolution === 'CUSTOMER_LIABLE' || values.resolution === 'CAPTAIN_LIABLE'; if (liable && (!values.amount?.trim() || !values.reason?.trim())) return; resolveMutation.mutate({ dispute: dialog.dispute, decision: dialog.decision, note: values.note, resolution: values.resolution as 'NO_ACTION' | 'CUSTOMER_LIABLE' | 'CAPTAIN_LIABLE' | undefined, amount: values.amount, reason: values.reason, internalNotes: values.internalNotes }); }}
         />
       ) : null}
       {chatIssue?.source === 'captain' ? <CaptainSupportChatDialog issue={chatIssue} onClose={() => setChatIssue(null)} /> : null}

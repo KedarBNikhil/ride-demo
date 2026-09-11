@@ -1,0 +1,33 @@
+import { useMemo, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { Badge, Card, ErrorBlock, LoadingBlock, PageHeader, StatCard } from '@/components/ui';
+import { runSystemHealthAudit, type HealthAudit, type HealthFinding, type HealthStatus } from '@/lib/api';
+
+const statusOrder: Record<HealthStatus, number> = { RISK: 0, NEEDS_ATTENTION: 1, PROBE_ERROR: 2, NOT_OBSERVABLE: 3, HEALTHY: 4 };
+const statusTone: Record<HealthStatus, 'green' | 'amber' | 'red' | 'slate' | 'violet'> = { HEALTHY: 'green', NEEDS_ATTENTION: 'amber', RISK: 'red', NOT_OBSERVABLE: 'slate', PROBE_ERROR: 'violet' };
+const labels: Record<HealthStatus, string> = { HEALTHY: 'Healthy', NEEDS_ATTENTION: 'Needs Attention', RISK: 'Risk', NOT_OBSERVABLE: 'Not Observable', PROBE_ERROR: 'Probe Error' };
+const groups: Array<[string, string[]]> = [
+  ['Core Platform', ['Supabase', 'Authentication', 'Storage']], ['Customer App', ['Customer app']], ['Captain App', ['Captain app']], ['Ride Platform', ['Ride platform', 'Captain operations', 'Pickup OTP']], ['Financial Controls', ['Financial controls', 'Promotion/free-ride protection', 'Captain settlements']], ['Captain Operations', ['KYC/documents', 'Account deletion / anti-abuse']], ['Notifications & External Services', ['Push notifications', 'Twilio', 'Google Maps', 'Website']],
+];
+function overallLabel(status: HealthStatus) { return status === 'NOT_OBSERVABLE' || status === 'PROBE_ERROR' ? 'Monitoring Incomplete' : labels[status]; }
+function formatTime(value: string) { return new Date(value).toLocaleString(); }
+
+function FindingCard({ finding }: { finding: HealthFinding }) {
+  const [open, setOpen] = useState(false);
+  return <Card className="overflow-hidden"><button onClick={() => setOpen((value) => !value)} className="flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-slate-50"><div className="min-w-0"><div className="font-semibold text-slate-900">{finding.component}</div><div className="mt-0.5 truncate text-sm text-slate-500">{finding.metric}: {finding.value}</div></div><Badge tone={statusTone[finding.status]}>{labels[finding.status]}</Badge></button>{open ? <div className="grid gap-3 border-t border-slate-100 p-4 text-sm sm:grid-cols-2"><Detail label="Status" value={labels[finding.status]} /><Detail label="Metric" value={finding.metric} /><Detail label="Current value" value={finding.value} /><Detail label="Threshold" value={finding.threshold} /><Detail label="Evidence source" value={finding.evidence} /><Detail label="Reason" value={finding.reason} />{finding.recommendedAlert ? <div className="sm:col-span-2 rounded-lg bg-slate-50 p-3"><div className="mb-1 font-semibold text-slate-900">Recommended Alert</div><Detail label="Alert trigger" value={finding.recommendedAlert.trigger} /><Detail label="Severity" value={finding.recommendedAlert.severity} /><Detail label="Why this matters" value={finding.recommendedAlert.reason} /><Detail label="Suggested response" value={finding.recommendedAlert.suggestedResponse} /></div> : null}</div> : null}</Card>;
+}
+function Detail({ label, value }: { label: string; value: string }) { return <div><div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div><div className="mt-0.5 text-slate-700">{value}</div></div>; }
+
+export function SystemHealthPage() {
+  const [window, setWindow] = useState<HealthAudit['observationWindow']>('24h'); const [issuesOnly, setIssuesOnly] = useState(false); const [filter, setFilter] = useState<HealthStatus | null>(null);
+  const audit = useMutation({ mutationFn: () => runSystemHealthAudit(window) }); const report = audit.data;
+  const visible = useMemo(() => (report?.findings ?? []).filter((finding) => (!issuesOnly || finding.status !== 'HEALTHY') && (!filter || finding.status === filter)).sort((a, b) => statusOrder[a.status] - statusOrder[b.status]), [report, issuesOnly, filter]);
+  return <><PageHeader title="System Health" subtitle="Production service and operational health across Sawaari." actions={<><select value={window} onChange={(event) => setWindow(event.target.value as HealthAudit['observationWindow'])} disabled={audit.isPending} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="15m">15 minutes</option><option value="1h">1 hour</option><option value="6h">6 hours</option><option value="24h">24 hours</option></select><button onClick={() => audit.mutate()} disabled={audit.isPending} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60">{audit.isPending ? 'Running production health checks…' : 'Run Health Check'}</button></>} />
+    {audit.isError ? <ErrorBlock error="Health audit could not complete. Existing service health has not been changed to Risk." /> : null}
+    {!report && !audit.isPending ? <Card className="p-6 text-sm text-slate-600">Run a read-only production health check to view current evidence. Provider and telemetry gaps will remain visible as Not Observable.</Card> : null}
+    {audit.isPending ? <LoadingBlock label="Running production health checks…" /> : null}
+    {report ? <div className="space-y-6"><Card className="p-5"><div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Overall Status</div><div className="mt-1 text-2xl font-bold text-slate-900">{overallLabel(report.overall)}</div><div className="mt-2 text-sm text-slate-500">Environment: Production · Last checked: {formatTime(report.completedAt)} · Duration: {(report.durationMs / 1000).toFixed(1)}s · Window: {report.observationWindow}</div></Card>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{(Object.keys(labels) as HealthStatus[]).map((status) => <button key={status} onClick={() => setFilter(filter === status ? null : status)}><StatCard label={labels[status]} value={report.counts[status] ?? 0} tone={status === 'RISK' ? 'bad' : status === 'NEEDS_ATTENTION' ? 'warn' : status === 'HEALTHY' ? 'good' : 'default'} hint={filter === status ? 'Filtering' : undefined} /></button>)}</div>
+      <label className="flex w-fit items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={issuesOnly} onChange={(event) => setIssuesOnly(event.target.checked)} /> Show Issues Only</label>
+      {groups.map(([title, services]) => { const items = visible.filter((finding) => services.includes(finding.service)); return items.length ? <section key={title}><h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">{title}</h2><div className="grid gap-3 lg:grid-cols-2">{items.map((finding) => <FindingCard key={`${finding.service}-${finding.component}`} finding={finding} />)}</div></section> : null; })}</div> : null}</>;
+}

@@ -8,7 +8,9 @@ const navItems = [
   { to: '/captains', label: 'Captains' },
   { to: '/payments', label: 'Payments & Issues' },
   { to: '/captain-settlements', label: 'Captain Settlements' },
+  { to: '/captain-document-changes', label: 'Document Changes' },
   { to: '/fraud', label: 'Fraud Signals' },
+  { to: '/system-health', label: 'System Health' },
 ];
 
 export function DashboardLayout() {

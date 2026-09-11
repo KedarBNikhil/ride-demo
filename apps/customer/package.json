@@ -8,6 +8,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
+    "test:booking-draft": "node ../../scripts/test-customer-booking-draft.mjs",
+    "test:production-auth": "node ../../scripts/test-production-auth.mjs",
     "ota:preflight": "bash scripts/ota.sh --preflight",
     "ota:publish": "bash scripts/ota.sh --publish",
     "eas-build-post-install": "CI=1 expo prebuild --clean --no-install"

@@ -9,30 +9,42 @@ fi
 
 readonly PACKAGE="com.nandyalride.customer"
 readonly PROJECT="1158ff7e-1da5-4a6a-9080-14791394da7a"
-readonly RUNTIME="customer-1.0.2"
+readonly RUNTIME="customer-1.0.3"
 readonly CHANNEL="production-customer"
+readonly VARIANT="customer"
+readonly MODE="customer"
+readonly MAPS_VARIABLES="EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_CUSTOMER,EXPO_PUBLIC_GOOGLE_MAPS_API_KEY"
 export CI=1
+
+run_with_eas_production_environment() {
+  npx --yes eas-cli@latest env:exec production "$1"
+}
+
+assert_optional_identity_override() {
+  local name="$1" expected="$2" actual="${!1:-}"
+  if [[ -n "$actual" && "$actual" != "$expected" ]]; then
+    echo "ERROR: $name must be $expected for Customer OTA export. Aborting." >&2
+    exit 1
+  fi
+}
+
+assert_optional_identity_override APP_VARIANT "$VARIANT"
+assert_optional_identity_override EXPO_PUBLIC_APP_MODE "$MODE"
+assert_optional_identity_override EXPO_PUBLIC_AUTH_MODE production
 
 npm run typecheck
 git diff --check
-config_file="$(mktemp "${TMPDIR:-/tmp}/sawaari-customer-config.XXXXXX")"
 channel_file="$(mktemp "${TMPDIR:-/tmp}/sawaari-customer-channel.XXXXXX")"
 export_dir="$(mktemp -d "${TMPDIR:-/tmp}/sawaari-customer-export.XXXXXX")"
-trap 'rm -f "$config_file" "$channel_file"; rm -rf "$export_dir"' EXIT
-npx expo config --json > "$config_file"
-node - "$config_file" <<'NODE'
-const fs = require('fs');
-const config = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-const expected = { mode: 'customer', package: 'com.nandyalride.customer', project: '1158ff7e-1da5-4a6a-9080-14791394da7a', runtime: 'customer-1.0.2', channel: 'production-customer' };
-const actual = { mode: config.extra?.appMode, package: config.android?.package, project: config.extra?.eas?.projectId, runtime: config.runtimeVersion, channel: config.updates?.requestHeaders?.['expo-channel-name'] };
-if (JSON.stringify(actual) !== JSON.stringify(expected)) { console.error('Customer OTA identity check failed.', { expected, actual }); process.exit(1); }
-NODE
+trap 'rm -f "$channel_file"; rm -rf "$export_dir"' EXIT
+run_with_eas_production_environment "APP_VARIANT=$VARIANT EXPO_PUBLIC_APP_MODE=$MODE EXPO_PUBLIC_AUTH_MODE=production node ../../scripts/ota-production-preflight.mjs Customer $VARIANT $MODE $PACKAGE $PROJECT $RUNTIME $CHANNEL $MAPS_VARIABLES"
 npx --yes eas-cli@latest channel:view "$CHANNEL" --json > "$channel_file"
 node - "$channel_file" "$CHANNEL" <<'NODE'
 const fs = require('fs'); const [file, channel] = process.argv.slice(2); const result = JSON.parse(fs.readFileSync(file, 'utf8'));
 if (!(result.currentPage?.updateBranches ?? []).some((branch) => branch.name === channel)) { throw new Error(`Channel ${channel} is not mapped to its own branch.`); }
 NODE
-npx expo export --platform android --clear --output-dir "$export_dir"
+printf -v export_command 'APP_VARIANT=%q EXPO_PUBLIC_APP_MODE=%q EXPO_PUBLIC_AUTH_MODE=production npx expo export --platform android --clear --max-workers 1 --output-dir %q' "$VARIANT" "$MODE" "$export_dir"
+run_with_eas_production_environment "$export_command"
 test -f "$export_dir/metadata.json"
 if [[ "$action" == "--preflight" ]]; then echo "Customer OTA preflight passed; nothing published."; exit 0; fi
 npx --yes eas-cli@latest update --branch "$CHANNEL" --platform android --skip-bundler --input-dir "$export_dir" --message "${OTA_MESSAGE:?Set OTA_MESSAGE before publishing}"

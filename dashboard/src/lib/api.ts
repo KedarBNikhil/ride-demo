@@ -17,8 +17,21 @@ import type {
   SettlementQueueRow,
   CaptainRideVerificationRow,
   CaptainSettlementRow,
+  CaptainDocumentChangeQueueRow,
   RideGpsEvidence,
 } from './types';
+
+export type HealthStatus = 'HEALTHY' | 'NEEDS_ATTENTION' | 'RISK' | 'NOT_OBSERVABLE' | 'PROBE_ERROR';
+export interface HealthFinding { service: string; component: string; status: HealthStatus; metric: string; value: string; threshold: string; evidence: string; reason: string; recommendedAlert: { trigger: string; severity: string; reason: string; suggestedResponse: string; baseline?: string } | null; cadence: string; }
+export interface HealthAudit { environment: 'production'; observationWindow: '15m' | '1h' | '6h' | '24h'; startedAt: string; completedAt: string; durationMs: number; overall: HealthStatus; counts: Record<HealthStatus, number>; findings: HealthFinding[]; }
+
+export async function runSystemHealthAudit(window: HealthAudit['observationWindow']): Promise<HealthAudit> {
+  const { data, error } = await supabase!.functions.invoke('system-health', { body: { window } });
+  if (error) throw new Error('Health audit could not complete.');
+  const result = data as { data?: HealthAudit } | null;
+  if (!result?.data) throw new Error('Health audit could not complete.');
+  return result.data;
+}
 
 type QueryResult<T> = PromiseLike<{ data: T | null; error: { message: string } | null }>;
 
@@ -297,6 +310,15 @@ export function resolveCustomerIssue(issueId: string, resolutionNote: string) {
   return unwrap(() => supabase!.rpc('operator_resolve_customer_payment_issue', { p_issue_id: issueId, p_resolution_note: resolutionNote }));
 }
 
+export function resolveDisputeWithAdjustment(source: 'customer' | 'captain', disputeId: string, resolution: 'NO_ACTION' | 'CUSTOMER_LIABLE' | 'CAPTAIN_LIABLE', amount?: number, reason?: string, notes?: string) {
+  return unwrap(() => supabase!.rpc('operator_resolve_dispute_with_adjustment', { p_dispute_source: source, p_dispute_id: disputeId, p_resolution: resolution, p_amount: amount ?? null, p_reason: reason ?? null, p_operator_notes: notes ?? null }));
+}
+
+export interface DisputeFinancialAdjustment { source_dispute_id: string; account_type: 'CUSTOMER' | 'CAPTAIN'; original_amount: number; applied_amount: number; remaining_amount: number; status: string; source_ride_id: string; created_at: string; created_by_operator: string; }
+export async function fetchDisputeFinancialAdjustments(): Promise<DisputeFinancialAdjustment[]> {
+  return (await unwrap(() => supabase!.rpc('operator_dispute_financial_adjustments'))) as DisputeFinancialAdjustment[];
+}
+
 // ---------------------------------------------------- Captain settlements
 
 export async function fetchCaptainRideVerificationQueue(status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'all' = 'PENDING') {
@@ -311,6 +333,33 @@ export async function fetchRideGpsEvidence(rideId: string): Promise<RideGpsEvide
   const evidence = (rows as RideGpsEvidence[] | null)?.[0];
   if (!evidence) throw new Error('GPS tracking evidence is unavailable for this ride.');
   return evidence;
+}
+
+export async function fetchCaptainDocumentChangeQueue(): Promise<CaptainDocumentChangeQueueRow[]> {
+  const rows = await unwrap(() => supabase!.rpc('operator_captain_document_change_queue'));
+  return (rows ?? []) as CaptainDocumentChangeQueueRow[];
+}
+
+export function reviewCaptainDocumentChange(documentId: string, approve: boolean, note?: string) {
+  return unwrap(() => supabase!.rpc('operator_review_captain_document_change', {
+    p_document_id: documentId,
+    p_approve: approve,
+    p_note: note?.trim() || null,
+  }));
+}
+
+export function verifyCaptainDocument(documentId: string, approve: boolean, note?: string) {
+  return unwrap(() => supabase!.rpc('operator_verify_captain_document', {
+    p_document_id: documentId,
+    p_approve: approve,
+    p_note: note?.trim() || null,
+  }));
+}
+
+export async function getCaptainDocumentPreviewUrl(storagePath: string): Promise<string> {
+  const { data, error } = await supabase!.storage.from('captain-documents').createSignedUrl(storagePath, 300);
+  if (error || !data?.signedUrl) throw new Error(error?.message ?? 'Document preview is unavailable');
+  return data.signedUrl;
 }
 
 export function verifyCaptainRide(compensationId: string, status: 'APPROVED' | 'REJECTED', rejectionReason?: string) {
@@ -459,14 +508,16 @@ export interface UnifiedDispute {
   paymentStatus: string | null;
   paymentMethod: string | null;
   finalFare: number | null;
+  financialAdjustment?: DisputeFinancialAdjustment;
 }
 
 export async function fetchAllDisputes(): Promise<UnifiedDispute[]> {
-  const [payouts, captains, customers] = await Promise.all([fetchPayoutDisputes(), fetchCaptainIssues(), fetchCustomerIssues()]);
+  const [payouts, captains, customers, adjustments] = await Promise.all([fetchPayoutDisputes(), fetchCaptainIssues(), fetchCustomerIssues(), fetchDisputeFinancialAdjustments()]);
+  const byDispute = new Map(adjustments.map((adjustment) => [adjustment.source_dispute_id, adjustment]));
   return [
     ...payouts.map((issue) => ({ ...issue, source: 'payout' as const, operator_note: issue.operator_note, paymentStatus: null, paymentMethod: null, finalFare: null })),
-    ...captains.map((issue) => ({ ...issue, source: 'captain' as const, operator_note: issue.resolution_note, paymentStatus: issue.paymentStatus, paymentMethod: issue.paymentMethod, finalFare: issue.finalFare })),
-    ...customers.map((issue) => ({ ...issue, source: 'customer' as const, operator_note: issue.resolution_note, paymentStatus: issue.paymentStatus, paymentMethod: issue.paymentMethod, finalFare: issue.finalFare })),
+    ...captains.map((issue) => ({ ...issue, source: 'captain' as const, operator_note: issue.resolution_note, paymentStatus: issue.paymentStatus, paymentMethod: issue.paymentMethod, finalFare: issue.finalFare, financialAdjustment: byDispute.get(issue.id) })),
+    ...customers.map((issue) => ({ ...issue, source: 'customer' as const, operator_note: issue.resolution_note, paymentStatus: issue.paymentStatus, paymentMethod: issue.paymentMethod, finalFare: issue.finalFare, financialAdjustment: byDispute.get(issue.id) })),
   ].sort((a, b) => b.opened_at.localeCompare(a.opened_at));
 }
 

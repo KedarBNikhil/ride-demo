@@ -1,6 +1,7 @@
 import * as Location from 'expo-location';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   BackHandler,
   Easing,
@@ -45,6 +46,7 @@ import { selectionHaptic } from '../utils/haptics';
 import { useBottomTabBarMetrics } from '../utils/safeAreaLayout';
 import { centerCoordinateInVisibleViewport, fitRouteInVisibleViewport, getVisibleMapPadding, HOME_LOCATION_DELTA, isValidMapCoordinate } from '../utils/mapCamera';
 import { DraggableMapSheet } from '../components/DraggableMapSheet';
+import { missingCustomerBookingLocation, toCustomerBookingConfirmationSnapshot } from '../services/customerBookingDraft';
 
 const sawaariHomeFooter = require('../../assets/images/sawaari-brand-nandyal.png');
 const sawaariBikeIcon = require('../../assets/icons/sawaari-bike.png');
@@ -823,10 +825,10 @@ export function RideTypeScreen({
   onSelect,
   onPassengerCountChange,
   onRouteQuote,
-  onOffers,
   onNext,
   onBack,
   onEditLocation,
+  onInvalidRoute,
   unavailableMessage,
   onUnavailableMessageHidden,
 }: {
@@ -835,10 +837,10 @@ export function RideTypeScreen({
   onSelect: (kind: RideKind) => void;
   onPassengerCountChange: (count: number) => void;
   onRouteQuote: (quote: RouteQuote) => void;
-  onOffers: () => void;
-  onNext: () => void;
+  onNext: (ride: CustomerRide) => void;
   onBack: () => void;
   onEditLocation: (target: LocationTarget) => void;
+  onInvalidRoute: (target: LocationTarget) => void;
   unavailableMessage?: string;
   onUnavailableMessageHidden: () => void;
 }) {
@@ -858,11 +860,14 @@ export function RideTypeScreen({
   const [routeQuote, setRouteQuote] = useState<RouteQuote | undefined>(ride.routeQuote);
   const [routeLoading, setRouteLoading] = useState(!hasUsableRouteQuote(ride.routeQuote));
   const [routeError, setRouteError] = useState<string | null>(null);
-  const [promotion, setPromotion] = useState<CustomerPromotionStatus | null>(null);
+  const missingLocation = missingCustomerBookingLocation(ride);
   const encodedPolyline = typeof routeQuote?.encodedPolyline === 'string' ? routeQuote.encodedPolyline : '';
   const routeCoordinates = decodeGooglePolyline(encodedPolyline);
   const hasValidRouteQuote = hasUsableRouteQuote(routeQuote);
 
+  useEffect(() => {
+    if (missingLocation) onInvalidRoute(missingLocation);
+  }, [missingLocation, onInvalidRoute]);
   useEffect(() => {
     let active = true;
     if (hasUsableRouteQuote(ride.routeQuote)) { setRouteQuote(ride.routeQuote); setRouteError(null); setRouteLoading(false); return; }
@@ -881,17 +886,14 @@ export function RideTypeScreen({
     const timer = setTimeout(() => fitRouteInVisibleViewport(mapRef.current, routeCoordinates, getVisibleMapPadding({ top: 64, bottomSheetHeight: rideSheetExpanded ? rideSheetHeight : rideSheetHeight - rideSheetCollapsedOffset, bottomInset })), 100);
     return () => clearTimeout(timer);
   }, [bottomInset, rideSheetCollapsedOffset, rideSheetExpanded, rideSheetHeight, routeQuote?.id]);
-  useEffect(() => { void rideDispatchService.getCustomerPromotionStatus().then(setPromotion).catch(() => setPromotion(null)); }, []);
   useEffect(() => {
     if (!unavailableMessage) return;
     const timer = setTimeout(onUnavailableMessageHidden, 5_000);
     return () => clearTimeout(timer);
   }, [onUnavailableMessageHidden, unavailableMessage]);
-  const selectedFareDisplay = getCustomerFareDisplay({ kind: selected, passengerCount: ride.passengerCount, routeQuote, promotion });
-  const promotionUnavailable = Boolean(promotion?.promotion_enabled && promotion.remaining_free_rides > 0 && hasValidRouteQuote && !selectedFareDisplay.promotionAvailable);
   const options: Array<{ kind: RideKind; fareDisplay: CustomerFareDisplay; eta: number }> = [
-    { kind: 'bike', fareDisplay: getCustomerFareDisplay({ kind: 'bike', passengerCount: 1, routeQuote, promotion }), eta: 3 },
-    { kind: 'auto', fareDisplay: getCustomerFareDisplay({ kind: 'auto', passengerCount: ride.passengerCount, routeQuote, promotion }), eta: 5 },
+    { kind: 'bike', fareDisplay: getCustomerFareDisplay({ kind: 'bike', passengerCount: 1, routeQuote, promotion: null }), eta: 3 },
+    { kind: 'auto', fareDisplay: getCustomerFareDisplay({ kind: 'auto', passengerCount: ride.passengerCount, routeQuote, promotion: null }), eta: 5 },
   ];
   const setRideSheet = (expanded: boolean) => {
     setRideSheetExpanded(expanded);
@@ -920,6 +922,8 @@ export function RideTypeScreen({
       runOnJS(setRideSheetExpanded)(expand);
     }), [rideSheetCanDrag, rideSheetCollapsedOffset, rideSheetDragStart, rideSheetOffset, rideSheetScrollOffset]);
 
+  if (missingLocation) return <View style={styles.bookingRouteRecovery}><ActivityIndicator /></View>;
+
   return <SafeAreaView style={styles.rideOptionsSafe} edges={['top', 'left', 'right']}>
     <MapView ref={mapRef} provider={PROVIDER_GOOGLE} initialRegion={NANDYAL} style={StyleSheet.absoluteFill}>
       <Marker coordinate={pickupCoordinate} pinColor={colors.success} title={t('rides.pickup')} />
@@ -939,7 +943,6 @@ export function RideTypeScreen({
               <View style={styles.sheetHandle} />
             </Pressable>
             <Reanimated.ScrollView style={styles.rideOptionsSheetScroll} contentContainerStyle={styles.rideOptionsSheetContent} onScroll={rideSheetScrollHandler} scrollEventThrottle={16} showsVerticalScrollIndicator={false}>
-        <PromotionOfferCard promotion={promotion} t={t} compact />
         <View style={styles.rideOptionsHeader}><Text style={styles.rideOptionsHeading}>{t('rides.selectRide')}</Text><Text style={[styles.rideFareHeading, routeError && styles.rideFareHeadingError]}>{routeLoading ? 'Finding road route…' : routeError ? t('rides.routeUnavailable') : t('rides.estimate')}</Text></View>
       <View style={styles.rideOptionList}>{options.map((option) => (
         <RideCard
@@ -950,10 +953,9 @@ export function RideTypeScreen({
           t={t}
         />
       ))}</View>
-      {promotionUnavailable && <Text style={styles.promotionUnavailable}>{selectedFareDisplay.routeDistanceMeters != null && selectedFareDisplay.routeDistanceMeters > promotion!.maximum_free_distance_meters ? t('rides.freeOfferDistanceUnavailable', { distance: promotion!.maximum_free_distance_meters / 1000 }) : t('rides.freeOfferUsedUnavailable')}</Text>}
       {selected === 'auto' && <View style={styles.passengerPicker}><Text style={styles.passengerPickerLabel}>{t('rides.autoPassengers')}</Text><View style={styles.passengerChoices}>{[1, 2, 3].map((count) => <Pressable key={count} onPress={() => onPassengerCountChange(count)} accessibilityRole="button" accessibilityState={{ selected: ride.passengerCount === count }} style={[styles.passengerChoice, ride.passengerCount === count && styles.passengerChoiceSelected]}><Text style={[styles.passengerChoiceText, ride.passengerCount === count && styles.passengerChoiceTextSelected]}>{formatNumber(count)}</Text></Pressable>)}</View></View>}
-      <View style={styles.rideOptionsExtras}><Text style={styles.rideOptionsExtra}>₹ {t('rides.cash')}</Text><View style={styles.rideOptionsDivider} /><Pressable onPress={() => { selectionHaptic(); onOffers(); }} accessibilityRole="button" style={styles.rideOffersButton}><Text style={styles.rideOptionsExtra}>{t('rides.offers')}</Text></Pressable></View>
-      <PrimaryButton label={t('rides.bookSelected', { ride: t(`rides.${selected}`) })} onPress={onNext} disabled={!hasValidRouteQuote || routeLoading} />
+      <View style={styles.rideOptionsExtras}><Text style={styles.rideOptionsExtra}>₹ {t('rides.cash')}</Text></View>
+      <PrimaryButton label={t('rides.bookSelected', { ride: t(`rides.${selected}`) })} onPress={() => onNext(toCustomerBookingConfirmationSnapshot({ ...ride, kind: selected }, routeQuote))} disabled={!hasValidRouteQuote || routeLoading} />
             </Reanimated.ScrollView>
           </View>
         </GestureDetector>
@@ -1061,19 +1063,23 @@ export function BookingConfirmScreen({
   beforeBook,
   onBook,
   onBack,
+  onInvalidRoute,
 }: {
   ride: CustomerRide;
   beforeBook: () => Promise<boolean>;
-  onBook: (rideId: string) => Promise<void>;
+  onBook: (ride: CustomerRide, rideId: string) => Promise<void>;
   onBack: () => void;
+  onInvalidRoute: (target: LocationTarget) => void;
 }) {
   const { t } = useTranslation();
   const dialog = useDialog();
   const routeQuote = hasUsableRouteQuote(ride.routeQuote) ? ride.routeQuote : undefined;
+  const missingLocation = missingCustomerBookingLocation(ride);
   const [booking, setBooking] = useState(false);
   const bookingRef = useRef(false);
   const [promotion, setPromotion] = useState<CustomerPromotionStatus | null>(null);
   useEffect(() => { void rideDispatchService.getCustomerPromotionStatus().then(setPromotion).catch(() => setPromotion(null)); }, []);
+  useEffect(() => { if (missingLocation) onInvalidRoute(missingLocation); }, [missingLocation, onInvalidRoute]);
   const fareDisplay = getCustomerFareDisplay({ kind: ride.kind, passengerCount: ride.passengerCount, routeQuote, promotion });
   const book = async () => {
     if (bookingRef.current) return;
@@ -1093,7 +1099,7 @@ export function BookingConfirmScreen({
         dialog({ title: t('rides.freeOfferNoLongerAvailable', { fare: formatFare(confirmedFareDisplay.customerCharge ?? 0) }) });
       }
       void rideDispatchService.getCustomerPromotionStatus().then(setPromotion).catch(() => setPromotion(null));
-      await onBook(createdRide.id);
+      await onBook(ride, createdRide.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       dialog({ title: message.includes('Route quote expired') ? 'Route expired. Go back and refresh the route before booking.' : t('login.tryAgain') });
@@ -1102,6 +1108,7 @@ export function BookingConfirmScreen({
       setBooking(false);
     }
   };
+  if (missingLocation) return <View style={styles.bookingRouteRecovery}><ActivityIndicator /></View>;
   return (
     <ScreenShell back={onBack} title={t('screens.bookingConfirm')}>
       <View style={[styles.summaryCard, shadows.card]}>
@@ -1282,7 +1289,7 @@ const cancellationReasons: Array<{ code: CancellationReason; labelKey: string }>
   { code: 'other', labelKey: 'Other' },
 ];
 
-export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCancelled, onBookings, onProfile, onOpenChat, onPickupOtpIssued, onShareLiveRide }: { ride: CustomerRide; onHome: () => void; onCancelled: () => void; onFareQuoteCancelled: () => void; onBookings: () => void; onProfile: () => void; onOpenChat: (rideId: string, captainName: string) => void; onPickupOtpIssued: (pickupOtp: string) => void; onShareLiveRide: (rideId: string) => void }) {
+export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onProfile, onOpenChat, onPickupOtpIssued, onShareLiveRide }: { ride: CustomerRide; onHome: () => void; onCancelled: () => void; onBookings: () => void; onProfile: () => void; onOpenChat: (rideId: string, captainName: string) => void; onPickupOtpIssued: (pickupOtp: string) => void; onShareLiveRide: (rideId: string) => void }) {
   const { t } = useTranslation();
   const { bottomInset, tabBarHeight } = useBottomTabBarMetrics();
   const { height: windowHeight } = useWindowDimensions();
@@ -1293,12 +1300,6 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
   const [otherReason, setOtherReason] = useState('');
   const [cancellationError, setCancellationError] = useState('');
   const [cancelling, setCancelling] = useState(false);
-  const [updatingFareQuote, setUpdatingFareQuote] = useState(false);
-  const [fareQuoteExpiring, setFareQuoteExpiring] = useState(false);
-  const [fareQuoteSecondsRemaining, setFareQuoteSecondsRemaining] = useState<number | null>(null);
-  const fareQuoteDecisionInFlight = useRef(false);
-  const fareQuoteTimeoutHandledForAcceptance = useRef<string | null>(null);
-  const fareQuoteWasPending = useRef(false);
   const [liveStatus, setLiveStatus] = useState<RideStatus>('accepted');
   const [liveRide, setLiveRide] = useState<DispatchRide | null>(null);
   const [captainDetails, setCaptainDetails] = useState<AssignedCaptainDetails | null>(null);
@@ -1345,11 +1346,6 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
   useEffect(() => {
     if (!ride.id || ride.id.startsWith('local-')) return;
     return rideDispatchService.subscribeToRide(ride.id, (updatedRide) => {
-      if (updatedRide.fare_approval_status === 'pending') fareQuoteWasPending.current = true;
-      if (updatedRide.status === 'cancelled' && fareQuoteWasPending.current) {
-        onFareQuoteCancelled();
-        return;
-      }
       setLiveStatus(updatedRide.status);
       setLiveRide(updatedRide);
       if (updatedRide.captain_id) {
@@ -1366,7 +1362,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
         });
       }
     });
-  }, [onFareQuoteCancelled, onHome, onPickupOtpIssued, ride.id, ride.pickupOtp]);
+  }, [onHome, onPickupOtpIssued, ride.id, ride.pickupOtp]);
   useEffect(() => {
     if (!ride.id || ride.id.startsWith('local-')) return;
     const rideId = ride.id;
@@ -1401,69 +1397,6 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
       setCancelling(false);
     }
   };
-  const respondToFareQuote = useCallback(async (accept: boolean) => {
-    if (!ride.id || fareQuoteDecisionInFlight.current) return;
-    fareQuoteDecisionInFlight.current = true;
-    setUpdatingFareQuote(true);
-    try {
-      const updatedRide = await rideDispatchService.approveFareQuote(ride.id, accept);
-      if (!accept && updatedRide.status === 'cancelled') onFareQuoteCancelled();
-    } catch {
-      const currentRide = await rideDispatchService.getRide(ride.id).catch(() => null);
-      if (!accept && currentRide?.status === 'cancelled') {
-        onFareQuoteCancelled();
-        return;
-      }
-      dialog({ title: t('login.tryAgain') });
-    } finally {
-      fareQuoteDecisionInFlight.current = false;
-      setUpdatingFareQuote(false);
-    }
-  }, [onFareQuoteCancelled, ride.id, t]);
-  const expireFareQuote = useCallback(async () => {
-    if (!ride.id || fareQuoteDecisionInFlight.current) return;
-    fareQuoteDecisionInFlight.current = true;
-    setFareQuoteExpiring(true);
-    try {
-      const updatedRide = await rideDispatchService.approveFareQuote(ride.id, false);
-      if (updatedRide.status === 'cancelled') onFareQuoteCancelled();
-    } catch {
-      const currentRide = await rideDispatchService.getRide(ride.id).catch(() => null);
-      if (currentRide?.status === 'cancelled') onFareQuoteCancelled();
-      // Otherwise wait for the existing authoritative timeout subscription/poll.
-    } finally {
-      fareQuoteDecisionInFlight.current = false;
-      setUpdatingFareQuote(false);
-    }
-  }, [onFareQuoteCancelled, ride.id]);
-  const awaitingFareApproval = liveRide?.fare_approval_status === 'pending';
-
-  useEffect(() => {
-    if (!awaitingFareApproval || !liveRide?.accepted_at || updatingFareQuote) {
-      setFareQuoteSecondsRemaining(null);
-      if (!awaitingFareApproval) {
-        fareQuoteDecisionInFlight.current = false;
-        fareQuoteTimeoutHandledForAcceptance.current = null;
-        setFareQuoteExpiring(false);
-      }
-      return;
-    }
-    const expiresAt = new Date(liveRide.accepted_at).getTime() + 30_000;
-    let active = true;
-    const tick = () => {
-      const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
-      if (!active) return;
-      setFareQuoteSecondsRemaining(remaining);
-      if (remaining === 0 && fareQuoteTimeoutHandledForAcceptance.current !== liveRide.accepted_at) {
-        fareQuoteTimeoutHandledForAcceptance.current = liveRide.accepted_at ?? null;
-        void expireFareQuote();
-      }
-    };
-    tick();
-    const timer = setInterval(tick, 1_000);
-    return () => { active = false; clearInterval(timer); };
-  }, [awaitingFareApproval, expireFareQuote, liveRide?.accepted_at, updatingFareQuote]);
-
   const liveFareDisplay = getCustomerFareDisplay({ kind: ride.kind, passengerCount: ride.passengerCount, routeQuote: ride.routeQuote, backendRide: liveRide });
 
   if (liveStatus === 'completed' && ride.id) {
@@ -1483,24 +1416,14 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onFareQuoteCanc
     </MapView>
     <Pressable onPress={onHome} accessibilityRole="button" style={[styles.assignedBack, shadows.soft]}><Text style={styles.rideOptionsBackText}>‹</Text></Pressable>
     <DraggableMapSheet bottom={tabBarHeight} collapsedHeight={280} maxHeight={windowHeight} style={[styles.assignedSheet, shadows.card]} contentContainerStyle={[styles.assignedSheetContent, { paddingBottom: 24 + bottomInset }]}>
-      {!arrived && <Text style={styles.bookingStatus}>{awaitingFareApproval ? t('rides.fareQuoteWaiting') : liveStatus === 'accepted' ? t('rides.bookedMessage') : t('rides.searchingSubtitle')}</Text>}
-      <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(inProgress ? 'rides.startedTitle' : arrived ? 'rides.hereTitle' : awaitingFareApproval ? 'rides.fareQuoteTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{inProgress ? t('rides.startedSubtitle') : arrived ? t('rides.hereSubtitle') : awaitingFareApproval ? t('rides.fareQuoteWaiting') : t('rides.arriving')}</Text></View></View>
+      {!arrived && <Text style={styles.bookingStatus}>{liveStatus === 'accepted' ? t('rides.bookedMessage') : t('rides.searchingSubtitle')}</Text>}
+      <View style={styles.assignedHeading}><View><Text style={styles.assignedTitle}>{t(inProgress ? 'rides.startedTitle' : arrived ? 'rides.hereTitle' : 'rides.confirmedTitle')}</Text><Text style={styles.assignedSubtitle}>{inProgress ? t('rides.startedSubtitle') : arrived ? t('rides.hereSubtitle') : t('rides.arriving')}</Text></View></View>
       {hasCurrentRide && <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{captainName}</Text><Text style={styles.assignedVehicle}>{vehicleType ? t(`rides.${vehicleType}`) : t('rides.captain')}</Text></View><View style={styles.assignedContact}><Pressable onPress={() => { if (ride.id) onOpenChat(ride.id, captainName); }} accessibilityRole="button" accessibilityLabel="Message captain" accessibilityState={{ disabled: !ride.id }} disabled={!ride.id} style={[styles.assignedCall, !ride.id && styles.assignedCallDisabled]}><Text style={styles.assignedCallText}>✉</Text></Pressable><Pressable onPress={() => { void callCaptain(); }} accessibilityRole="button" accessibilityLabel="Call captain" accessibilityState={{ disabled: !captainDetails?.phone }} disabled={!captainDetails?.phone} style={[styles.assignedCall, !captainDetails?.phone && styles.assignedCallDisabled]}><Text style={styles.assignedCallText}>☎</Text></Pressable></View></View>}
-      {liveRide?.fare_approval_status === 'pending' && <View style={styles.fareQuoteCard}>
-        <Text style={styles.fareQuoteTitle}>{t('rides.fareQuoteTitle')}</Text>
-        <Text style={styles.fareQuoteCountdown}>{fareQuoteSecondsRemaining ?? 30}s</Text>
-        <Text style={styles.fareQuoteMessage}>{t('rides.fareQuoteMessage', { distance: formatNumber(Number(liveRide.pickup_distance_meters ?? 0) / 1000, { maximumFractionDigits: 1 }) })}</Text>
-        <SummaryRow label={t('rides.fareQuoteRide')} value={formatFare(Number(liveRide.base_fare ?? 0) + Number(liveRide.distance_surcharge ?? 0))} vehicleKind={vehicleType ?? ride.kind} />
-        <SummaryRow label={t('rides.fareQuotePickup')} value={formatFare(Number(liveRide.pickup_surcharge ?? 0))} icon="+" />
-        <SummaryRow label={t('rides.fareQuoteTotal')} value={liveFareDisplay.isFree ? t('rides.freeRideAmount') : formatFare(liveFareDisplay.customerCharge ?? 0)} icon="₹" last />
-        <PrimaryButton label={updatingFareQuote || fareQuoteExpiring ? t('login.pleaseWait') : t('rides.acceptFareQuote')} onPress={() => { void respondToFareQuote(true); }} disabled={updatingFareQuote || fareQuoteExpiring} />
-        <PrimaryButton label={t('rides.declineFareQuote')} onPress={startCancellation} danger disabled={updatingFareQuote || fareQuoteExpiring} />
-      </View>}
       <View style={styles.assignedPickupRow}><View style={styles.assignedPickupDot} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.pickup')} · {ride.pickup}</Text></View>
       <View style={styles.assignedPickupRow}><View style={[styles.assignedPickupDot, styles.assignedDropDot]} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.drop')} · {ride.drop}</Text></View>
       {arrived && !!pickupPin && !inProgress && <View style={styles.pickupPinCard}><Text style={styles.pickupPinLabel}>{t('rides.pickupPinLabel')}</Text><Text style={styles.pickupPin}>{pickupPin}</Text><Text style={styles.pickupPinHint}>{t('rides.pickupPinHint')}</Text></View>}
       {inProgress && <><View style={styles.tripStatRow}><Text style={styles.tripStatLabel}>{t('rides.destinationDistance')}</Text><Text style={styles.tripStatValue}>{liveRide?.trip_distance_meters == null ? '—' : `${formatNumber(Number(liveRide.trip_distance_meters) / 1000, { maximumFractionDigits: 1 })} km`}</Text></View><Pressable onPress={() => { void Linking.openURL('tel:112'); }} accessibilityRole="button" style={styles.sosButton}><Text style={styles.sosText}>{t('rides.sos')}</Text></Pressable><PrimaryButton label="Share live ride status" onPress={() => onShareLiveRide(liveRide?.id ?? ride.id!)} /></>}
-      {canCancel && !awaitingFareApproval && <PrimaryButton label={t('rides.cancelRide')} onPress={startCancellation} danger />}
+      {canCancel && <PrimaryButton label={t('rides.cancelRide')} onPress={startCancellation} danger />}
     </DraggableMapSheet>
     <CustomerTabBar active="bookings" onHome={onHome} onBookings={onBookings} onProfile={onProfile} />
     {cancelStep !== 'none' && <View style={styles.cancellationOverlay}>
@@ -2044,12 +1967,6 @@ const styles = StyleSheet.create({
   assignedCaptainRow: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', gap: 11, padding: 10 },
   assignedCaptainText: { flex: 1 },
   assignedVehicle: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, marginTop: 2 },
-  fareQuoteCard: { backgroundColor: colors.accentLight, borderColor: colors.accent, borderRadius: radii.md, borderWidth: 1, gap: 10, padding: 14 },
-  fareQuoteTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '900' },
-  fareQuoteCountdown: { color: colors.error, fontFamily, fontSize: fontSize.md, fontWeight: '900', textAlign: 'center' },
-  fareQuoteMessage: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 20 },
-  declineFareQuote: { alignItems: 'center', minHeight: 38, justifyContent: 'center' },
-  declineFareQuoteText: { color: colors.error, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   assignedContact: { flexDirection: 'row', gap: 7 }, assignedCall: { alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: radii.pill, height: 38, justifyContent: 'center', width: 38 }, assignedCallDisabled: { opacity: 0.45 },
   assignedCallText: { color: colors.primary, fontSize: 20 },
   assignedPickupRow: { alignItems: 'flex-start', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', gap: 9, paddingHorizontal: 12, paddingVertical: 11 },
@@ -2118,6 +2035,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.lg,
     fontWeight: '800',
   },
+  bookingRouteRecovery: { alignItems: 'center', backgroundColor: colors.bg, flex: 1, justifyContent: 'center' },
 
   // Searching
   searchingScreen: { backgroundColor: colors.primaryLight, flex: 1 },

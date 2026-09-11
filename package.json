@@ -10,6 +10,7 @@
     "dashboard:dev": "npm run dev --workspace dashboard",
     "dashboard:build": "npm run build --workspace dashboard",
     "dashboard:typecheck": "npm run typecheck --workspace dashboard",
+    "health:audit": "node monitoring/health/index.mjs",
     "start:customer": "npm run start --workspace @sawaari/customer",
     "start:captain": "npm run start --workspace @sawaari/captain",
     "android:customer": "npm run android --workspace @sawaari/customer",

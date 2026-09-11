@@ -53,6 +53,7 @@ export type DispatchRide = {
   accepted_at?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
+  has_open_payment_issue?: boolean;
 };
 
 // `completed` means the Captain has ended the driving portion of the trip. It
@@ -62,6 +63,7 @@ export const customerRideLifecycle = (ride: DispatchRide | null | undefined): Cu
   if (!ride) return 'none';
   if (isCustomerActiveRideStatus(ride.status)) return 'active';
   if (ride.status !== 'completed') return 'none';
+  if (ride.has_open_payment_issue) return 'none';
   if (ride.payment_status === 'pending' || ride.payment_status === 'declared') return 'payment';
   if ((ride.payment_status === 'confirmed' || ride.payment_status === 'not_required') && ride.customer_rating == null) return 'rating';
   return 'none';
@@ -181,11 +183,11 @@ const requireClient = () => {
   return supabase;
 };
 
-async function edgeFunctionError(error: unknown) {
+async function edgeFunctionError(error: unknown, fallback = 'Ride offer could not be updated') {
   const context = (error as { context?: { json?: () => Promise<unknown> } } | null)?.context;
   const payload = await context?.json?.().catch(() => null);
   const message = (payload as { error?: unknown } | null)?.error;
-  return new Error(typeof message === 'string' ? message : error instanceof Error ? error.message : 'Ride offer could not be updated');
+  return new Error(typeof message === 'string' ? message : error instanceof Error ? error.message : fallback);
 }
 
 async function currentUserId() {
@@ -255,7 +257,8 @@ export const rideDispatchService = {
     const client = requireClient();
     const { data, error } = await client.functions.invoke('ride-maps', { body: { action: 'create_routed_ride', draft } });
     const rideId = (data as { data?: { rideId?: string }; error?: string } | null)?.data?.rideId;
-    if (error || !rideId) throw error ?? new Error((data as { error?: string } | null)?.error ?? 'Ride request was not created');
+    if (error) throw await edgeFunctionError(error, 'Ride request was not created');
+    if (!rideId) throw new Error((data as { error?: string } | null)?.error ?? 'Ride request was not created');
     return rideId;
   },
 
@@ -281,14 +284,30 @@ export const rideDispatchService = {
     return rides.find((ride) => isCustomerActiveRideStatus(ride.status)) ?? null;
   },
 
-  async getCustomerCurrentRide(): Promise<DispatchRide | null> {
+  async customerRideHasOpenPaymentIssue(rideId: string) {
+    const { data, error } = await requireClient().rpc('customer_ride_has_open_payment_issue', { p_ride_id: rideId });
+    if (error) throw error;
+    return Boolean(data);
+  },
+
+  async getCustomerCurrentRide(dismissedCompletedRideIds: ReadonlySet<string> = new Set()): Promise<DispatchRide | null> {
     const rides = await this.getCustomerRideHistory();
+    const paymentCandidateIds = rides
+      .filter((ride) => ride.status === 'completed' && (ride.payment_status === 'pending' || ride.payment_status === 'declared'))
+      .map((ride) => ride.id);
+    const openIssueRideIds = new Set(
+      await Promise.all(paymentCandidateIds.map(async (rideId) => (
+        await this.customerRideHasOpenPaymentIssue(rideId) ? rideId : null
+      ))).then((rideIds) => rideIds.filter((rideId): rideId is string => Boolean(rideId))),
+    );
+    const ridesWithPaymentIssueState = rides.map((ride) => openIssueRideIds.has(ride.id) ? { ...ride, has_open_payment_issue: true } : ride);
     // Post-ride obligations deliberately outrank an operational ride if old
     // data is inconsistent. The create-ride invariant prevents that state,
     // while this priority keeps the customer out of a new booking flow.
-    return rides.find((ride) => customerRideLifecycle(ride) === 'payment')
-      ?? rides.find((ride) => customerRideLifecycle(ride) === 'rating')
-      ?? rides.find((ride) => customerRideLifecycle(ride) === 'active')
+    const isDismissedCompletedRide = (ride: DispatchRide) => ride.status === 'completed' && dismissedCompletedRideIds.has(ride.id);
+    return ridesWithPaymentIssueState.find((ride) => !isDismissedCompletedRide(ride) && customerRideLifecycle(ride) === 'payment')
+      ?? ridesWithPaymentIssueState.find((ride) => !isDismissedCompletedRide(ride) && customerRideLifecycle(ride) === 'rating')
+      ?? ridesWithPaymentIssueState.find((ride) => customerRideLifecycle(ride) === 'active')
       ?? null;
   },
 
@@ -554,10 +573,17 @@ export const rideDispatchService = {
     if (error) throw error;
   },
 
-  async confirmCustomerPayment(rideId: string, method: 'cash' | 'upi') {
+  async confirmCustomerPayment(rideId: string, method: 'cash') {
     const { data, error } = await requireClient().rpc('customer_confirm_payment', { p_ride_id: rideId, p_method: method });
     if (error || !data) throw error ?? new Error('Payment could not be saved');
     return data as DispatchRide;
+  },
+
+  async getCustomerRidePaymentBreakdown(rideId: string) {
+    const { data, error } = await requireClient().rpc('customer_ride_payment_breakdown', { p_ride_id: rideId }).maybeSingle();
+    if (error || !data) throw error ?? new Error('Payment breakdown is unavailable');
+    const breakdown = data as { ride_fare: unknown; previous_ride_adjustment: unknown; total_payable: unknown; adjustment_reason: string | null };
+    return { ride_fare: asNumber(breakdown.ride_fare), previous_ride_adjustment: asNumber(breakdown.previous_ride_adjustment), total_payable: asNumber(breakdown.total_payable), adjustment_reason: breakdown.adjustment_reason };
   },
 
   async confirmCaptainPaymentReceived(rideId: string) {

@@ -5,7 +5,11 @@
     "production": {
       "environment": "production",
       "channel": "production-captain",
-      "env": { "EXPO_PUBLIC_AUTH_MODE": "production" }
+      "env": {
+        "APP_VARIANT": "captain",
+        "EXPO_PUBLIC_APP_MODE": "captain",
+        "EXPO_PUBLIC_AUTH_MODE": "production"
+      }
     }
   },
   "submit": { "production": {} }

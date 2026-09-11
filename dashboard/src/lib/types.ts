@@ -230,6 +230,20 @@ export interface RideGpsEvidence {
   samples: RideGpsSample[];
 }
 
+export interface CaptainDocumentChangeQueueRow {
+  document_id: string;
+  captain_id: string;
+  captain_name: string | null;
+  captain_phone: string | null;
+  document_type: 'license' | 'rc' | 'insurance';
+  verification_status: 'pending' | 'verified' | 'rejected' | 'reupload_required';
+  change_request_status: 'requested' | 'approved' | 'rejected' | 'none';
+  change_requested_at: string | null;
+  replacement_submitted_at: string | null;
+  review_note: string | null;
+  storage_path: string | null;
+}
+
 export interface CaptainSettlementRow {
   batch_id: string;
   settlement_date: string;

@@ -5,7 +5,11 @@
     "production": {
       "environment": "production",
       "channel": "production-customer",
-      "env": { "EXPO_PUBLIC_AUTH_MODE": "production" }
+      "env": {
+        "APP_VARIANT": "customer",
+        "EXPO_PUBLIC_APP_MODE": "customer",
+        "EXPO_PUBLIC_AUTH_MODE": "production"
+      }
     }
   },
   "submit": { "production": {} }

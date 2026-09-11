@@ -1,8 +1,6 @@
 import type { AppLanguage } from '../i18n/createI18n';
-import { demoAuthService } from './demoAuth';
 import { supabase } from '../lib/supabase';
 import { registerPushNotifications } from './pushNotifications';
-import { isProductionAuthMode } from './authMode';
 import { createProductionAuthService } from './productionAuth';
 import { normalizeAccountHolder, normalizeAccountNumber, normalizeIfsc, normalizeUpi, payoutIsValid } from '../utils/payoutValidation';
 
@@ -27,11 +25,7 @@ async function currentCaptainUser() {
   const client = requireSupabase();
   const { data: { session } } = await client.auth.getSession();
   if (session?.user) return session.user;
-  if (isProductionAuthMode) throw new Error('AUTHENTICATION_REQUIRED');
-  const { data, error: signInError } = await client.auth.signInAnonymously();
-  if (signInError?.code === 'anonymous_provider_disabled') throw new Error('DEMO_ANONYMOUS_SIGN_IN_DISABLED');
-  if (signInError || !data.user) throw signInError ?? new Error('Unable to create a test captain session');
-  return data.user;
+  throw new Error('AUTHENTICATION_REQUIRED');
 }
 
 /**

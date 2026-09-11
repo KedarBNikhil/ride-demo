@@ -1,6 +1,6 @@
 export type FareRideType = 'bike' | 'auto';
 
-export const SOFT_LAUNCH_FARE_RULE_VERSION = 'soft-launch-2026-08-18';
+export const SOFT_LAUNCH_FARE_RULE_VERSION = 'soft-launch-bike-18-2026-09-10';
 
 export type FareInput = {
   rideType: FareRideType;
@@ -43,7 +43,7 @@ const FARE_RULES: Record<FareRideType, FareRule> = {
   },
   bike: {
     includedTripMeters: 2_000,
-    baseFare: () => 20,
+    baseFare: () => 18,
     distanceBlockMeters: 100,
     distanceBlockFare: 1,
     pickupFreeMeters: 800,

@@ -1,8 +1,13 @@
-export type AuthMode = 'demo' | 'production';
+import { resolveAuthMode, type AuthMode } from './authModePolicy';
 
 // This flag selects the handset login experience only. The database setting is
 // the security authority and must be enabled separately for a pilot release.
-export const authMode: AuthMode = process.env.EXPO_PUBLIC_AUTH_MODE === 'production' ? 'production' : 'demo';
+// Demo is available only to an explicitly configured development JS bundle.
+export { resolveAuthMode, type AuthMode } from './authModePolicy';
+export const authMode: AuthMode = resolveAuthMode(
+  process.env.EXPO_PUBLIC_AUTH_MODE,
+  typeof __DEV__ !== 'undefined' && __DEV__,
+);
 
 export const isProductionAuthMode = authMode === 'production';
 

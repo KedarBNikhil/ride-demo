@@ -99,6 +99,8 @@ export type SettlementQueueItem = {
 
 export type CaptainRidePayout = {
   captain_earning_amount: number;
+  dispute_deduction: number;
+  net_earning_amount: number;
   payout_status: 'not_started' | 'initiated' | 'processing' | 'paid' | 'failed' | 'reversed' | 'held';
   is_held: boolean;
 };
@@ -576,8 +578,8 @@ export const rideDispatchService = {
     const { data, error } = await requireClient().rpc('captain_ride_payout', { p_ride_id: rideId }).maybeSingle();
     if (error) throw error;
     if (!data) return null;
-    const payout = data as Omit<CaptainRidePayout, 'captain_earning_amount' | 'is_held'> & { captain_earning_amount: unknown; is_held: unknown };
-    return { ...payout, captain_earning_amount: asNumber(payout.captain_earning_amount), is_held: Boolean(payout.is_held) } as CaptainRidePayout;
+    const payout = data as Omit<CaptainRidePayout, 'captain_earning_amount' | 'dispute_deduction' | 'net_earning_amount' | 'is_held'> & { captain_earning_amount: unknown; dispute_deduction: unknown; net_earning_amount: unknown; is_held: unknown };
+    return { ...payout, captain_earning_amount: asNumber(payout.captain_earning_amount), dispute_deduction: asNumber(payout.dispute_deduction), net_earning_amount: asNumber(payout.net_earning_amount), is_held: Boolean(payout.is_held) } as CaptainRidePayout;
   },
 
   async reviewSettlement(settlementId: string, action: 'confirmed' | 'flagged', note?: string) {
