@@ -33,6 +33,17 @@ function durationSeconds(value: unknown) {
   return match ? Math.max(1, Math.round(Number(match[1]))) : 0;
 }
 
+function straightLineDistanceMeters(origin: Coordinate, destination: Coordinate) {
+  const radians = Math.PI / 180;
+  const latitudeDelta = (destination.latitude - origin.latitude) * radians;
+  const longitudeDelta = (destination.longitude - origin.longitude) * radians;
+  const latitude1 = origin.latitude * radians;
+  const latitude2 = destination.latitude * radians;
+  const a = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(latitude1) * Math.cos(latitude2) * Math.sin(longitudeDelta / 2) ** 2;
+  return 6_371_000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 async function reservePlacesCall(callKind: string) {
   const { data, error } = await admin.rpc('reserve_google_places_call', { p_call_kind: callKind });
   if (error?.message.includes('GOOGLE_PLACES_DAILY_CAP_REACHED')) throw new Error('Daily Google Places request limit reached. Try again tomorrow.');
@@ -64,6 +75,13 @@ async function computeRoute(origin: Coordinate, destination: Coordinate, routeKi
     });
     const item = (body.routes as Array<Record<string, unknown>> | undefined)?.[0];
     const route = { distanceMeters: Number(item?.distanceMeters), durationSeconds: durationSeconds(item?.duration), encodedPolyline: String((item?.polyline as Record<string, unknown> | undefined)?.encodedPolyline ?? '') };
+    // Routes reports a zero-distance leg without duration or polyline when the
+    // Captain is already at the Customer's pickup. Preserve that fact with an
+    // explicit sentinel, but only for a genuinely co-located pair of points.
+    if (routeKind === 'captain_to_pickup' && route.distanceMeters === 0 && straightLineDistanceMeters(origin, destination) <= 15) {
+      await finishGoogleRoutesCall(callId, true, 200);
+      return { route: { distanceMeters: 0, durationSeconds: 0, encodedPolyline: 'AT_PICKUP' }, callId };
+    }
     if (!Number.isInteger(route.distanceMeters) || route.distanceMeters < 1 || route.durationSeconds < 1 || !route.encodedPolyline) throw new Error('Google returned an incomplete route');
     await finishGoogleRoutesCall(callId, true, 200);
     return { route, callId };
@@ -196,6 +214,18 @@ Deno.serve(async (request) => {
         .eq('status', 'offered')
         .gt('expires_at', new Date().toISOString())
         .maybeSingle();
+      if (!offer) {
+        const { data: staleOffer } = await admin
+          .from('ride_offers')
+          .select('status, rides!inner(status, captain_id)')
+          .eq('id', offerId)
+          .eq('captain_id', userData.user.id)
+          .maybeSingle();
+        const staleRide = staleOffer?.rides as { status?: string; captain_id?: string | null } | null;
+        if (staleOffer?.status === 'cancelled' && staleRide?.status === 'accepted' && staleRide.captain_id && staleRide.captain_id !== userData.user.id) {
+          return fail('RIDE_ALREADY_ACCEPTED_BY_ANOTHER_CAPTAIN', 409);
+        }
+      }
       const pickup = coordinate({ latitude: offer?.rides?.pickup_latitude, longitude: offer?.rides?.pickup_longitude });
       const { data: availability, error: availabilityError } = await admin.from('captain_availability').select('latitude, longitude').eq('captain_id', userData.user.id).single();
       const captain = coordinate({ latitude: availability?.latitude, longitude: availability?.longitude });

@@ -1,7 +1,7 @@
 import * as Location from 'expo-location';
 import MapView from 'react-native-maps';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -18,8 +18,9 @@ import { selectionHaptic } from '../../utils/haptics';
 import { useBottomTabBarMetrics } from '../../utils/safeAreaLayout';
 import { HOME_LOCATION_DELTA } from '../../utils/mapCamera';
 import { DraggableMapSheet } from '../../components/DraggableMapSheet';
+import { COMPANY_UPI_ID } from '../../config/companyPayment';
 export function CaptainDashboardScreen({ online, timeoutNotice, onToggle, onSettings, onBookings, onEarnings, onRequest, request, onAccept, onReject, requestCycle, onResumeRide }: { online: boolean; timeoutNotice?: string | null; onToggle: () => void; onSettings: () => void; onBookings?: () => void; onEarnings?: () => void; onRequest: (request: CaptainRideRequest | null) => void; request: CaptainRideRequest | null; onAccept: () => Promise<void>; onReject: () => void; requestCycle: number; onResumeRide?: (ride: CaptainActiveRide) => void }) {
-  const { t } = useTranslation(); const { bottomInset, tabBarHeight } = useBottomTabBarMetrics(); const mapRef = useRef<MapView>(null); const [location, setLocation] = useState<LiveCoordinate | null>(null); const [locationUnavailable, setLocationUnavailable] = useState(false); const [availabilitySaving, setAvailabilitySaving] = useState(false); const [availabilityError, setAvailabilityError] = useState(false); const [today, setToday] = useState({ earnings: 0, trips: 0 });
+  const { t } = useTranslation(); const { bottomInset, tabBarHeight } = useBottomTabBarMetrics(); const mapRef = useRef<MapView>(null); const [location, setLocation] = useState<LiveCoordinate | null>(null); const [locationUnavailable, setLocationUnavailable] = useState(false); const [availabilitySaving, setAvailabilitySaving] = useState(false); const [availabilityError, setAvailabilityError] = useState(false); const [today, setToday] = useState({ earnings: 0, trips: 0 }); const [balance, setBalance] = useState<{ amount_due: number; status: string; adjustment_id: string; block_threshold: number } | null>(null); const [utr, setUtr] = useState('');
   const freshLocationRequest = useRef<Promise<Location.LocationObject> | null>(null);
   const requestFreshLocation = () => {
     if (!freshLocationRequest.current) freshLocationRequest.current = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).finally(() => { freshLocationRequest.current = null; });
@@ -55,6 +56,7 @@ export function CaptainDashboardScreen({ online, timeoutNotice, onToggle, onSett
     return () => { active = false; subscription?.remove(); };
   }, [online]);
   useEffect(() => { void registerPushNotifications('captain').catch(() => undefined); }, []);
+  useEffect(() => { void rideDispatchService.getCaptainOutstandingBalance().then((rows) => setBalance(rows[0] ?? null)).catch(() => undefined); }, [online]);
   const initialCameraSet = useRef(false);
   useEffect(() => {
     if (!location || initialCameraSet.current) return;
@@ -112,6 +114,7 @@ export function CaptainDashboardScreen({ online, timeoutNotice, onToggle, onSett
         <Text style={styles.bottomDetail}>{t(online ? 'captain.onlineWaiting' : 'captain.offlineDetail')}</Text>
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: online, disabled: availabilitySaving }} disabled={availabilitySaving} onPress={() => { selectionHaptic(); void toggleAvailability(); }} style={[styles.toggle, online ? styles.toggleOnline : styles.toggleOffline, availabilitySaving && styles.toggleDisabled]}><View style={[styles.knob, online && styles.knobOnline]} /><Text style={styles.toggleText}>{t(availabilitySaving ? 'captain.updatingAvailability' : online ? 'captain.goOffline' : 'captain.goOnline')}</Text></Pressable>
         {availabilityError && <Text accessibilityRole="alert" style={styles.availabilityError}>{t('captain.availabilityUpdateFailed')}</Text>}
+        {balance && <View style={styles.summaryCard}><Text style={styles.summaryLabel}>{balance.amount_due > balance.block_threshold && !online ? 'Payment required' : 'Amount due to Sawaari'}</Text><Text style={styles.summaryValue}>{formatFare(balance.amount_due)}</Text><Text style={styles.summaryLabel}>UPI ID: {COMPANY_UPI_ID}</Text>{balance.status === 'PENDING_VERIFICATION' ? <Text style={styles.summaryLabel}>Payment verification pending</Text> : <><TextInput value={utr} onChangeText={setUtr} placeholder="UTR / UPI transaction reference" style={styles.utr} /><Pressable disabled={!utr.trim()} onPress={() => { if (utr.trim()) void rideDispatchService.submitAdjustmentPayment(balance.adjustment_id, balance.amount_due, utr).then(() => setBalance({ ...balance, status: 'PENDING_VERIFICATION' })).catch(() => setAvailabilityError(true)); }}><Text style={styles.sheetHint}>I Have Paid</Text></Pressable></>}</View>}
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}><Text style={styles.summaryValue}>{formatFare(today.earnings)}</Text><Text style={styles.summaryLabel}>{t('captain.todayEarnings')}</Text></View>
           <View style={styles.summaryCard}><Text style={styles.summaryValue}>{today.trips}</Text><Text style={styles.summaryLabel}>{t('captain.todayTrips')}</Text></View>

@@ -13,6 +13,8 @@ import {
   resolveCaptainIssue,
   resolveCustomerIssue,
   resolveDisputeWithAdjustment,
+  fetchAdjustmentPaymentRequests,
+  reviewAdjustmentPayment,
   resolvePayoutDispute,
   reviewSettlement,
   sendCaptainPaymentIssueMessage,
@@ -26,12 +28,13 @@ import type { CaptainPaymentIssueMessage } from '@/lib/api';
 import type { CustomerPaymentIssueMessage } from '@/lib/api';
 import { formatDateTime, formatFare, titleize } from '@/lib/format';
 
-type Tab = 'settlements' | 'payouts' | 'disputes';
+type Tab = 'settlements' | 'payouts' | 'disputes' | 'recoveries';
 
 const TABS: Array<[Tab, string]> = [
   ['settlements', 'Settlement queue'],
   ['payouts', 'Payout queue'],
   ['disputes', 'Disputes & issues'],
+  ['recoveries', 'Sawaari recovery'],
 ];
 
 interface Field {
@@ -145,8 +148,17 @@ export function PaymentsPage() {
       {tab === 'settlements' ? <SettlementsTab /> : null}
       {tab === 'payouts' ? <PayoutsTab /> : null}
       {tab === 'disputes' ? <DisputesTab /> : null}
+      {tab === 'recoveries' ? <RecoveriesTab /> : null}
     </>
   );
+}
+
+function RecoveriesTab() {
+  const queryClient = useQueryClient(); const [dialog, setDialog] = useState<{ id: string; action: 'VERIFIED' | 'REJECTED' } | null>(null);
+  const requests = useQuery({ queryKey: ['adjustment-payment-requests'], queryFn: fetchAdjustmentPaymentRequests });
+  const review = useMutation({ mutationFn: (v: { id: string; action: 'VERIFIED' | 'REJECTED'; note?: string }) => reviewAdjustmentPayment(v.id, v.action, v.note), onSuccess: () => { setDialog(null); void queryClient.invalidateQueries({ queryKey: ['adjustment-payment-requests'] }); void queryClient.invalidateQueries({ queryKey: ['disputes'] }); } });
+  if (requests.isLoading) return <LoadingBlock />; if (requests.error) return <ErrorBlock error={requests.error} />;
+  return <><Card><div className="border-b border-slate-100 px-4 py-3"><h2 className="text-sm font-semibold text-slate-700">UPI payments to Sawaari · 9030279703@ibl</h2></div><DataTable data={requests.data ?? []} columns={[{ header: 'Submitted', accessorFn: (r) => r.submitted_at, cell: (c) => formatDateTime(c.getValue<string>()) }, { header: 'Account', accessorFn: (r) => r.account_type }, { header: 'Customer / Captain', accessorFn: (r) => r.customer_name ?? r.captain_name ?? '—' }, { header: 'Amount', accessorFn: (r) => Number(r.amount), cell: (c) => formatFare(c.getValue<number>()) }, { header: 'UTR', accessorFn: (r) => r.utr_reference }, { header: 'Source ride', accessorFn: (r) => r.source_ride_id.slice(0, 8) }, { header: 'Status', accessorFn: (r) => r.status, cell: (c) => <StatusBadge value={c.getValue<string>()} /> }, { header: '', id: 'actions', cell: (c) => c.row.original.status === 'PENDING_VERIFICATION' ? <div className="flex gap-1"><button onClick={() => setDialog({ id: c.row.original.request_id, action: 'VERIFIED' })} className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white">Verify payment</button><button onClick={() => setDialog({ id: c.row.original.request_id, action: 'REJECTED' })} className="rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold text-white">Reject</button></div> : null }]} emptyMessage="No Sawaari payment requests." /></Card>{dialog && <ActionDialog title={dialog.action === 'VERIFIED' ? 'Verify UPI payment' : 'Reject UPI payment'} fields={[{ key: 'note', label: dialog.action === 'REJECTED' ? 'Rejection reason (required)' : 'Operator note (optional)', type: 'textarea', required: dialog.action === 'REJECTED' }]} submitLabel={dialog.action === 'VERIFIED' ? 'Verify payment' : 'Reject payment'} busy={review.isPending} error={review.error instanceof Error ? review.error.message : null} onCancel={() => setDialog(null)} onSubmit={(values) => review.mutate({ id: dialog.id, action: dialog.action, note: values.note })} />}</>;
 }
 
 // -------------------------------------------------------------- settlements

@@ -9,7 +9,7 @@ export type RideStatus =
 
 export type PaymentStatus = 'pending' | 'declared' | 'confirmed' | 'not_required';
 export type ChargeType = 'free' | 'standard';
-export type PaymentMethod = 'cash' | 'upi';
+export type PaymentMethod = 'cash' | 'upi' | 'razorpay';
 
 export interface Profile {
   id: string;

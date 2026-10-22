@@ -37,7 +37,7 @@ export type DispatchRide = {
   captain_latitude?: number | null;
   captain_longitude?: number | null;
   payment_status?: 'pending' | 'declared' | 'confirmed' | 'not_required';
-  payment_method?: 'cash' | 'upi' | null;
+  payment_method?: 'cash' | 'upi' | 'razorpay' | null;
   customer_charge_amount?: number | null;
   customer_charge_type?: 'free' | 'standard';
   customer_charge_status?: 'pending' | 'declared' | 'not_required';
@@ -584,6 +584,15 @@ export const rideDispatchService = {
     if (error || !data) throw error ?? new Error('Payment breakdown is unavailable');
     const breakdown = data as { ride_fare: unknown; previous_ride_adjustment: unknown; total_payable: unknown; adjustment_reason: string | null };
     return { ride_fare: asNumber(breakdown.ride_fare), previous_ride_adjustment: asNumber(breakdown.previous_ride_adjustment), total_payable: asNumber(breakdown.total_payable), adjustment_reason: breakdown.adjustment_reason };
+  },
+  async getCustomerOutstandingBalance() {
+    const { data, error } = await requireClient().rpc('customer_outstanding_sawaari_balance');
+    if (error) throw error;
+    return (data ?? []).map((row: any) => ({ amount_due: asNumber(row.amount_due), status: String(row.status), adjustment_id: String(row.adjustment_id), rejection_reason: row.rejection_reason == null ? null : String(row.rejection_reason) }));
+  },
+  async submitAdjustmentPayment(adjustmentId: string, amount: number, utr: string) {
+    const { error } = await requireClient().rpc('submit_financial_adjustment_payment', { p_adjustment_id: adjustmentId, p_amount: amount, p_utr_reference: utr.trim() });
+    if (error) throw error;
   },
 
   async confirmCaptainPaymentReceived(rideId: string) {

@@ -7,7 +7,7 @@ import { CustomerTabBar } from './CustomerScreens';
 import { colors, fontFamily, fontSize, layout, radii } from '../theme';
 import { getCurrentProfile, type CurrentProfile } from '../services/currentProfile';
 import { rideDispatchService, type ReceivedRating } from '../services/rideDispatch';
-import { deleteCurrentAccount } from '../services/accountDeletion';
+import { deleteCurrentAccount, logoutCurrentDevice } from '../services/accountDeletion';
 import { useDialog } from '../components/ThemedDialog';
 import { selectionHaptic } from '../utils/haptics';
 import { useBottomTabBarMetrics } from '../utils/safeAreaLayout';
@@ -18,13 +18,14 @@ function displayPhoneNumber(phone: string | null | undefined) {
   return digits.startsWith('91') && digits.length === 12 ? digits.slice(2) : phone;
 }
 
-export function CustomerProfileScreen({ onHome, onBookings, onSettings, onSafety, onAccountDeleted }: { onHome: () => void; onBookings: () => void; onSettings: () => void; onSafety: () => void; onAccountDeleted: () => void }) {
+export function CustomerProfileScreen({ onHome, onBookings, onSettings, onSafety, onAccountDeleted, onLoggedOut }: { onHome: () => void; onBookings: () => void; onSettings: () => void; onSafety: () => void; onAccountDeleted: () => void; onLoggedOut: () => void }) {
   const { t } = useTranslation();
   const { tabBarHeight } = useBottomTabBarMetrics();
   const dialog = useDialog();
   const [profile, setProfile] = useState<CurrentProfile | null>(null);
   const [rating, setRating] = useState<ReceivedRating | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useFocusEffect(useCallback(() => {
     void getCurrentProfile().then(setProfile).catch(() => setProfile(null));
@@ -33,7 +34,7 @@ export function CustomerProfileScreen({ onHome, onBookings, onSettings, onSafety
   }, []));
 
   const confirmDelete = () => {
-    if (deleting) return;
+    if (deleting || loggingOut) return;
     dialog({
       title: t('profile.deleteAccountTitle'),
       message: t('profile.deleteAccountConfirmation'),
@@ -54,6 +55,19 @@ export function CustomerProfileScreen({ onHome, onBookings, onSettings, onSafety
     });
   };
 
+  const logout = async () => {
+    if (deleting || loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logoutCurrentDevice();
+      onLoggedOut();
+    } catch {
+      dialog({ title: t('login.tryAgain') });
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
   return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + 24 }]} showsVerticalScrollIndicator={false}>
       <Text style={styles.title}>{t('screens.profile')}</Text>
@@ -71,7 +85,10 @@ export function CustomerProfileScreen({ onHome, onBookings, onSettings, onSafety
       <Pressable accessibilityRole="button" onPress={() => { selectionHaptic(); onSafety(); }} style={({ pressed }) => [styles.safetyRow, pressed && styles.rowPressed]}>
         <Text style={styles.rowIcon}>🛡</Text><View style={styles.safetyText}><Text style={styles.rowTitle}>{t('home.safetyTitle')}</Text><Text style={styles.subtitle}>{t('home.safetySubtitle')}</Text></View><Text style={styles.chevron}>›</Text>
       </Pressable>
-      <Pressable accessibilityRole="button" disabled={deleting} onPress={() => { selectionHaptic(); confirmDelete(); }} style={({ pressed }) => [styles.deleteRow, pressed && styles.deleteRowPressed, deleting && styles.disabled]}>
+      <Pressable accessibilityRole="button" disabled={deleting || loggingOut} onPress={() => { selectionHaptic(); void logout(); }} style={({ pressed }) => [styles.logoutRow, pressed && styles.rowPressed, loggingOut && styles.disabled]}>
+        <Text style={styles.logoutText}>{loggingOut ? t('profile.loggingOut') : t('profile.logoutAction')}</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" disabled={deleting || loggingOut} onPress={() => { selectionHaptic(); confirmDelete(); }} style={({ pressed }) => [styles.deleteRow, pressed && styles.deleteRowPressed, (deleting || loggingOut) && styles.disabled]}>
         <Text style={styles.deleteText}>{deleting ? t('login.pleaseWait') : t('profile.deleteAccountAction')}</Text>
       </Pressable>
     </ScrollView>
@@ -99,6 +116,8 @@ const styles = StyleSheet.create({
   safetyText: { flex: 1, gap: 1 },
   subtitle: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs },
   chevron: { color: colors.textMuted, fontSize: 26 },
+  logoutRow: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, justifyContent: 'center', minHeight: layout.rowMinHeight, paddingHorizontal: layout.cardPaddingHorizontal },
+  logoutText: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
   deleteRow: { alignItems: 'center', borderColor: colors.error, borderRadius: radii.md, borderWidth: 1, justifyContent: 'center', minHeight: layout.rowMinHeight, paddingHorizontal: layout.cardPaddingHorizontal },
   deleteRowPressed: { backgroundColor: colors.errorLight },
   disabled: { opacity: 0.6 },

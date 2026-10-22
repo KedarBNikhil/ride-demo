@@ -78,7 +78,14 @@ export function CustomerAppNavigator() {
     setCustomerRideResolution('resolving');
     const sync = (async () => {
       const ride = await rideDispatchService.getCustomerCurrentRide(dismissedCompletedRideIdsRef.current);
-      if (!ride) { setCustomerRideResolution('none'); if (customerRideRef.current.id && !customerRideRef.current.id.startsWith('local-')) clearCustomerRide(); return null; }
+      if (!ride) {
+        setCustomerRideResolution('none');
+        if (customerRideRef.current.id && !customerRideRef.current.id.startsWith('local-')) clearCustomerRide();
+        if (navigationRef.isReady() && ['Searching', 'RideConfirmed'].includes(currentRouteName() ?? '')) {
+          navigationRef.reset({ index: 0, routes: [{ name: 'CustomerHome' as never }] });
+        }
+        return null;
+      }
       const pickupOtp = ride.status === 'arrived' ? await rideDispatchService.getStoredCustomerPickupOtp(ride.id) : null;
       setCustomerRide({ ...customerRideFromDispatch(ride), ...(pickupOtp ? { pickupOtp } : {}) }); setCustomerRideStatus(ride.status); setCustomerRideResolution('active');
       if (ride.status === 'arrived' && !pickupOtp) void rideDispatchService.issueCustomerPickupOtp(ride.id).then((otp) => { if (otp) setCustomerRide((current) => current.id === ride.id ? { ...current, pickupOtp: otp } : current); }).catch(() => undefined);
@@ -118,7 +125,7 @@ export function CustomerAppNavigator() {
     <Stack.Screen name="CustomerRideChat">{({ navigation, route }) => { const { rideId, captainName } = route.params as { rideId: string; captainName: string }; return <CustomerRideChat rideId={rideId} captainName={captainName} onBack={() => navigation.goBack()} />; }}</Stack.Screen>
     <Stack.Screen name="CustomerPaymentIssueSupport">{({ navigation, route }) => <CustomerPaymentIssueSupportScreen rideId={(route.params as { rideId: string }).rideId} onBack={() => navigation.goBack()} />}</Stack.Screen>
     <Stack.Screen name="CustomerBookings">{({ navigation }) => <CustomerBookingsScreen ride={customerRide} onHome={openCustomerHome} onProfile={() => navigation.navigate('CustomerProfile')} onCancelled={() => { setCustomerRideStatus('cancelled'); setCustomerRideResolution('none'); navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] }); }} onOpenSupport={(rideId) => navigation.navigate('CustomerPaymentIssueSupport', { rideId })} onOpenRide={(selectedRide, status) => { void allowCustomerBooking().then((allowed) => { if (!allowed) return; if (status === 'cancelled' || status === 'completed') { const bookingDraft = toReusableCustomerBookingDraft(selectedRide); setCustomerRide(bookingDraft); setCustomerRideStatus(null); setCustomerRideResolution('none'); const missingLocation = missingCustomerBookingLocation(bookingDraft); if (missingLocation) { setLocationTarget(missingLocation); navigation.navigate('LocationPicker'); } else navigation.navigate('RideType'); return; } setCustomerRide(selectedRide); setCustomerRideStatus(status); if (status === 'requested' || status === 'searching') navigation.navigate('Searching'); else navigation.navigate('RideConfirmed'); }); }} />}</Stack.Screen>
-    <Stack.Screen name="CustomerProfile">{({ navigation }) => <CustomerProfileScreen onHome={openCustomerHome} onBookings={() => navigation.navigate('CustomerBookings')} onSettings={() => navigation.navigate('Settings')} onSafety={() => navigation.navigate('EmergencyContacts')} onAccountDeleted={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerAuthChoice' }] })} />}</Stack.Screen>
+    <Stack.Screen name="CustomerProfile">{({ navigation }) => <CustomerProfileScreen onHome={openCustomerHome} onBookings={() => navigation.navigate('CustomerBookings')} onSettings={() => navigation.navigate('Settings')} onSafety={() => navigation.navigate('EmergencyContacts')} onAccountDeleted={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerAuthChoice' }] })} onLoggedOut={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerAuthChoice' }] })} />}</Stack.Screen>
     <Stack.Screen name="LiveRideTracking">{({ navigation, route }) => <LiveRideTrackingScreen token={(route.params as { token: string }).token} onClose={() => navigation.goBack()} />}</Stack.Screen>
     <Stack.Screen name="Settings">{({ navigation, route }) => <SettingsScreen profile={Boolean((route.params as { profile?: boolean } | undefined)?.profile)} ratingRole="customer" onBack={() => navigation.goBack()} onLanguageChange={(next) => { void chooseLanguage(next).then(() => navigation.goBack()); }} onSafety={() => navigation.navigate('EmergencyContacts')} onAbout={() => navigation.navigate('About')} onAccountDeleted={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerAuthChoice' }] })} />}</Stack.Screen>
     <Stack.Screen name="About">{({ navigation }) => <AboutScreen onBack={() => navigation.goBack()} />}</Stack.Screen>

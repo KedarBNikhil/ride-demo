@@ -9,7 +9,7 @@ fi
 
 readonly PACKAGE="com.nandyalride.captain"
 readonly PROJECT="6acc15fd-28b0-4f3a-b825-7e8e5d05cc13"
-readonly RUNTIME="captain-1.0.4"
+readonly RUNTIME="captain-1.0.7"
 readonly CHANNEL="production-captain"
 readonly VARIANT="captain"
 readonly MODE="captain"

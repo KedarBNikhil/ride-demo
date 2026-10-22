@@ -38,5 +38,11 @@ export default {
     ['expo-location', {}],
     ['expo-contacts', { contactsPermission: 'Allow Nandyal Ride to access your contacts so you can add emergency contacts.' }],
   ],
-  extra: { appMode: 'customer', eas: { projectId } },
+  extra: {
+    appMode: 'customer',
+    // Keep gateway checkout off until its server secrets and payment methods
+    // have been configured for the release channel.
+    razorpayRideCheckoutEnabled: process.env.EXPO_PUBLIC_RAZORPAY_RIDE_CHECKOUT_ENABLED === 'true',
+    eas: { projectId },
+  },
 };

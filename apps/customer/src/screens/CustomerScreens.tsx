@@ -38,6 +38,7 @@ import { legalOperator } from '../legal/legalDocuments';
 import { straightLineDistanceMeters } from '../services/distanceProvider';
 import { LiveLocationMap, LiveLocationMarker } from '../components/LiveLocationMap';
 import { CustomerRideSettlement } from './CustomerRideSettlement';
+import { OutstandingBalanceCard } from '../components/OutstandingBalanceCard';
 import { formatFare, formatNumber, formatOtp } from '../utils/format';
 import { filterAndSortRideHistory, rideHistoryPeriodLabel, type RideHistoryFilter } from '../utils/rideHistory';
 import { RideHistoryFilterControl } from '../components/RideHistoryFilter';
@@ -196,6 +197,7 @@ export function CustomerAuthChoiceScreen({ onLogin, onSignup }: { onLogin: () =>
 }
 
 export function CustomerSignupScreen({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
+  const dialog = useDialog();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
@@ -210,7 +212,14 @@ export function CustomerSignupScreen({ onComplete, onBack }: { onComplete: () =>
     <Text style={styles.signupLabel}>Address <Text style={styles.signupOptional}>(optional)</Text></Text><TextInput value={address} onChangeText={setAddress} placeholder="Add an address" placeholderTextColor={colors.textMuted} style={styles.signupInput} />
     <View style={styles.addressTypes}>{(['home', 'work'] as const).map((type) => <Pressable key={type} onPress={() => setAddressType(type)} style={[styles.addressType, addressType === type && styles.addressTypeActive]}><Text style={[styles.addressTypeText, addressType === type && styles.addressTypeTextActive]}>{type === 'home' ? 'Home' : 'Work'}</Text></Pressable>)}</View>
   </View>;
-  return <PhoneOtpAuth title="Create your account" subtitle="Enter your details to get started" emoji="" phoneStepLabel="" onBack={onBack} initialPhone={phone} phoneStepContent={details} canSendOtp={Boolean(name.trim() && validPhone())} onSendOtp={async (value) => { setPhone(value); await customerAuthService.sendOtp(value); }} onVerifyOtp={async (value, otp) => { await customerAuthService.verifyOtp(value, otp); await customerAuthService.saveSignupProfile(name); onComplete(); }} />;
+  return <PhoneOtpAuth title="Create your account" subtitle="Enter your details to get started" emoji="" phoneStepLabel="" onBack={onBack} initialPhone={phone} phoneStepContent={details} canSendOtp={Boolean(name.trim() && validPhone())} onSendOtp={async (value) => {
+    setPhone(value);
+    if (await customerAuthService.accountExists(value)) {
+      dialog({ title: 'Sign up', message: 'This number already has an account. Please use Login to continue.', buttons: [{ text: 'OK' }] });
+      return false;
+    }
+    await customerAuthService.sendOtp(value);
+  }} onVerifyOtp={async (value, otp) => { await customerAuthService.verifyOtp(value, otp); await customerAuthService.saveSignupProfile(name); onComplete(); }} />;
 }
 
 /* ─────────────────────────── HOME ─────────────────────────── */
@@ -1118,6 +1127,7 @@ export function BookingConfirmScreen({
         {ride.kind === 'auto' && <SummaryRow label={t('rides.passengers')} value={formatNumber(ride.passengerCount)} icon="👤" />}
         <View style={[styles.summaryRow, styles.summaryRowDivider]}><Text style={styles.summaryIcon}>💰</Text><View style={styles.summaryText}><Text style={styles.summaryLabel}>{t('rides.estimate')}</Text><CustomerFareValue display={fareDisplay} t={t} alignStart /></View></View>
       </View>
+      <OutstandingBalanceCard />
       <PrimaryButton label={booking ? t('login.pleaseWait') : t('rides.book')} onPress={() => { void book(); }} disabled={booking} />
     </ScreenShell>
   );
@@ -1364,6 +1374,9 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
     });
   }, [onHome, onPickupOtpIssued, ride.id, ride.pickupOtp]);
   useEffect(() => {
+    if (liveRide?.status === 'completed' && liveRide.customer_rating != null) onHome();
+  }, [liveRide?.customer_rating, liveRide?.id, liveRide?.status, onHome]);
+  useEffect(() => {
     if (!ride.id || ride.id.startsWith('local-')) return;
     const rideId = ride.id;
     let active = true;
@@ -1400,7 +1413,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
   const liveFareDisplay = getCustomerFareDisplay({ kind: ride.kind, passengerCount: ride.passengerCount, routeQuote: ride.routeQuote, backendRide: liveRide });
 
   if (liveStatus === 'completed' && ride.id) {
-    return <CustomerRideSettlement rideId={ride.id} fare={liveFareDisplay.customerCharge ?? 0} captainName={captainName} paymentStatus={liveRide?.payment_status ?? 'pending'} freeRide={liveFareDisplay.isFree} onHome={onHome} />;
+    return <CustomerRideSettlement rideId={ride.id} fare={liveFareDisplay.customerCharge ?? 0} captainName={captainName} paymentStatus={liveRide?.payment_status ?? 'pending'} paymentMethod={liveRide?.payment_method} freeRide={liveFareDisplay.isFree} onHome={onHome} />;
   }
   const displayedCaptainCoordinate = liveRide?.captain_latitude != null && liveRide?.captain_longitude != null
     ? { latitude: Number(liveRide.captain_latitude), longitude: Number(liveRide.captain_longitude) }

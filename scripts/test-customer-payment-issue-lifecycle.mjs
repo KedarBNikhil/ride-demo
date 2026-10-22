@@ -32,9 +32,18 @@ test('an open payment issue releases a completed ride from Customer payment rest
   assert.equal(customerRideLifecycle(completedRide), 'payment');
 });
 
+test('a completed and rated ride is never restored as a current ride', () => {
+  assert.equal(customerRideLifecycle({ ...completedRide, payment_status: 'confirmed', customer_rating: 5 }), 'none');
+});
+
 test('the Customer resolver fetches issue state before choosing a payment ride', () => {
   assert.match(source, /customerRideHasOpenPaymentIssue/);
   assert.match(source, /ridesWithPaymentIssueState[\s\S]*customerRideLifecycle/);
+});
+
+test('a stale open ride screen redirects home after the completed ride is rated', () => {
+  const screens = fs.readFileSync(path.join(root, 'apps/customer/src/screens/CustomerScreens.tsx'), 'utf8');
+  assert.match(screens, /liveRide\?\.status === 'completed' && liveRide\.customer_rating != null\) onHome\(\)/);
 });
 
 test('the booking invariant exempts only rides with an open Customer or Captain payment issue', () => {

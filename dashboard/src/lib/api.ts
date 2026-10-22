@@ -318,6 +318,9 @@ export interface DisputeFinancialAdjustment { source_dispute_id: string; account
 export async function fetchDisputeFinancialAdjustments(): Promise<DisputeFinancialAdjustment[]> {
   return (await unwrap(() => supabase!.rpc('operator_dispute_financial_adjustments'))) as DisputeFinancialAdjustment[];
 }
+export interface AdjustmentPaymentRequest { request_id: string; account_type: 'CUSTOMER' | 'CAPTAIN'; customer_name: string | null; captain_name: string | null; amount: number; utr_reference: string; status: string; adjustment_id: string; source_ride_id: string; submitted_at: string; rejection_reason: string | null; }
+export async function fetchAdjustmentPaymentRequests(): Promise<AdjustmentPaymentRequest[]> { return (await unwrap(() => supabase!.rpc('operator_adjustment_payment_requests'))) as AdjustmentPaymentRequest[]; }
+export function reviewAdjustmentPayment(requestId: string, action: 'VERIFIED' | 'REJECTED', note?: string) { return unwrap(() => supabase!.rpc('operator_review_adjustment_payment', { p_request_id: requestId, p_action: action, p_note: note ?? null })); }
 
 // ---------------------------------------------------- Captain settlements
 

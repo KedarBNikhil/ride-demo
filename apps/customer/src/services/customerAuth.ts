@@ -7,13 +7,17 @@ const productionAuth = createProductionAuthService('customer');
 
 export const customerAuthService = {
   sendOtp: productionAuth.sendOtp,
-  async sendLoginOtp(phone: string) {
+  async accountExists(phone: string) {
     const client = supabase;
     if (!client) throw new Error('SUPABASE_NOT_CONFIGURED');
     const normalizedPhone = toIndianE164(phone);
     const { data, error } = await client.rpc('customer_login_account_exists', { p_phone: normalizedPhone });
     if (error) throw error;
-    if (!data) return { requested: false };
+    return Boolean(data);
+  },
+  async sendLoginOtp(phone: string) {
+    const normalizedPhone = toIndianE164(phone);
+    if (!await this.accountExists(normalizedPhone)) return { requested: false };
     return productionAuth.sendOtp(normalizedPhone);
   },
   async verifyOtp(phone: string, otp: string) {

@@ -22,7 +22,7 @@ export function CaptainAppNavigator() {
   const [hasLanguage, setHasLanguage] = useState<boolean | null>(null);
   const [i18n] = useState(() => createAppI18n('en'));
   const [captainOnline, setCaptainOnline] = useState(false);
-  const [profile, setProfile] = useState<CaptainProfile>({ name: '', language: 'en', vehicleType: null });
+  const [profile, setProfile] = useState<CaptainProfile>({ name: '', language: 'en', vehicleType: null, vehiclePlateNumber: '' });
   const [accountStatus, setAccountStatus] = useState<CaptainAccountStatus>('unauthenticated');
   const [onboardingRoute, setOnboardingRoute] = useState<CaptainOnboardingRoute>('signup');
   const [accountReady, setAccountReady] = useState(false);

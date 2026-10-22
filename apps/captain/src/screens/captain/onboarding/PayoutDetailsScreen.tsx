@@ -8,6 +8,18 @@ import { captainOnboardingService } from '../../../services/captainOnboarding';
 import { colors, fontFamily, fontSize, radii, shadows } from '../../../theme';
 import { normalizeAccountHolder, normalizeAccountNumber, normalizeIfsc, normalizeUpi, payoutFieldError, payoutIsValid, type PayoutField } from '../../../utils/payoutValidation';
 
+function payoutSubmissionError(error: unknown, fallback: string) {
+  const message = error instanceof Error
+    ? error.message
+    : error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+      ? error.message
+      : '';
+  if (message === 'AUTHENTICATION_REQUIRED') return 'Your session has expired. Please sign in again.';
+  if (message === 'PAYOUT_APPLICATION_NOT_FOUND') return 'Your onboarding application was not found. Please sign in again and restart onboarding.';
+  if (/network|fetch|timeout|offline/i.test(message)) return 'We could not reach Sawaari. Check your Internet connection and try again.';
+  return fallback;
+}
+
 export function PayoutDetailsScreen({ onBack, onFinish }: { onBack: () => void; onFinish: () => Promise<void> }) {
   const { t } = useTranslation();
   const [payout, setPayout] = useState<CaptainPayout>({ method: 'bank' });
@@ -20,7 +32,7 @@ export function PayoutDetailsScreen({ onBack, onFinish }: { onBack: () => void; 
     setTouched(payout.method === 'bank' ? { accountNumber: true, confirmAccountNumber: true, ifsc: true, accountHolder: true } : { upiId: true });
     if (!payoutIsValid(payout.method, payout)) return;
     setSaving(true); setSubmitError('');
-    try { await captainOnboardingService.savePayout(payout); await onFinish(); } catch (error) { setSubmitError(error instanceof Error ? error.message : t('captain.payoutRequired')); } finally { setSaving(false); }
+    try { await captainOnboardingService.savePayout(payout); await onFinish(); } catch (error) { setSubmitError(payoutSubmissionError(error, t('captain.payoutSubmissionFailed'))); } finally { setSaving(false); }
   };
   const field = (label: string, key: PayoutField, placeholder: string, keyboardType?: 'number-pad') => {
     const value = payout[key as keyof CaptainPayout] ?? ''; const error = errorFor(key);
