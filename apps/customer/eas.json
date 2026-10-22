@@ -2,6 +2,17 @@
   "cli": { "appVersionSource": "local" },
   "build": {
     "development": { "developmentClient": true, "distribution": "internal" },
+    "razorpay-test": {
+      "distribution": "internal",
+      "environment": "production",
+      "android": { "buildType": "apk" },
+      "env": {
+        "APP_VARIANT": "customer",
+        "EXPO_PUBLIC_APP_MODE": "customer",
+        "EXPO_PUBLIC_AUTH_MODE": "production",
+        "EXPO_PUBLIC_RAZORPAY_TEST_ENABLED": "true"
+      }
+    },
     "production": {
       "environment": "production",
       "channel": "production-customer",

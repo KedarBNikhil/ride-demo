@@ -51,6 +51,11 @@
     "rating": "Rating",
     "ratingCount": "{{count}} ratings",
     "noRatings": "No ratings yet",
+    "razorpayTestCheckout": "Test Razorpay checkout",
+    "razorpayTestOpening": "Opening Test Mode checkout…",
+    "razorpayTestSuccess": "Test payment verified",
+    "razorpayTestSuccessDetail": "Razorpay verified this Test Mode payment. No ride or settlement was changed.",
+    "razorpayTestFailed": "Test payment was not completed",
     "deleteAccountTitle": "Delete account?",
     "deleteAccountConfirmation": "Your account will be permanently deleted. You can register again later with this phone number, but any new-user offers will not be restored.",
     "deleteAccountAction": "Delete account"

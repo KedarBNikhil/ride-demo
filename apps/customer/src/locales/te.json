@@ -51,6 +51,11 @@
     "rating": "రేటింగ్",
     "ratingCount": "{{count}} రేటింగ్‌లు",
     "noRatings": "ఇంకా రేటింగ్‌లు లేవు",
+    "razorpayTestCheckout": "Razorpay పరీక్ష చెక్‌అవుట్",
+    "razorpayTestOpening": "పరీక్ష మోడ్ చెక్‌అవుట్ తెరుస్తోంది…",
+    "razorpayTestSuccess": "పరీక్ష చెల్లింపు ధృవీకరించబడింది",
+    "razorpayTestSuccessDetail": "Razorpay ఈ పరీక్ష మోడ్ చెల్లింపును ధృవీకరించింది. రైడ్ లేదా సెటిల్‌మెంట్ మార్చబడలేదు.",
+    "razorpayTestFailed": "పరీక్ష చెల్లింపు పూర్తికాలేదు",
     "deleteAccountTitle": "ఖాతాను తొలగించాలా?",
     "deleteAccountConfirmation": "మీ ఖాతా శాశ్వతంగా తొలగించబడుతుంది. ఇదే ఫోన్ నంబర్‌తో మళ్లీ నమోదు చేసుకోవచ్చు, కానీ కొత్త వినియోగదారు ఆఫర్లు తిరిగి ఇవ్వబడవు.",
     "deleteAccountAction": "ఖాతాను తొలగించండి"

@@ -4,13 +4,13 @@ export default {
   name: 'Sawaari',
   slug: 'nandyal-ride-customer',
   scheme: 'exp+nandyal-ride-customer',
-  version: '1.0.3',
+  version: '1.0.4',
   orientation: 'portrait',
   userInterfaceStyle: 'light',
   icon: './assets/images/sawaari-app-icon.png',
   splash: { resizeMode: 'contain', backgroundColor: '#FFFFFF' },
   assetBundlePatterns: ['**/*'],
-  runtimeVersion: 'customer-1.0.3',
+  runtimeVersion: 'customer-1.0.4',
   updates: {
     url: `https://u.expo.dev/${projectId}`,
     enabled: true,
@@ -20,7 +20,7 @@ export default {
   },
   android: {
     package: 'com.nandyalride.customer',
-    versionCode: 5,
+    versionCode: 6,
     googleServicesFile: './firebase/google-services.json',
     config: { googleMaps: { apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_CUSTOMER ?? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '' } },
     permissions: ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'POST_NOTIFICATIONS', 'READ_CONTACTS'],
@@ -38,5 +38,9 @@ export default {
     ['expo-location', {}],
     ['expo-contacts', { contactsPermission: 'Allow Nandyal Ride to access your contacts so you can add emergency contacts.' }],
   ],
-  extra: { appMode: 'customer', eas: { projectId } },
+  extra: {
+    appMode: 'customer',
+    razorpayTestCheckoutEnabled: process.env.EXPO_PUBLIC_RAZORPAY_TEST_ENABLED === 'true',
+    eas: { projectId },
+  },
 };

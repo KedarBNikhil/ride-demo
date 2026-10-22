@@ -10,6 +10,7 @@ import { useDialog } from '../components/ThemedDialog';
 import { rideDispatchService, type ReceivedRating } from '../services/rideDispatch';
 import { getCurrentProfile, type CurrentProfile } from '../services/currentProfile';
 import { deleteCurrentAccount } from '../services/accountDeletion';
+import { isRazorpayTestCheckoutEnabled, startRazorpayTestCheckout } from '../services/razorpayTestCheckout';
 import { selectionHaptic } from '../utils/haptics';
 
 function displayPhoneNumber(phone: string | null | undefined) {
@@ -88,6 +89,7 @@ export function SettingsScreen({
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
+  const [razorpayTesting, setRazorpayTesting] = useState(false);
   const appName = Constants.expoConfig?.name ?? t('app.name');
   const appVersion = Constants.expoConfig?.version;
   const profileText = i18n.language === 'te'
@@ -124,6 +126,18 @@ export function SettingsScreen({
       ],
     });
   };
+  const startRazorpayTest = async () => {
+    if (razorpayTesting) return;
+    setRazorpayTesting(true);
+    try {
+      await startRazorpayTestCheckout();
+      dialog({ title: t('profile.razorpayTestSuccess'), message: t('profile.razorpayTestSuccessDetail') });
+    } catch (error) {
+      dialog({ title: t('profile.razorpayTestFailed'), message: error instanceof Error ? error.message : t('login.tryAgain') });
+    } finally {
+      setRazorpayTesting(false);
+    }
+  };
   if (!profile) {
     return <ScreenShell back={onBack} title={t('screens.settings')}>
       <View style={styles.settingsGroup}>
@@ -140,6 +154,9 @@ export function SettingsScreen({
         <Pressable accessibilityRole="button" onPress={() => dialog({ title: t('home.helpTitle'), message: t('profile.helpComingSoon') })} style={({ pressed }) => [styles.settingsRow, pressed && styles.rowPressed]}>
           <Text style={styles.settingsTitle}>{t('profile.help')}</Text><Text style={styles.rowChevron}>›</Text>
         </Pressable>
+        {isRazorpayTestCheckoutEnabled && <Pressable accessibilityRole="button" disabled={razorpayTesting} onPress={() => { selectionHaptic(); void startRazorpayTest(); }} style={({ pressed }) => [styles.settingsRow, pressed && styles.rowPressed, razorpayTesting && styles.rowDisabled]}>
+          <Text style={styles.settingsTitle}>{razorpayTesting ? t('profile.razorpayTestOpening') : t('profile.razorpayTestCheckout')}</Text><Text style={styles.rowChevron}>›</Text>
+        </Pressable>}
       </View>
     </ScreenShell>;
   }
@@ -243,6 +260,7 @@ const styles = StyleSheet.create({
   settingsTitle: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.md, fontWeight: '800' },
   languageRows: { backgroundColor: colors.surfaceSecondary, gap: 1, paddingVertical: 4 },
   rowPressed: { backgroundColor: colors.surfaceSecondary },
+  rowDisabled: { opacity: 0.6 },
   profileCard: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', gap: 12, paddingHorizontal: layout.cardPaddingHorizontal, paddingVertical: layout.cardPaddingVertical },
   profileAvatar: { alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: radii.pill, height: 48, justifyContent: 'center', width: 48 },
   profileAvatarHead: { backgroundColor: '#66717D', borderRadius: radii.pill, height: 16, width: 16 },
