@@ -3,6 +3,13 @@
   "version": "1.0.2",
   "private": true,
   "main": "index.js",
+  "expo": {
+    "autolinking": {
+      "ios": {
+        "exclude": ["react-native-razorpay"]
+      }
+    }
+  },
   "scripts": {
     "start": "expo start --clear",
     "android": "expo run:android",

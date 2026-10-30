@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 
 // Expo Go does not provide this project's native push configuration. Avoid
@@ -143,7 +144,7 @@ export async function registerPushNotifications(appVariant: 'customer' | 'captai
   const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
   const { error } = await supabase.rpc('register_push_device', {
     p_expo_push_token: token,
-    p_platform: 'android',
+    p_platform: Platform.OS,
     p_app_variant: appVariant,
   });
   if (error) throw error;

@@ -8,6 +8,7 @@ import {
   Image,
   LayoutAnimation,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -48,6 +49,8 @@ import { useBottomTabBarMetrics } from '../utils/safeAreaLayout';
 import { centerCoordinateInVisibleViewport, fitRouteInVisibleViewport, getVisibleMapPadding, HOME_LOCATION_DELTA, isValidMapCoordinate } from '../utils/mapCamera';
 import { DraggableMapSheet } from '../components/DraggableMapSheet';
 import { missingCustomerBookingLocation, toCustomerBookingConfirmationSnapshot } from '../services/customerBookingDraft';
+
+const mapProvider = Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined;
 
 const sawaariHomeFooter = require('../../assets/images/sawaari-brand-nandyal.png');
 const sawaariBikeIcon = require('../../assets/icons/sawaari-bike.png');
@@ -97,7 +100,7 @@ const SearchingMap = React.memo(function SearchingMap({ pickup, searchKey, nearb
     return () => cancelAnimationFrame(frame);
   }, [pickup]);
   return <View style={StyleSheet.absoluteFill}>
-    <MapView ref={mapRef} provider={PROVIDER_GOOGLE} initialRegion={region} scrollEnabled={false} zoomEnabled={false} rotateEnabled={false} onMapReady={() => { setMapReady(true); if (isValidMapCoordinate(pickup) && mapRef.current) void mapRef.current.pointForCoordinate(pickup).then(setPickupPoint).catch(() => setPickupPoint(null)); }} style={StyleSheet.absoluteFill}>
+    <MapView ref={mapRef} provider={mapProvider} initialRegion={region} scrollEnabled={false} zoomEnabled={false} rotateEnabled={false} onMapReady={() => { setMapReady(true); if (isValidMapCoordinate(pickup) && mapRef.current) void mapRef.current.pointForCoordinate(pickup).then(setPickupPoint).catch(() => setPickupPoint(null)); }} style={StyleSheet.absoluteFill}>
       {pickup && <Marker coordinate={pickup} pinColor={colors.success} tracksViewChanges={false} />}
       {nearbyCaptains.slice(0, 3).map((captain) => <SearchingCaptainMarker key={captain.id} captain={captain} />)}
     </MapView>
@@ -779,7 +782,7 @@ function PinDropPicker({ target, initialCoordinate, initialAddress, requiresManu
   return <SafeAreaView style={styles.pinPickerSafe} edges={['top', 'left', 'right']}>
     <MapView
       ref={mapRef}
-      provider={PROVIDER_GOOGLE}
+      provider={mapProvider}
       initialRegion={{ ...coordinate, latitudeDelta: 0.012, longitudeDelta: 0.012 }}
       onRegionChangeComplete={(region) => {
         const next = { latitude: region.latitude, longitude: region.longitude };
@@ -934,7 +937,7 @@ export function RideTypeScreen({
   if (missingLocation) return <View style={styles.bookingRouteRecovery}><ActivityIndicator /></View>;
 
   return <SafeAreaView style={styles.rideOptionsSafe} edges={['top', 'left', 'right']}>
-    <MapView ref={mapRef} provider={PROVIDER_GOOGLE} initialRegion={NANDYAL} style={StyleSheet.absoluteFill}>
+    <MapView ref={mapRef} provider={mapProvider} initialRegion={NANDYAL} style={StyleSheet.absoluteFill}>
       <Marker coordinate={pickupCoordinate} pinColor={colors.success} title={t('rides.pickup')} />
       <Marker coordinate={dropCoordinate} pinColor={colors.accent} title={t('rides.drop')} />
       {routeCoordinates.length > 1 && <Polyline coordinates={routeCoordinates} strokeColor={colors.primaryDark} strokeWidth={5} />}
@@ -1422,7 +1425,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
   const inProgress = liveStatus === 'in_progress';
 
   return <SafeAreaView style={styles.assignedSafe} edges={['top', 'left', 'right']}>
-    <MapView ref={mapRef} provider={PROVIDER_GOOGLE} initialRegion={NANDYAL} style={StyleSheet.absoluteFill}>
+    <MapView ref={mapRef} provider={mapProvider} initialRegion={NANDYAL} style={StyleSheet.absoluteFill}>
       <Marker coordinate={pickup} pinColor={colors.success} title={t('rides.pickup')} />
       {displayedApproachRoute.length > 1 && <Polyline coordinates={displayedApproachRoute} strokeColor={colors.primaryDark} strokeWidth={5} />}
       {displayedCaptainCoordinate && <Marker.Animated coordinate={displayedCaptainCoordinate}><View style={styles.liveCaptainMarker}><VehicleIcon kind={vehicleType ?? ride.kind} size={28} /></View></Marker.Animated>}

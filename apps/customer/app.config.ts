@@ -27,6 +27,7 @@ export default {
   },
   ios: {
     bundleIdentifier: 'com.nandyalride.customer',
+    googleServicesFile: './firebase/GoogleService-Info.plist',
     infoPlist: {
       NSLocationWhenInUseUsageDescription: 'Nandyal Ride uses your location to set your pickup point and show ride progress.',
       NSContactsUsageDescription: 'Nandyal Ride uses your contacts to let you add emergency contacts.',
@@ -34,6 +35,8 @@ export default {
   },
   plugins: [
     './plugins/withAndroidCrashlytics',
+    './plugins/withFirebaseStaticLinkage',
+    './plugins/withIosSceneLifecycle',
     ['expo-notifications', {}],
     ['expo-location', {}],
     ['expo-contacts', { contactsPermission: 'Allow Nandyal Ride to access your contacts so you can add emergency contacts.' }],

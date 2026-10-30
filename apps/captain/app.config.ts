@@ -36,6 +36,7 @@ export default {
   },
   plugins: [
     './plugins/withAndroidCrashlytics',
+    './plugins/withFirebaseStaticLinkage',
     './plugins/withCaptainOfferAlert',
     ['expo-notifications', { sounds: ['./assets/sounds/incoming_ride_alert.mp3'] }],
     ['expo-audio', { recordAudioAndroid: false }],

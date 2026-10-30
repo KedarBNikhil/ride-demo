@@ -14,7 +14,7 @@
       <string>production-customer</string>
     </dict>
     <key>EXUpdatesRuntimeVersion</key>
-    <string>customer-1.0.2</string>
+    <string>customer-1.0.3</string>
     <key>EXUpdatesURL</key>
     <string>https://u.expo.dev/1158ff7e-1da5-4a6a-9080-14791394da7a</string>
   </dict>
