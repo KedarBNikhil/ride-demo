@@ -9,7 +9,7 @@ import { ScreenShell } from '../components/ScreenShell';
 import { useDialog } from '../components/ThemedDialog';
 import { rideDispatchService, type ReceivedRating } from '../services/rideDispatch';
 import { getCurrentProfile, type CurrentProfile } from '../services/currentProfile';
-import { deleteCurrentAccount } from '../services/accountDeletion';
+import { deleteCurrentAccount, logoutCurrentDevice } from '../services/accountDeletion';
 import { selectionHaptic } from '../utils/haptics';
 
 function displayPhoneNumber(phone: string | null | undefined) {
@@ -74,6 +74,7 @@ export function SettingsScreen({
   onAbout,
   onDocuments,
   onAccountDeleted,
+  onLoggedOut,
 }: {
   onLanguageChange: (language: AppLanguage) => void;
   onBack: () => void;
@@ -83,12 +84,14 @@ export function SettingsScreen({
   onAbout?: () => void;
   onDocuments?: () => void;
   onAccountDeleted?: () => void;
+  onLoggedOut?: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const dialog = useDialog();
   const [receivedRating, setReceivedRating] = useState<ReceivedRating | null>(null);
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const appName = Constants.expoConfig?.name ?? t('app.name');
   const appVersion = Constants.expoConfig?.version;
@@ -106,7 +109,7 @@ export function SettingsScreen({
     return undefined;
   }, [profile]));
   const confirmDeleteAccount = () => {
-    if (!ratingRole || deletingAccount) return;
+    if (!ratingRole || deletingAccount || loggingOut) return;
     dialog({
       title: t('profile.deleteAccountTitle'),
       message: t('profile.deleteAccountConfirmation'),
@@ -125,6 +128,18 @@ export function SettingsScreen({
         })(); } },
       ],
     });
+  };
+  const logout = async () => {
+    if (deletingAccount || loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logoutCurrentDevice();
+      onLoggedOut?.();
+    } catch {
+      dialog({ title: t('login.tryAgain') });
+    } finally {
+      setLoggingOut(false);
+    }
   };
   if (!profile) {
     return <ScreenShell back={onBack} title={t('screens.settings')}>
@@ -229,7 +244,11 @@ export function SettingsScreen({
         </View>
       </View>}
 
-      {profile && ratingRole && <Pressable onPress={confirmDeleteAccount} disabled={deletingAccount} accessibilityRole="button" style={[styles.deleteAccountButton, deletingAccount && styles.deleteAccountButtonDisabled]}>
+      {profile && ratingRole && <Pressable onPress={() => { selectionHaptic(); void logout(); }} disabled={deletingAccount || loggingOut} accessibilityRole="button" style={[styles.logoutButton, loggingOut && styles.deleteAccountButtonDisabled]}>
+        <Text style={styles.logoutText}>{loggingOut ? t('profile.loggingOut') : t('profile.logoutAction')}</Text>
+      </Pressable>}
+
+      {profile && ratingRole && <Pressable onPress={confirmDeleteAccount} disabled={deletingAccount || loggingOut} accessibilityRole="button" style={[styles.deleteAccountButton, (deletingAccount || loggingOut) && styles.deleteAccountButtonDisabled]}>
         <Text style={styles.deleteAccountText}>{deletingAccount ? t('login.pleaseWait') : t('profile.deleteAccountAction')}</Text>
       </Pressable>}
 
@@ -328,6 +347,8 @@ const styles = StyleSheet.create({
   rowChevron: { alignSelf: 'center', color: colors.textMuted, fontSize: 26 },
   groupedRows: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, overflow: 'hidden' },
   groupedRow: { alignItems: 'center', flexDirection: 'row', minHeight: layout.rowMinHeight, paddingHorizontal: layout.cardPaddingHorizontal },
+  logoutButton: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, justifyContent: 'center', minHeight: layout.rowMinHeight, paddingHorizontal: layout.cardPaddingHorizontal },
+  logoutText: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
   deleteAccountButton: { alignItems: 'center', borderColor: colors.error, borderRadius: radii.md, borderWidth: 1, justifyContent: 'center', minHeight: layout.rowMinHeight, paddingHorizontal: layout.cardPaddingHorizontal },
   deleteAccountButtonDisabled: { opacity: 0.6 },
   deleteAccountText: { color: colors.error, fontFamily, fontSize: fontSize.md, fontWeight: '900' },

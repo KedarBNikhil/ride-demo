@@ -90,9 +90,12 @@ async function requestBackgroundPermission(): Promise<boolean> {
   if (foregroundResult.status !== 'granted') return false;
   const background = await Location.getBackgroundPermissionsAsync();
   if (background.status === 'granted') return true;
+  const settingsInstructions = Platform.OS === 'ios'
+    ? 'open Settings, tap Sawaari Captain, then tap Location and choose Always.'
+    : 'open Settings, then tap Permissions → Location → Allow all the time.';
   return new Promise((resolve) => Alert.alert(
     'Allow location all the time',
-    'To track an active ride while Sawaari Captain is minimized, open Settings, then tap Permissions → Location → Allow all the time. Tracking is used only during an active ride and stops when it ends.',
+    `To track an active ride while Sawaari Captain is minimized, ${settingsInstructions} Tracking is used only during an active ride and stops when it ends.`,
     [{ text: 'Not now', style: 'cancel', onPress: () => resolve(false) }, { text: 'Open Settings', onPress: () => { void Linking.openSettings().finally(() => resolve(false)); } }],
   ));
 }
@@ -109,14 +112,15 @@ export const activeRideGpsTracking = {
     await AsyncStorage.setItem(CONTEXT_KEY, JSON.stringify(context));
     await flushPending();
     if (!(await Location.hasStartedLocationUpdatesAsync(ACTIVE_RIDE_GPS_TASK))) {
-      await Location.startLocationUpdatesAsync(ACTIVE_RIDE_GPS_TASK, {
+      const options: Location.LocationTaskOptions = {
         accuracy: Location.Accuracy.Balanced, timeInterval: TARGET_INTERVAL_MS, distanceInterval: 0,
         pausesUpdatesAutomatically: false, deferredUpdatesInterval: TARGET_INTERVAL_MS,
-        foregroundService: {
+        ...(Platform.OS === 'android' ? { foregroundService: {
           notificationTitle: 'Sawaari ride in progress',
           notificationBody: 'Location is being used to track your active ride.',
-        },
-      });
+        } } : {}),
+      };
+      await Location.startLocationUpdatesAsync(ACTIVE_RIDE_GPS_TASK, options);
     }
   },
   async reconcile(ride: { id: string; status: string } | null): Promise<void> {

@@ -7,3 +7,9 @@ export async function deleteCurrentAccount(appVariant: 'customer' | 'captain') {
   const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
   if (signOutError) throw signOutError;
 }
+
+export async function logoutCurrentDevice() {
+  if (!supabase) throw new Error('SUPABASE_NOT_CONFIGURED');
+  const { error } = await supabase.auth.signOut({ scope: 'local' });
+  if (error) throw error;
+}

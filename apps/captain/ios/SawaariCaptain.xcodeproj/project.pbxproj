@@ -14,6 +14,7 @@
 		B1E454536EA826F8EFDFAF80 /* libPods-SawaariCaptain.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 7C796CBC23F436BDC63D216D /* libPods-SawaariCaptain.a */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		CD8A0BB9441445D793E81C59 /* incoming_ride_alert.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 00981FD7AF434407ADA89F73 /* incoming_ride_alert.mp3 */; };
+		A1C2D3E4F5A60718293A4B5C /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A60718293A4B5C /* SceneDelegate.swift */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
@@ -28,6 +29,7 @@
 		81DA2EFC01393C86A0A77A70 /* Pods-SawaariCaptain.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SawaariCaptain.debug.xcconfig"; path = "Target Support Files/Pods-SawaariCaptain/Pods-SawaariCaptain.debug.xcconfig"; sourceTree = "<group>"; };
 		A0B64CA3765AAFE32F646660 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = SawaariCaptain/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = SawaariCaptain/SplashScreen.storyboard; sourceTree = "<group>"; };
+		B1C2D3E4F5A60718293A4B5C /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SceneDelegate.swift; path = SawaariCaptain/SceneDelegate.swift; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = SawaariCaptain/AppDelegate.swift; sourceTree = "<group>"; };
@@ -104,6 +106,7 @@
 			isa = PBXGroup;
 			children = (
 				79A3C2FB6FBF226794784C93 /* ExpoModulesProvider.swift */,
+				B1C2D3E4F5A60718293A4B5C /* SceneDelegate.swift */,
 			);
 			name = SawaariCaptain;
 			sourceTree = "<group>";
@@ -397,6 +400,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
+				A1C2D3E4F5A60718293A4B5C /* SceneDelegate.swift in Sources */,
 				3F98F227510585179C5C8830 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -66,6 +66,21 @@ target 'SawaariCaptain' do
       end
     end
 
+    # Crashlytics does not have production dSYM artifacts to validate for a
+    # simulator. Keep its release-device behavior intact, but make its runner
+    # a no-op when Xcode is building iphonesimulator.
+    crashlytics_runner = File.join(installer.sandbox.root, 'FirebaseCrashlytics', 'run')
+    if File.exist?(crashlytics_runner)
+      crashlytics_script = File.read(crashlytics_runner)
+      unless crashlytics_script.include?('Skipping Crashlytics symbol upload for simulator')
+        crashlytics_script.sub!(
+          '#  Figure out where we\'re being called from',
+          "if [ \"${PLATFORM_NAME}\" = \"iphonesimulator\" ]; then\n  echo \"info: Skipping Crashlytics symbol upload for simulator\"\n  exit 0\nfi\n\n#  Figure out where we're being called from"
+        )
+        File.write(crashlytics_runner, crashlytics_script)
+      end
+    end
+
     react_native_post_install(
       installer,
       config[:reactNativePath],
@@ -73,4 +88,5 @@ target 'SawaariCaptain' do
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
   end
+
 end
