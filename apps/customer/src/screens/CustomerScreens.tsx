@@ -49,10 +49,13 @@ import { useBottomTabBarMetrics } from '../utils/safeAreaLayout';
 import { centerCoordinateInVisibleViewport, fitRouteInVisibleViewport, getVisibleMapPadding, HOME_LOCATION_DELTA, isValidMapCoordinate } from '../utils/mapCamera';
 import { DraggableMapSheet } from '../components/DraggableMapSheet';
 import { missingCustomerBookingLocation, toCustomerBookingConfirmationSnapshot } from '../services/customerBookingDraft';
+import type { AppLanguage } from '../i18n/createI18n';
 
 const mapProvider = Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined;
 
 const sawaariHomeFooter = require('../../assets/images/sawaari-brand-nandyal.png');
+const sawaariWelcomeJourneyArtwork = require('../../assets/images/sawaari-welcome-journey-artwork.png');
+const sawaariWelcomeCaptainRideArtwork = require('../../assets/images/sawaari-welcome-captain-ride-artwork.png');
 const sawaariBikeIcon = require('../../assets/icons/sawaari-bike.png');
 const sawaariAutoIcon = require('../../assets/icons/sawaari-auto.png');
 
@@ -155,13 +158,24 @@ function getCustomerFareDisplay({ kind, passengerCount, routeQuote, promotion, b
 export function CustomerLoginScreen({
   onComplete,
   onBack,
+  language,
+  onLanguageChange,
 }: {
   onComplete: () => void;
   onBack?: () => void;
+  language: AppLanguage;
+  onLanguageChange: (language: AppLanguage) => void;
 }) {
   const { t } = useTranslation();
   const dialog = useDialog();
-  return <PhoneOtpAuth title={t('screens.customerLogin')} subtitle={t('login.subtitle')} emoji="📱" onBack={onBack} onSendOtp={async (phone) => {
+  const chooseLanguage = () => {
+    selectionHaptic();
+    dialog({ title: t('language.choose'), buttons: [
+      { text: t('language.english'), onPress: () => { selectionHaptic(); onLanguageChange('en'); } },
+      { text: t('language.telugu'), onPress: () => { selectionHaptic(); onLanguageChange('te'); } },
+    ] });
+  };
+  return <PhoneOtpAuth customerLoginLayout languageLabel={language === 'te' ? 'తె' : 'EN'} onLanguagePress={chooseLanguage} title={t('login.customerLoginTitle')} subtitle={t('login.customerLoginSubtitle')} emoji="" onBack={onBack} onSendOtp={async (phone) => {
     const result = await customerAuthService.sendLoginOtp(phone);
     if (!result.requested) {
       dialog({ title: 'Login', message: "This number doesn't have an account. Please signup to start using Sawaari with this number.", buttons: [{ text: 'OK' }] });
@@ -174,32 +188,85 @@ export function CustomerLoginScreen({
 export function CustomerIntroScreen({ onComplete }: { onComplete: () => void }) {
   const brandOpacity = useRef(new Animated.Value(0)).current;
   const brandTranslateY = useRef(new Animated.Value(14)).current;
+  const brandScale = useRef(new Animated.Value(0.94)).current;
   const footerOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(brandOpacity, { toValue: 1, duration: 380, useNativeDriver: true }),
-      Animated.timing(brandTranslateY, { toValue: 0, duration: 380, useNativeDriver: true }),
-      Animated.timing(footerOpacity, { toValue: 1, duration: 460, delay: 180, useNativeDriver: true }),
+      Animated.timing(brandOpacity, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(brandTranslateY, { toValue: 0, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(brandScale, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(footerOpacity, { toValue: 1, duration: 360, delay: 120, easing: Easing.out(Easing.quad), useNativeDriver: true }),
     ]).start(({ finished }) => { if (finished) onComplete(); });
-  }, [brandOpacity, brandTranslateY, footerOpacity, onComplete]);
+  }, [brandOpacity, brandScale, brandTranslateY, footerOpacity, onComplete]);
 
   return <SafeAreaView style={styles.introSafe} edges={['top', 'right', 'bottom', 'left']}>
     <View style={styles.introContent}>
-      <Animated.Text style={[styles.introBrand, { opacity: brandOpacity, transform: [{ translateY: brandTranslateY }] }]}>Sawaari</Animated.Text>
+      <Animated.Text style={[styles.introBrand, { opacity: brandOpacity, transform: [{ translateY: brandTranslateY }, { scale: brandScale }] }]}>Sawaari</Animated.Text>
       <Animated.Text style={[styles.introFooter, { opacity: footerOpacity }]}>Made with love ❤️ for Nandyal</Animated.Text>
     </View>
   </SafeAreaView>;
 }
 
-export function CustomerAuthChoiceScreen({ onLogin, onSignup }: { onLogin: () => void; onSignup: () => void }) {
-  return <ScreenShell noHeader>
-    <View style={styles.authChoiceHero}><Text style={styles.authChoiceBrand}>Sawaari</Text><Text style={styles.authChoiceTagline}>Your local ride, your community</Text></View>
-    <View style={[styles.authChoiceCard, shadows.card]}><Text style={styles.authChoiceTitle}>Ready to ride?</Text><Text style={styles.authChoiceHelp}>Create an account or log in with your mobile number.</Text><PrimaryButton label="Sign up" onPress={onSignup} /><PrimaryButton label="Login" secondary onPress={onLogin} /></View>
-  </ScreenShell>;
+export function CustomerAuthChoiceScreen({ onLogin, onSignup, language, onLanguageChange }: { onLogin: () => void; onSignup: () => void; language: AppLanguage; onLanguageChange: (language: AppLanguage) => void }) {
+  const { t } = useTranslation();
+  const dialog = useDialog();
+  const { height, width } = useWindowDimensions();
+  const [artworkPage, setArtworkPage] = useState(0);
+  const artworkHeight = Math.min(360, Math.max(280, height * 0.4));
+  const chooseLanguage = () => {
+    selectionHaptic();
+    dialog({
+    title: t('language.choose'),
+    buttons: [
+      { text: t('language.english'), onPress: () => { selectionHaptic(); onLanguageChange('en'); } },
+      { text: t('language.telugu'), onPress: () => { selectionHaptic(); onLanguageChange('te'); } },
+    ],
+    });
+  };
+  const onArtworkScrollEnd = (offsetX: number) => {
+    const nextPage = Math.round(offsetX / width);
+    if (nextPage !== artworkPage) {
+      selectionHaptic();
+      setArtworkPage(nextPage);
+    }
+  };
+
+  return <SafeAreaView style={styles.authChoiceSafe} edges={['top', 'right', 'bottom', 'left']}>
+    <View style={styles.authChoiceTopBar}>
+      <Text style={styles.authChoiceBrand}>{t('authChoice.brand')}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('language.change')} onPress={chooseLanguage} style={styles.authChoiceLanguageButton}>
+        <Text style={styles.authChoiceLanguageLabel}>{language === 'te' ? 'తె' : 'EN'}</Text>
+      </Pressable>
+    </View>
+    <View style={[styles.authChoiceArtworkArea, { height: artworkHeight }]}>
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(event) => onArtworkScrollEnd(event.nativeEvent.contentOffset.x)}
+      >
+        <Image accessibilityIgnoresInvertColors resizeMode="cover" source={sawaariWelcomeJourneyArtwork} style={[styles.authChoiceArtwork, { width }]} />
+        <Image accessibilityIgnoresInvertColors resizeMode="cover" source={sawaariWelcomeCaptainRideArtwork} style={[styles.authChoiceArtwork, { width }]} />
+      </ScrollView>
+    </View>
+    <View accessibilityRole="adjustable" accessibilityLabel={`Welcome illustration ${artworkPage + 1} of 2`} style={styles.authChoicePagination}>
+      {[0, 1].map((page) => <View key={page} style={[styles.authChoicePaginationDot, artworkPage === page && styles.authChoicePaginationDotActive]} />)}
+    </View>
+    <View style={styles.authChoiceContent}>
+      <View style={styles.authChoiceCopy}>
+        <Text style={styles.authChoiceTitle}>{t('authChoice.welcome')}</Text>
+        <Text style={styles.authChoiceHelp}>{t('authChoice.subtitle')}</Text>
+        <Pressable accessibilityRole="button" onPress={() => { selectionHaptic(); onLogin(); }} style={styles.authChoicePrimaryButton}><Text style={styles.authChoicePrimaryButtonText}>{t('authChoice.login')}</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => { selectionHaptic(); onSignup(); }} style={styles.authChoiceSecondaryButton}><Text style={styles.authChoiceSecondaryButtonText}>{t('authChoice.signup')}</Text></Pressable>
+        <Text style={styles.authChoiceLegal}>{t('authChoice.legal')}</Text>
+      </View>
+    </View>
+  </SafeAreaView>;
 }
 
-export function CustomerSignupScreen({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
+export function CustomerSignupScreen({ onComplete, onBack, language, onLanguageChange }: { onComplete: () => void; onBack: () => void; language: AppLanguage; onLanguageChange: (language: AppLanguage) => void }) {
+  const { t } = useTranslation();
   const dialog = useDialog();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -209,13 +276,23 @@ export function CustomerSignupScreen({ onComplete, onBack }: { onComplete: () =>
     try { toIndianE164(phone); return true; } catch { return false; }
   };
 
-  const details = <View style={[styles.signupCard, shadows.soft]}>
-    <Text style={styles.signupLabel}>Name</Text><TextInput value={name} onChangeText={setName} autoCapitalize="words" placeholder="Your name" placeholderTextColor={colors.textMuted} style={styles.signupInput} />
-    <Text style={styles.signupLabel}>Phone number</Text><TextInput value={phone} onChangeText={(next) => setPhone(next.replace(/[^+\d]/g, '').replace(/(?!^)\+/g, '').slice(0, 13))} keyboardType="phone-pad" placeholder="9876543210 or +919876543210" placeholderTextColor={colors.textMuted} style={styles.signupInput} />
-    <Text style={styles.signupLabel}>Address <Text style={styles.signupOptional}>(optional)</Text></Text><TextInput value={address} onChangeText={setAddress} placeholder="Add an address" placeholderTextColor={colors.textMuted} style={styles.signupInput} />
-    <View style={styles.addressTypes}>{(['home', 'work'] as const).map((type) => <Pressable key={type} onPress={() => setAddressType(type)} style={[styles.addressType, addressType === type && styles.addressTypeActive]}><Text style={[styles.addressTypeText, addressType === type && styles.addressTypeTextActive]}>{type === 'home' ? 'Home' : 'Work'}</Text></Pressable>)}</View>
+  const chooseLanguage = () => {
+    selectionHaptic();
+    dialog({ title: t('language.choose'), buttons: [
+      { text: t('language.english'), onPress: () => { selectionHaptic(); onLanguageChange('en'); } },
+      { text: t('language.telugu'), onPress: () => { selectionHaptic(); onLanguageChange('te'); } },
+    ] });
+  };
+  const details = <View style={styles.signupDetails}>
+    <Text style={styles.signupLabel}>{t('login.nameLabel')}<Text style={styles.signupRequired}>*</Text></Text>
+    <TextInput value={name} onChangeText={setName} autoCapitalize="words" placeholder={t('login.namePlaceholder')} placeholderTextColor={colors.textMuted} style={styles.signupInput} />
+    <Text style={styles.signupLabel}>{t('login.customerPhoneLabel')}<Text style={styles.signupRequired}>*</Text></Text>
+    <View style={styles.signupPhoneRow}><View accessibilityLabel="Country code +91" style={styles.signupCountryCode}><Text style={styles.signupCountryCodeText}>+91</Text></View><TextInput value={phone} onChangeText={(next) => setPhone(next.replace(/\D/g, '').slice(0, 10))} keyboardType="phone-pad" placeholder={t('login.yourPhonePlaceholder')} placeholderTextColor={colors.textMuted} style={styles.signupPhoneInput} /></View>
+    <Text style={styles.signupLabel}>{t('login.addressLabel')} <Text style={styles.signupOptional}>({t('login.optional')})</Text></Text>
+    <TextInput value={address} onChangeText={setAddress} placeholder={t('login.addressPlaceholder')} placeholderTextColor={colors.textMuted} style={styles.signupInput} />
+    <View style={styles.addressTypes}>{(['home', 'work'] as const).map((type) => <Pressable key={type} onPress={() => { selectionHaptic(); setAddressType(type); }} style={[styles.addressType, addressType === type && styles.addressTypeActive]}><Text style={[styles.addressTypeText, addressType === type && styles.addressTypeTextActive]}>{type === 'home' ? t('home.home') : t('home.work')}</Text></Pressable>)}</View>
   </View>;
-  return <PhoneOtpAuth title="Create your account" subtitle="Enter your details to get started" emoji="" phoneStepLabel="" onBack={onBack} initialPhone={phone} phoneStepContent={details} canSendOtp={Boolean(name.trim() && validPhone())} onSendOtp={async (value) => {
+  return <PhoneOtpAuth customerSignupLayout languageLabel={language === 'te' ? 'తె' : 'EN'} onLanguagePress={chooseLanguage} title={t('login.signupTitle')} subtitle={t('login.signupSubtitle')} emoji="" phoneStepLabel="" onBack={onBack} initialPhone={phone} phoneStepContent={details} canSendOtp={Boolean(name.trim() && validPhone())} onSendOtp={async (value) => {
     setPhone(value);
     if (await customerAuthService.accountExists(value)) {
       dialog({ title: 'Sign up', message: 'This number already has an account. Please use Login to continue.', buttons: [{ text: 'OK' }] });
@@ -433,7 +510,7 @@ export function CustomerHomeScreen({
             <Reanimated.ScrollView contentContainerStyle={styles.homeSheetContent} onScroll={sheetScrollHandler} scrollEventThrottle={16} showsVerticalScrollIndicator={false} style={styles.homeSheetScroll}>
               <View style={styles.homeSheetDynamicContent}>
                 <Pressable onPress={() => { selectionHaptic(); startBooking(); }} accessibilityRole="button" style={styles.destinationAction}>
-                  <Text style={styles.destinationPin}>⌖</Text><View style={styles.destinationTextWrap}><Text style={styles.destinationLabel}>{t('home.whereTo')}</Text><Text style={styles.destinationSub}>{t('home.whereToHint')}</Text></View><Text style={styles.destinationArrow}>›</Text>
+                  <View style={styles.destinationTextWrap}><Text style={styles.destinationLabel}>{t('home.whereTo')}</Text><Text style={styles.destinationSub}>{t('home.whereToHint')}</Text></View>
                 </Pressable>
                 <PromotionOfferCard promotion={promotion} t={t} strip />
                 <View style={styles.recentDestinations}><Text style={styles.homeSectionTitle}>{t('home.recentDestinations')}</Text>{recentDestinations.length ? recentDestinations.map((recent) => <RecentDestination key={recent.id} ride={recent} onPress={() => { selectionHaptic(); const pickup = userLocation ? (cachedAddress || t('location.gpsDefault')) : undefined; onChooseDestination(recent.drop_address, { latitude: Number(recent.drop_latitude), longitude: Number(recent.drop_longitude) }, pickup, userLocation ?? undefined); }} />) : <Text style={styles.recentDestinationsEmpty}>{t('home.recentDestinationsEmpty')}</Text>}</View>
@@ -462,8 +539,17 @@ function RecentDestination({ ride, onPress }: { ride: DispatchRide; onPress: () 
   return <Pressable accessibilityRole="button" onPress={onPress} style={styles.recentDestination}><Text style={styles.recentDestinationIcon}>↺</Text><View style={styles.recentDestinationText}><Text style={styles.recentDestinationName} numberOfLines={1}>{name || ride.drop_address}</Text>{address.length > 0 && <Text style={styles.recentDestinationAddress} numberOfLines={2}>{address.join(', ')}</Text>}</View><Text style={styles.recentDestinationChevron}>›</Text></Pressable>;
 }
 
-function HomeTab({ icon, label, active, onPress }: { icon: string; label: string; active?: boolean; onPress?: () => void }) {
-  return <Pressable disabled={!onPress} onPress={() => { if (onPress) { selectionHaptic(); onPress(); } }} accessibilityRole="button" accessibilityState={{ selected: active }} style={styles.homeTab}><Text style={[styles.homeTabIcon, active && styles.homeTabIconActive]}>{icon}</Text><Text style={[styles.homeTabLabel, active && styles.homeTabLabelActive]} numberOfLines={1}>{label}</Text></Pressable>;
+type CustomerTabIconKind = 'home' | 'rides' | 'account';
+
+function CustomerTabIcon({ kind, active = false }: { kind: CustomerTabIconKind; active?: boolean }) {
+  const color = active ? colors.primary : colors.textMuted;
+  if (kind === 'home') return <View style={styles.customerTabIconCanvas}><View style={[styles.customerTabHomeRoof, { borderColor: color }]} /><View style={[styles.customerTabHomeBody, { borderColor: color }]}><View style={[styles.customerTabHomeDoor, { borderColor: color }]} /></View></View>;
+  if (kind === 'rides') return <View style={styles.customerTabIconCanvas}><View style={[styles.customerTabCalendar, { borderColor: color }]}><View style={[styles.customerTabCalendarTop, { borderColor: color }]} /><View style={[styles.customerTabCalendarDot, { backgroundColor: color }]} /></View><View style={[styles.customerTabClock, { borderColor: color }]}><View style={[styles.customerTabClockHand, { backgroundColor: color }]} /></View></View>;
+  return <View style={styles.customerTabIconCanvas}><View style={[styles.customerTabAccountHead, { borderColor: color }]} /><View style={[styles.customerTabAccountBody, { borderColor: color }]} /></View>;
+}
+
+function HomeTab({ kind, label, active, onPress }: { kind: CustomerTabIconKind; label: string; active?: boolean; onPress?: () => void }) {
+  return <Pressable disabled={!onPress} onPress={() => { if (onPress) { selectionHaptic(); onPress(); } }} accessibilityRole="button" accessibilityState={{ selected: active }} style={styles.homeTab}><CustomerTabIcon kind={kind} active={active} /><Text style={[styles.homeTabLabel, active && styles.homeTabLabelActive]} numberOfLines={1}>{label}</Text></Pressable>;
 }
 
 function LocationRow({
@@ -1530,30 +1616,47 @@ export function CustomerBookingsScreen({ ride, onHome, onProfile, onCancelled, o
 
 export function CustomerTabBar({ active, onHome, onBookings, onProfile }: { active: 'home' | 'bookings' | 'profile'; onHome: () => void; onBookings: () => void; onProfile: () => void }) {
   const { t } = useTranslation();
-  const dialog = useDialog();
   const { bottomInset, tabBarHeight } = useBottomTabBarMetrics();
-  return <View style={[styles.homeTabBar, { minHeight: tabBarHeight, paddingBottom: 10 + bottomInset }]}><HomeTab icon="⌂" label={t('home.tabHome')} active={active === 'home'} onPress={onHome} /><HomeTab icon="▤" label={t('home.tabBookings')} active={active === 'bookings'} onPress={onBookings} /><HomeTab icon="?" label={t('home.tabHelp')} onPress={() => dialog({ title: t('home.helpTitle'), message: t('home.helpMessage') })} /><HomeTab icon="♙" label={t('home.tabProfile')} active={active === 'profile'} onPress={onProfile} /></View>;
+  return <View style={[styles.homeTabBar, { minHeight: tabBarHeight, paddingBottom: 10 + bottomInset }]}><HomeTab kind="home" label={t('home.tabHome')} active={active === 'home'} onPress={onHome} /><HomeTab kind="rides" label={t('home.tabBookings')} active={active === 'bookings'} onPress={onBookings} /><HomeTab kind="account" label={t('home.tabProfile')} active={active === 'profile'} onPress={onProfile} /></View>;
 }
 
 /* ─────────────────────────── STYLES ─────────────────────────── */
 
 const styles = StyleSheet.create({
   introSafe: { flex: 1, backgroundColor: colors.primary },
-  introContent: { alignItems: 'center', flex: 1, justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 32 },
-  introBrand: { color: colors.textOnPrimary, fontFamily, fontSize: 46, fontWeight: '900', marginTop: '62%' },
-  introFooter: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '700', textAlign: 'center' },
-  authChoiceHero: { alignItems: 'center', flex: 1, justifyContent: 'center', minHeight: 280 },
-  authChoiceBrand: { color: colors.primary, fontFamily, fontSize: 46, fontWeight: '900' },
-  authChoiceTagline: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, marginTop: 8 },
-  authChoiceCard: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.xl, borderWidth: 1, gap: 14, padding: 22 },
-  authChoiceTitle: { color: colors.textPrimary, fontFamily, fontSize: fontSize.xl, fontWeight: '900', textAlign: 'center' },
-  authChoiceHelp: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, lineHeight: 24, marginBottom: 4, textAlign: 'center' },
-  signupCard: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: 8, padding: 16 },
-  signupLabel: { color: colors.textPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '800', marginTop: 4 },
+  introContent: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 32 },
+  introBrand: { color: colors.textOnPrimary, fontFamily, fontSize: 46, fontWeight: '900' },
+  introFooter: { bottom: 32, color: colors.textOnPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900', left: 24, position: 'absolute', right: 24, textAlign: 'center' },
+  authChoiceSafe: { backgroundColor: colors.surface, flex: 1 },
+  authChoiceTopBar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 14 },
+  authChoiceBrand: { color: colors.primary, fontFamily: 'NotoSansTelugu-ExtraBold', fontSize: 36, letterSpacing: -1.4 },
+  authChoiceLanguageButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 28, height: 56, justifyContent: 'center', width: 56 },
+  authChoiceLanguageLabel: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
+  authChoiceArtworkArea: { overflow: 'hidden' },
+  authChoiceArtwork: { height: '100%', width: '100%' },
+  authChoicePagination: { alignItems: 'center', flexDirection: 'row', gap: 7, height: 30, justifyContent: 'center' },
+  authChoicePaginationDot: { backgroundColor: 'rgba(32, 45, 39, 0.25)', borderRadius: 4, height: 6, width: 6 },
+  authChoicePaginationDotActive: { backgroundColor: colors.primary, width: 20 },
+  authChoiceContent: { flex: 1, justifyContent: 'flex-end' },
+  authChoiceCopy: { gap: 18, paddingBottom: 28, paddingHorizontal: 24 },
+  authChoiceTitle: { color: colors.textPrimary, fontFamily, fontSize: 36, fontWeight: '900', letterSpacing: -1.1 },
+  authChoiceHelp: { color: colors.textSecondary, fontFamily, fontSize: fontSize.lg, lineHeight: 28, marginBottom: 18 },
+  authChoicePrimaryButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: radii.pill, justifyContent: 'center', minHeight: 60, paddingHorizontal: 20 },
+  authChoicePrimaryButtonText: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '900' },
+  authChoiceSecondaryButton: { alignItems: 'center', borderColor: colors.primaryDark, borderRadius: radii.pill, borderWidth: 2, justifyContent: 'center', minHeight: 60, paddingHorizontal: 20 },
+  authChoiceSecondaryButtonText: { color: colors.primaryDark, fontFamily, fontSize: fontSize.lg, fontWeight: '900' },
+  authChoiceLegal: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs, lineHeight: 19, marginTop: 2 },
+  signupDetails: { gap: 8, marginTop: 40 },
+  signupLabel: { color: colors.textPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '800', marginTop: 10 },
+  signupRequired: { color: colors.error },
   signupOptional: { color: colors.textMuted, fontWeight: '400' },
-  signupInput: { backgroundColor: colors.bg, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, color: colors.textPrimary, fontFamily, fontSize: fontSize.md, padding: 14 },
-  addressTypes: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  addressType: { alignItems: 'center', backgroundColor: colors.primaryLight, borderColor: colors.primary, borderRadius: radii.pill, borderWidth: 1, minWidth: 88, paddingHorizontal: 16, paddingVertical: 10 },
+  signupInput: { borderBottomColor: colors.border, borderBottomWidth: 2, color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, height: 48, paddingHorizontal: 0 },
+  signupPhoneRow: { alignItems: 'flex-end', flexDirection: 'row', gap: 16, marginBottom: 2 },
+  signupCountryCode: { alignItems: 'center', borderColor: colors.border, borderRadius: radii.pill, borderWidth: 1, height: 44, justifyContent: 'center', paddingHorizontal: 14 },
+  signupCountryCodeText: { color: colors.textPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
+  signupPhoneInput: { borderBottomColor: colors.border, borderBottomWidth: 2, color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.lg, height: 48, paddingHorizontal: 0 },
+  addressTypes: { flexDirection: 'row', gap: 12, marginTop: 10 },
+  addressType: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.primary, borderRadius: radii.pill, borderWidth: 1.5, minWidth: 110, paddingHorizontal: 16, paddingVertical: 10 },
   addressTypeActive: { backgroundColor: colors.primary },
   addressTypeText: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' },
   addressTypeTextActive: { color: colors.textOnPrimary },
@@ -1594,12 +1697,10 @@ const styles = StyleSheet.create({
   promotionStripAccent: { color: colors.success, fontSize: 12 },
   promotionStripText: { color: colors.textPrimary, flex: 1, fontFamily, fontSize: fontSize.xs, fontWeight: '700', lineHeight: 18 },
   offersEmpty: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md, marginTop: 32, textAlign: 'center' },
-  destinationAction: { alignItems: 'center', backgroundColor: colors.successLight, borderColor: colors.success, borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', minHeight: 72, paddingHorizontal: 16, ...shadows.soft },
-  destinationPin: { color: colors.primary, fontSize: 25, marginRight: 12 },
-  destinationTextWrap: { flex: 1, gap: 4 },
-  destinationLabel: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '800' },
+  destinationAction: { backgroundColor: colors.surface, borderColor: colors.primary, borderRadius: radii.lg, borderWidth: 1.5, justifyContent: 'center', minHeight: 76, paddingHorizontal: 18, ...shadows.soft },
+  destinationTextWrap: { gap: 3 },
+  destinationLabel: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '900' },
   destinationSub: { color: colors.textSecondary, fontFamily, fontSize: fontSize.xs },
-  destinationArrow: { color: colors.primary, fontSize: 30, fontWeight: '700', lineHeight: 32 },
   recentDestinations: { gap: 2, paddingTop: 2 },
   recentDestinationsEmpty: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 20, paddingVertical: 8 },
   recentDestination: { alignItems: 'center', borderBottomColor: colors.divider, borderBottomWidth: 1, flexDirection: 'row', gap: 4, minHeight: 58, paddingVertical: 8 },
@@ -1616,12 +1717,21 @@ const styles = StyleSheet.create({
   landmarkCard: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flex: 1, minHeight: 66, opacity: 0.94, paddingHorizontal: 5, paddingTop: 8 },
   landmarkIcon: { color: colors.primary, fontSize: 18, marginBottom: 3 },
   landmarkText: { color: colors.textPrimary, fontFamily, fontSize: 10, lineHeight: 13, textAlign: 'center' },
-  homeTabBar: { backgroundColor: colors.surface, borderColor: colors.border, borderTopWidth: 1, bottom: 0, elevation: 7, flexDirection: 'row', justifyContent: 'space-around', left: 0, paddingTop: 2, position: 'absolute', right: 0, zIndex: 7 },
-  homeTab: { alignItems: 'center', flex: 1, gap: 0, justifyContent: 'center', minHeight: 48, minWidth: 0 },
-  homeTabIcon: { color: colors.textMuted, fontSize: 25, lineHeight: 27 },
-  homeTabIconActive: { color: colors.primary },
+  homeTabBar: { backgroundColor: colors.surface, borderColor: colors.border, borderTopWidth: 1, bottom: 0, elevation: 7, flexDirection: 'row', justifyContent: 'space-around', left: 0, paddingTop: 4, position: 'absolute', right: 0, zIndex: 7 },
+  homeTab: { alignItems: 'center', flex: 1, gap: 2, justifyContent: 'center', minHeight: 52, minWidth: 0 },
   homeTabLabel: { color: colors.textMuted, fontFamily, fontSize: 12 },
   homeTabLabelActive: { color: colors.primaryDark, fontWeight: '800' },
+  customerTabIconCanvas: { alignItems: 'center', height: 27, justifyContent: 'center', position: 'relative', width: 28 },
+  customerTabHomeRoof: { borderLeftWidth: 2, borderTopWidth: 2, height: 15, position: 'absolute', top: 2, transform: [{ rotate: '45deg' }], width: 15 },
+  customerTabHomeBody: { borderRadius: 1, borderWidth: 2, bottom: 2, height: 13, position: 'absolute', width: 17 },
+  customerTabHomeDoor: { borderLeftWidth: 2, borderRightWidth: 2, borderTopWidth: 2, bottom: 0, height: 7, position: 'absolute', width: 5 },
+  customerTabCalendar: { borderRadius: 3, borderWidth: 2, height: 19, left: 2, position: 'absolute', top: 3, width: 18 },
+  customerTabCalendarTop: { borderBottomWidth: 2, height: 5, width: '100%' },
+  customerTabCalendarDot: { borderRadius: 1, height: 3, left: 5, position: 'absolute', top: 9, width: 3 },
+  customerTabClock: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 7, borderWidth: 2, bottom: 1, height: 14, justifyContent: 'center', position: 'absolute', right: 1, width: 14 },
+  customerTabClockHand: { height: 5, transform: [{ rotate: '35deg' }], width: 2 },
+  customerTabAccountHead: { borderRadius: 5, borderWidth: 2, height: 10, position: 'absolute', top: 2, width: 10 },
+  customerTabAccountBody: { borderRadius: 10, borderTopWidth: 2, bottom: 2, height: 10, position: 'absolute', width: 20 },
 
   // Pickup and destination form
   locationFormIntro: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 22 },
