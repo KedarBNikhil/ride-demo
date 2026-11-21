@@ -98,4 +98,14 @@ export const fontSize = {
   '3xl': 36,
 } as const;
 
-export const fontFamily = 'NotoSansTelugu';
+// Plus Jakarta Sans is the default Latin face. Android falls back to Noto Sans
+// Telugu for Telugu glyphs, which keeps mixed-language strings legible.
+// Medium gives the body copy enough presence at mobile sizes; headings and
+// actions use the explicit heavier families below instead of Android's
+// unreliable synthetic weight selection for runtime-loaded fonts.
+export const fontFamily = 'PlusJakartaSans-Medium';
+export const fontFamilyMedium = 'PlusJakartaSans-Medium';
+export const fontFamilySemiBold = 'PlusJakartaSans-SemiBold';
+export const fontFamilyBold = 'PlusJakartaSans-Bold';
+export const fontFamilyExtraBold = 'PlusJakartaSans-ExtraBold';
+export const fontFamilyTelugu = 'NotoSansTelugu';

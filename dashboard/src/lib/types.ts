@@ -288,12 +288,7 @@ export type CaptainIssueReason =
   | 'cash_not_received'
   | 'other';
 
-export type CustomerIssueReason =
-  | 'paid_but_not_received'
-  | 'incorrect_fare'
-  | 'upi_problem'
-  | 'cash_dispute'
-  | 'other';
+export type CustomerIssueReason = string;
 
 export interface CaptainPaymentIssue {
   id: string;
@@ -312,6 +307,9 @@ export interface CustomerPaymentIssue {
   ride_id: string;
   customer_id: string;
   reason: CustomerIssueReason;
+  issue_category: string | null;
+  customer_note: string | null;
+  support_requested_at: string | null;
   status: 'open' | 'resolved';
   opened_at: string;
   resolved_at: string | null;

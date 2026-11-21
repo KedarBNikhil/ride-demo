@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 const isExpoGo = Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
 
 export type CaptainOfferNotification = { rideId: string; offerId: string };
-export type CustomerRideNotification = { rideId: string };
+export type CustomerRideNotification = { rideId: string; type: 'ride_update' | 'customer_support_message' };
 // Android does not let an app change a channel's sound after the channel was
 // first created. Keep this versioned so installed Captain apps receive the
 // supplied tone rather than retaining the earlier system-default channel.
@@ -57,9 +57,9 @@ export async function dismissCaptainOfferNotification(offer: CaptainOfferNotific
 export function customerRideNotificationFromData(data: unknown): CustomerRideNotification | null {
   if (!data || typeof data !== 'object') return null;
   const { type, rideId } = data as Record<string, unknown>;
-  if (typeof type !== 'string' || !['ride_accepted', 'ride_arrived', 'ride_in_progress', 'ride_completed', 'ride_cancelled'].includes(type)) return null;
+  if (typeof type !== 'string' || !['ride_accepted', 'ride_arrived', 'ride_in_progress', 'ride_completed', 'ride_cancelled', 'customer_support_message'].includes(type)) return null;
   if (typeof rideId !== 'string' || !uuidPattern.test(rideId)) return null;
-  return { rideId };
+  return { rideId, type: type === 'customer_support_message' ? 'customer_support_message' : 'ride_update' };
 }
 
 /**

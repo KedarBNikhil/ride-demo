@@ -49,6 +49,8 @@ Deno.serve(async (request) => {
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
   const { data: userData, error: userError } = await admin.auth.getUser(token);
   if (userError || !userData.user) return response({ error: 'Authentication required' }, 401);
+  const { error: pilotError } = await admin.rpc('assert_pilot_identity_for_user', { p_user_id: userData.user.id, p_app_variant: 'customer' });
+  if (pilotError) return response({ error: 'Online payment is not available for this account' }, 403);
 
   const body = await request.json().catch(() => null) as { action?: unknown; rideId?: unknown; razorpay_order_id?: unknown; razorpay_payment_id?: unknown; razorpay_signature?: unknown } | null;
   const rideId = text(body?.rideId, 80);

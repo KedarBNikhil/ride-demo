@@ -1,34 +1,40 @@
 import Constants from 'expo-constants';
-import { Linking, NativeModules, Platform } from 'react-native';
+import { AppState, Linking, NativeModules, Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 
 const isExpoGo = Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
-const nativeAlert = NativeModules.CaptainOfferAlert as { start(rideId: string, offerId: string, expiresAt: number): void; stop(offerId?: string): void } | undefined;
+const nativeAlert = NativeModules.CaptainOfferAlert as { start(rideId: string, offerId: string, expiresAt: number, pickup?: string, drop?: string, fare?: string): void; stop(offerId?: string): void; canDrawOverlays?: () => Promise<boolean>; openOverlaySettings?: () => void } | undefined;
 let activeOfferId: string | null = null;
 
-type OfferData = CaptainOfferNotification & { expiresAt: string };
-export type CaptainOfferNotification = { rideId: string; offerId: string };
+type OfferData = CaptainOfferNotification & { expiresAt: string; pickup?: string; drop?: string; fare?: string };
+export type CaptainOfferNotification = { rideId: string; offerId: string; action?: 'accept' | 'reject' };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function captainOfferNotificationFromData(data: unknown): CaptainOfferNotification | null {
   if (!data || typeof data !== 'object') return null;
-  const { type, rideId, offerId } = data as Record<string, unknown>;
+  const { type, rideId, offerId, action } = data as Record<string, unknown>;
   if (type !== 'ride_offer' || typeof rideId !== 'string' || typeof offerId !== 'string') return null;
-  return uuidPattern.test(rideId) && uuidPattern.test(offerId) ? { rideId, offerId } : null;
+  if (!uuidPattern.test(rideId) || !uuidPattern.test(offerId)) return null;
+  return { rideId, offerId, ...(action === 'accept' || action === 'reject' ? { action } : {}) };
 }
 
 function parseOffer(data: unknown): OfferData | null {
   const offer = captainOfferNotificationFromData(data);
   if (!offer || !data || typeof data !== 'object') return null;
-  const expiresAt = (data as Record<string, unknown>).expiresAt;
-  return typeof expiresAt === 'string' && Number.isFinite(Date.parse(expiresAt)) ? { ...offer, expiresAt } : null;
+  const { expiresAt, pickup, drop, fare } = data as Record<string, unknown>;
+  return typeof expiresAt === 'string' && Number.isFinite(Date.parse(expiresAt))
+    ? { ...offer, expiresAt, ...(typeof pickup === 'string' ? { pickup } : {}), ...(typeof drop === 'string' ? { drop } : {}), ...(typeof fare === 'string' ? { fare } : {}) }
+    : null;
 }
 
 export function startDirectCaptainOfferAlert(data: unknown) {
   const offer = parseOffer(data);
-  if (!offer || Platform.OS !== 'android' || isExpoGo || !nativeAlert) return null;
+  if (!offer) return null;
+  // The active app already owns the full in-app request sheet. Keep the
+  // overlay exclusively for backgrounded/locked-device delivery.
+  if (AppState.currentState === 'active' || Platform.OS !== 'android' || isExpoGo || !nativeAlert) return offer;
   activeOfferId = offer.offerId;
-  nativeAlert.start(offer.rideId, offer.offerId, Date.parse(offer.expiresAt));
+  nativeAlert.start(offer.rideId, offer.offerId, Date.parse(offer.expiresAt), offer.pickup, offer.drop, offer.fare);
   return offer;
 }
 
@@ -46,8 +52,23 @@ function offerFromUrl(url: string): CaptainOfferNotification | null {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'exp+nandyal-ride-captain:' || parsed.hostname !== 'ride-offer') return null;
-    return captainOfferNotificationFromData({ type: 'ride_offer', rideId: parsed.searchParams.get('rideId'), offerId: parsed.searchParams.get('offerId') });
+    return captainOfferNotificationFromData({ type: 'ride_offer', rideId: parsed.searchParams.get('rideId'), offerId: parsed.searchParams.get('offerId'), action: parsed.searchParams.get('action') });
   } catch { return null; }
+}
+
+export async function isCaptainOfferOverlayAllowed() {
+  if (Platform.OS !== 'android' || isExpoGo || !nativeAlert?.canDrawOverlays) return false;
+  return nativeAlert.canDrawOverlays();
+}
+
+export function openCaptainOfferOverlaySettings() {
+  if (Platform.OS === 'android' && !isExpoGo) nativeAlert?.openOverlaySettings?.();
+}
+
+// Overlay controls were added after the first Captain alert bridge. An OTA must
+// never force a permission flow that its installed native binary cannot open.
+export function canUseCaptainOfferOverlayControls() {
+  return Platform.OS === 'android' && !isExpoGo && typeof nativeAlert?.canDrawOverlays === 'function' && typeof nativeAlert?.openOverlaySettings === 'function';
 }
 
 export function subscribeToDirectCaptainOfferResponses(onOffer: (offer: CaptainOfferNotification) => void) {

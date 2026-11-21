@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, Animated } from 'react-native';
-import { colors, radii, shadows, fontFamily, fontSize } from '../theme';
+import { colors, radii, shadows, fontFamilyExtraBold, fontSize } from '../theme';
 import { selectionHaptic } from '../utils/haptics';
 
 type Props = {
@@ -94,9 +94,8 @@ const styles = StyleSheet.create({
   },
   label: {
     color: colors.textOnPrimary,
-    fontFamily,
+    fontFamily: fontFamilyExtraBold,
     fontSize: fontSize.lg,
-    fontWeight: '800',
     textAlign: 'center',
   },
   labelSmall: {

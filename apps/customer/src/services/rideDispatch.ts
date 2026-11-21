@@ -37,7 +37,7 @@ export type DispatchRide = {
   captain_latitude?: number | null;
   captain_longitude?: number | null;
   payment_status?: 'pending' | 'declared' | 'confirmed' | 'not_required';
-  payment_method?: 'cash' | 'upi' | 'razorpay' | null;
+  payment_method?: 'cash' | 'upi' | 'razorpay' | 'external' | null;
   customer_charge_amount?: number | null;
   customer_charge_type?: 'free' | 'standard';
   customer_charge_status?: 'pending' | 'declared' | 'not_required';
@@ -45,27 +45,30 @@ export type DispatchRide = {
   free_ride_sequence?: number | null;
   pricing_distance_meters?: number | null;
   customer_rating?: number | null;
+  customer_rating_skipped_at?: string | null;
   cancellation_reason_code?: string | null;
   cancellation_reason_detail?: string | null;
   cancellation_charge?: number | null;
   travelled_distance_km?: number | null;
   requested_at?: string | null;
   accepted_at?: string | null;
+  /** When the captain marked that they had reached the pickup point. */
+  arrived_at?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
+  cancelled_at?: string | null;
+  queued_after_ride_id?: string | null;
   has_open_payment_issue?: boolean;
 };
 
-// `completed` means the Captain has ended the driving portion of the trip. It
-// does not, by itself, release the Customer to make another booking: payment
-// (and then the existing rating flow) are resolved from persisted ride fields.
+// A completed ride blocks a new booking only while payment is unsettled.
 export const customerRideLifecycle = (ride: DispatchRide | null | undefined): CustomerRideLifecycle => {
   if (!ride) return 'none';
   if (isCustomerActiveRideStatus(ride.status)) return 'active';
   if (ride.status !== 'completed') return 'none';
   if (ride.has_open_payment_issue) return 'none';
   if (ride.payment_status === 'pending' || ride.payment_status === 'declared') return 'payment';
-  if ((ride.payment_status === 'confirmed' || ride.payment_status === 'not_required') && ride.customer_rating == null) return 'rating';
+  if (ride.customer_rating == null && !ride.customer_rating_skipped_at) return 'rating';
   return 'none';
 };
 
@@ -77,7 +80,7 @@ export type AssignedCaptainDetails = {
   phone: string | null;
 };
 
-export type RideMessage = { id: string; sender_id: string; body: string; created_at: string };
+export type RideMessage = { id: string; sender_id: string; sender_role: 'customer' | 'captain' | null; body: string; created_at: string };
 
 export type ReceivedRating = {
   average: number | null;
@@ -121,11 +124,22 @@ export type CaptainPaymentIssueMessage = {
 
 export type CustomerPaymentIssue = {
   id: string;
-  reason: 'paid_but_not_received' | 'incorrect_fare' | 'upi_problem' | 'cash_dispute' | 'other';
+  issue_category: 'fare_or_payment' | 'safety' | 'captain_or_ride' | 'lost_item' | 'other' | null;
+  reason: string;
   customer_note: string | null;
   status: 'open' | 'resolved';
   opened_at: string;
   assigned_support_id: string | null;
+  support_requested_at: string | null;
+  unread_support_messages?: number;
+};
+
+export type CustomerIssueHistoryItem = CustomerPaymentIssue & {
+  ride_id: string;
+  resolved_at: string | null;
+  resolution_note: string | null;
+  ride_completed_at: string | null;
+  customer_charge: number | null;
 };
 
 export type CustomerPaymentIssueMessage = {
@@ -151,6 +165,7 @@ export type CustomerPromotionStatus = {
   reserved_free_rides: number;
   remaining_free_rides: number;
 };
+export type CustomerCoupon = { code: string; title: string; description: string; discount_type: 'flat' | 'percent'; discount_value: number; maximum_discount: number | null; minimum_fare: number };
 
 export type CaptainRideRequest = {
   offerId: string;
@@ -322,6 +337,11 @@ export const rideDispatchService = {
       completed_free_rides: asNumber(status.completed_free_rides), reserved_free_rides: asNumber(status.reserved_free_rides), remaining_free_rides: asNumber(status.remaining_free_rides),
     };
   },
+  async getCustomerAvailableCoupons(): Promise<CustomerCoupon[]> {
+    const { data, error } = await requireClient().rpc('customer_available_coupons');
+    if (error) throw error;
+    return (data ?? []) as CustomerCoupon[];
+  },
 
   subscribeToCustomerRideHistory(onRides: (rides: DispatchRide[]) => void, onError?: (error: Error) => void) {
     if (!supabase) return () => {};
@@ -374,9 +394,12 @@ export const rideDispatchService = {
   },
 
   async sendRideMessage(rideId: string, body: string) {
-    const { error } = await requireClient().rpc('send_ride_message', { p_ride_id: rideId, p_body: body.trim() });
+    const { error } = await requireClient().rpc('send_ride_message', { p_ride_id: rideId, p_body: body.trim(), p_sender_role: 'customer' });
     if (error) throw error;
   },
+
+  async unreadRideMessageCount(rideId: string) { const { data, error } = await requireClient().rpc('unread_ride_message_count', { p_ride_id: rideId, p_reader_role: 'customer' }); if (error) throw error; return Number(data ?? 0); },
+  async markRideMessagesRead(rideId: string) { const { error } = await requireClient().rpc('mark_ride_messages_read', { p_ride_id: rideId, p_reader_role: 'customer' }); if (error) throw error; },
 
   subscribeToRideMessages(rideId: string, onMessages: (messages: RideMessage[]) => void, onError?: (error: Error) => void) {
     if (!supabase) return () => {};
@@ -630,6 +653,11 @@ export const rideDispatchService = {
     if (error) throw error;
   },
 
+  async skipCaptainRating(rideId: string) {
+    const { error } = await requireClient().rpc('customer_skip_captain_rating', { p_ride_id: rideId });
+    if (error) throw error;
+  },
+
   async raiseCaptainPaymentIssue(rideId: string, reason: string) {
     const { error } = await requireClient().rpc('captain_raise_payment_issue', { p_ride_id: rideId, p_reason: reason });
     if (error) throw error;
@@ -652,15 +680,23 @@ export const rideDispatchService = {
     if (error) throw error;
   },
 
-  async raiseCustomerPaymentIssue(rideId: string, reason: string, note?: string) {
-    const { error } = await requireClient().rpc('customer_raise_payment_issue', { p_ride_id: rideId, p_reason: reason, p_note: note?.trim() || null });
+  async raiseCustomerPaymentIssue(rideId: string, category: string, reason: string, note?: string) {
+    const { error } = await requireClient().rpc('customer_raise_payment_issue', { p_ride_id: rideId, p_category: category, p_reason: reason, p_note: note?.trim() || null });
+    if (error) throw error;
+  },
+
+  async requestCustomerIssueSupport(rideId: string) {
+    const { error } = await requireClient().rpc('customer_request_issue_support', { p_ride_id: rideId });
     if (error) throw error;
   },
 
   async getCustomerPaymentIssue(rideId: string): Promise<CustomerPaymentIssue | null> {
     const { data, error } = await requireClient().rpc('customer_payment_issue_for_ride', { p_ride_id: rideId }).maybeSingle();
     if (error) throw error;
-    return data as CustomerPaymentIssue | null;
+    if (!data) return null;
+    const { data: unread, error: unreadError } = await requireClient().rpc('customer_unread_payment_issue_messages', { p_ride_id: rideId });
+    if (unreadError) throw unreadError;
+    return { ...(data as CustomerPaymentIssue), unread_support_messages: Number(unread ?? 0) };
   },
 
   async getCustomerPaymentIssueMessages(rideId: string): Promise<CustomerPaymentIssueMessage[]> {
@@ -669,8 +705,52 @@ export const rideDispatchService = {
     return (data ?? []) as CustomerPaymentIssueMessage[];
   },
 
+  async markCustomerPaymentIssueMessagesRead(rideId: string) {
+    const { error } = await requireClient().rpc('customer_mark_payment_issue_messages_read', { p_ride_id: rideId });
+    if (error) throw error;
+  },
+
   async sendCustomerPaymentIssueMessage(rideId: string, body: string) {
     const { error } = await requireClient().rpc('customer_send_payment_issue_message', { p_ride_id: rideId, p_body: body.trim() });
+    if (error) throw error;
+  },
+
+  async getCustomerIssueHistory(): Promise<CustomerIssueHistoryItem[]> {
+    const { data, error } = await requireClient().rpc('customer_issue_history');
+    if (error) throw error;
+    return ((data ?? []) as Array<Record<string, unknown>>).map((item) => ({ ...item, unread_support_messages: Number(item.unread_support_messages ?? 0), customer_charge: item.customer_charge == null ? null : Number(item.customer_charge) })) as CustomerIssueHistoryItem[];
+  },
+
+  async getCustomerIssuesForRide(rideId: string): Promise<CustomerIssueHistoryItem[]> {
+    return (await this.getCustomerIssueHistory()).filter((issue) => issue.ride_id === rideId);
+  },
+
+  async getCustomerIssueDetail(issueId: string): Promise<CustomerIssueHistoryItem | null> {
+    const { data, error } = await requireClient().rpc('customer_payment_issue_detail', { p_issue_id: issueId }).maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const item = data as Record<string, unknown>;
+    return { ...item, unread_support_messages: Number(item.unread_support_messages ?? 0), customer_charge: item.customer_charge == null ? null : Number(item.customer_charge) } as CustomerIssueHistoryItem;
+  },
+
+  async getCustomerIssueMessagesById(issueId: string): Promise<CustomerPaymentIssueMessage[]> {
+    const { data, error } = await requireClient().rpc('customer_payment_issue_messages_by_id', { p_issue_id: issueId });
+    if (error) throw error;
+    return (data ?? []) as CustomerPaymentIssueMessage[];
+  },
+
+  async markCustomerIssueMessagesReadById(issueId: string) {
+    const { error } = await requireClient().rpc('customer_mark_payment_issue_messages_read_by_id', { p_issue_id: issueId });
+    if (error) throw error;
+  },
+
+  async sendCustomerIssueMessageById(issueId: string, body: string) {
+    const { error } = await requireClient().rpc('customer_send_payment_issue_message_by_id', { p_issue_id: issueId, p_body: body.trim() });
+    if (error) throw error;
+  },
+
+  async requestCustomerIssueSupportById(issueId: string) {
+    const { error } = await requireClient().rpc('customer_request_issue_support_by_id', { p_issue_id: issueId });
     if (error) throw error;
   },
 

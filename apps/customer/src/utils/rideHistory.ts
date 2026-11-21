@@ -1,33 +1,6 @@
 import type { DispatchRide } from '../services/rideDispatch';
-
-export type RideHistoryFilter = 'all' | 'date' | 'month' | 'year';
-
-export function rideHistoryTimestamp(ride: DispatchRide): number {
-  const value = ride.completed_at ?? ride.requested_at ?? ride.accepted_at ?? ride.started_at;
-  const timestamp = value ? new Date(value).getTime() : 0;
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-
-export function filterAndSortRideHistory(rides: DispatchRide[], filter: RideHistoryFilter, now = new Date()): DispatchRide[] {
-  return [...rides]
-    .sort((left, right) => rideHistoryTimestamp(right) - rideHistoryTimestamp(left))
-    .filter((ride) => {
-      if (filter === 'all') return true;
-      const timestamp = rideHistoryTimestamp(ride);
-      if (!timestamp) return false;
-      const date = new Date(timestamp);
-      if (filter === 'date') return date.toDateString() === now.toDateString();
-      if (filter === 'month') return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
-      return date.getFullYear() === now.getFullYear();
-    });
-}
-
-export function rideHistoryPeriodLabel(filter: RideHistoryFilter, now = new Date(), language = 'en'): string {
-  if (filter === 'all') return '';
-  const options: Intl.DateTimeFormatOptions = filter === 'date'
-    ? { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
-    : filter === 'month'
-      ? { month: 'long', year: 'numeric' }
-      : { year: 'numeric' };
-  return now.toLocaleDateString(language === 'te' ? 'te-IN' : 'en-IN', options);
-}
+export type RideHistoryPeriod = 'all' | 'day' | 'month' | 'year' | 'last7' | 'last30'; export type RideHistoryStatus = 'all' | 'completed' | 'cancelled'; export type RideHistorySort = 'newest' | 'oldest'; export type RideHistoryFilter = { period: RideHistoryPeriod; anchor: Date; status: RideHistoryStatus; sort: RideHistorySort };
+export const defaultRideHistoryFilter = (): RideHistoryFilter => ({ period: 'all', anchor: new Date(), status: 'all', sort: 'newest' });
+export function rideHistoryTimestamp(ride: DispatchRide): number { const value = ride.completed_at ?? ride.cancelled_at ?? ride.requested_at ?? ride.accepted_at ?? ride.started_at; const timestamp = value ? new Date(value).getTime() : 0; return Number.isFinite(timestamp) ? timestamp : 0; }
+export function filterAndSortRideHistory(rides: DispatchRide[], filter: RideHistoryFilter, now = new Date()): DispatchRide[] { return [...rides].filter((ride) => { if (filter.status !== 'all' && ride.status !== filter.status) return false; if (filter.period === 'all') return true; const timestamp = rideHistoryTimestamp(ride); if (!timestamp) return false; const date = new Date(timestamp); const anchor = filter.anchor; if (filter.period === 'day') return date.toDateString() === anchor.toDateString(); if (filter.period === 'month') return date.getFullYear() === anchor.getFullYear() && date.getMonth() === anchor.getMonth(); if (filter.period === 'year') return date.getFullYear() === anchor.getFullYear(); const lower = new Date(now); lower.setHours(0, 0, 0, 0); lower.setDate(lower.getDate() - (filter.period === 'last7' ? 6 : 29)); return timestamp >= lower.getTime() && timestamp <= now.getTime(); }).sort((left, right) => (filter.sort === 'newest' ? -1 : 1) * (rideHistoryTimestamp(left) - rideHistoryTimestamp(right))); }
+export function rideHistoryPeriodLabel(filter: RideHistoryFilter, language = 'en'): string { const locale = language === 'te' ? 'te-IN' : 'en-IN'; if (filter.period === 'all') return 'Any time'; if (filter.period === 'last7') return 'Last 7 days'; if (filter.period === 'last30') return 'Last 30 days'; const options: Intl.DateTimeFormatOptions = filter.period === 'day' ? { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' } : filter.period === 'month' ? { month: 'long', year: 'numeric' } : { year: 'numeric' }; return filter.anchor.toLocaleDateString(locale, options); }

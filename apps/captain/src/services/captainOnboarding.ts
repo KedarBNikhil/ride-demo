@@ -44,14 +44,16 @@ async function resolveAuthenticatedCaptainAccount(): Promise<CaptainAccount> {
   const { data: { user }, error: userError } = await client.auth.getUser();
   if (userError || !user || user.id !== session.user.id) throw userError ?? new Error('AUTHENTICATION_REQUIRED');
 
-  const [{ data: application, error: applicationError }, { data: captainProfile, error: captainProfileError }, { data: documents, error: documentsError }] = await Promise.all([
+  const [{ data: application, error: applicationError }, { data: captainProfile, error: captainProfileError }, { data: documents, error: documentsError }, { data: reonboardingReset, error: reonboardingResetError }] = await Promise.all([
     client.from('captain_onboarding_applications').select('full_name, preferred_language, vehicle_type, vehicle_plate_number, status').eq('user_id', user.id).maybeSingle(),
     client.from('captain_profiles').select('vehicle_type').eq('user_id', user.id).maybeSingle(),
     client.from('captain_onboarding_documents').select('document_type').eq('user_id', user.id),
+    client.from('captain_onboarding_resets').select('user_id').eq('user_id', user.id).maybeSingle(),
   ]);
   if (applicationError) throw applicationError;
   if (captainProfileError) throw captainProfileError;
   if (documentsError) throw documentsError;
+  if (reonboardingResetError) throw reonboardingResetError;
 
   const profile: CaptainProfile = application
     ? {
@@ -65,7 +67,11 @@ async function resolveAuthenticatedCaptainAccount(): Promise<CaptainAccount> {
   // Approved applications normally have a Captain profile (created by the
   // approval trigger). A legacy Captain profile is also an established account
   // and must never be sent through profile creation again.
-  if (captainProfile || application?.status === 'approved') return { status: 'approved', profile, onboardingRoute: 'review' };
+  if (application?.status === 'approved') return { status: 'approved', profile, onboardingRoute: 'review' };
+  // A controlled reset keeps historical ride/accounting facts attached to the
+  // original Captain record, but intentionally routes this account through a
+  // fresh application until that application is approved again.
+  if (!reonboardingReset && captainProfile) return { status: 'approved', profile, onboardingRoute: 'review' };
   if (application?.status === 'draft') {
     if (!profile.vehiclePlateNumber) return { status: 'draft', profile, onboardingRoute: 'profile' };
     const completedDocumentTypes = new Set(documents?.map((document) => document.document_type));
@@ -93,6 +99,8 @@ export const captainOnboardingService = {
   sendOtp: productionAuth.sendOtp,
   async verifyOtp(phone: string, otp: string) {
     await productionAuth.verifyOtp(phone, otp);
+    const { error } = await requireSupabase().rpc('verify_pilot_identity', { p_app_variant: 'captain' });
+    if (error) throw error;
     void registerPushNotifications('captain').catch(() => undefined);
     return { verified: true };
   },

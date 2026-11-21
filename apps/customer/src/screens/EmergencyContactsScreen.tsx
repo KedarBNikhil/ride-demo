@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import * as Contacts from 'expo-contacts';
@@ -29,12 +29,13 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
   const [mode, setMode] = useState<'overview' | 'picker'>('overview');
   const [deviceContacts, setDeviceContacts] = useState<DeviceContact[]>([]);
   const [deviceLoading, setDeviceLoading] = useState(false);
-  const [addedKeys, setAddedKeys] = useState<string[]>([]);
+  const [selectedDeviceKeys, setSelectedDeviceKeys] = useState<string[]>([]);
   const [manualName, setManualName] = useState('');
   const [manualPhone, setManualPhone] = useState('');
   const [saving, setSaving] = useState(false);
   const [manualEntry, setManualEntry] = useState(false);
   const autoOpened = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -51,6 +52,8 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
       .catch(() => setPermission('denied'));
   }, []);
 
+  const normalizedPhone = (phone: string) => phone.replace(/\D/g, '');
+
   const loadDeviceContacts = useCallback(async () => {
     setDeviceLoading(true);
     try {
@@ -58,13 +61,16 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
         fields: [Contacts.Fields.Name, Contacts.Fields.PhoneNumbers],
         sort: Contacts.SortTypes.FirstName,
       });
-      setDeviceContacts(data.map(toDeviceContact).filter((contact): contact is DeviceContact => contact !== null));
+      const contacts = data.map(toDeviceContact).filter((contact): contact is DeviceContact => contact !== null);
+      setDeviceContacts(contacts);
+      const savedPhones = new Set(saved.map((contact) => normalizedPhone(contact.phoneNumber)));
+      setSelectedDeviceKeys(contacts.filter((contact) => savedPhones.has(normalizedPhone(contact.phone))).map((contact) => contact.key));
     } catch {
       setDeviceContacts([]);
     } finally {
       setDeviceLoading(false);
     }
-  }, []);
+  }, [saved]);
 
   const openPicker = useCallback(() => {
     setMode('picker');
@@ -90,18 +96,21 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
   };
 
   const openAddFlow = () => {
+    if (permission === 'granted' && !loadFailed) {
+      openPicker();
+      return;
+    }
     setManualEntry(true);
   };
 
-  const addContact = async (name: string, phone: string, key?: string) => {
+  const addContact = async (name: string, phone: string) => {
     if (saving) return;
-    const normalizedPhone = phone.replace(/\D/g, '');
-    if (saved.some((contact) => contact.phoneNumber.replace(/\D/g, '') === normalizedPhone)) return;
+    const phoneKey = normalizedPhone(phone);
+    if (saved.some((contact) => normalizedPhone(contact.phoneNumber) === phoneKey)) return;
     setSaving(true);
     try {
       const created = await emergencyContactsService.add(name, phone);
       setSaved((current) => [...current, created]);
-      if (key) setAddedKeys((current) => [...current, key]);
       setManualName('');
       setManualPhone('');
       setManualEntry(false);
@@ -122,6 +131,35 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
     void addContact(name, phone);
   };
 
+  const toggleDeviceContact = (key: string) => {
+    selectionHaptic();
+    setSelectedDeviceKeys((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+  };
+
+  const savePickerSelection = async () => {
+    if (saving) return;
+    const selected = deviceContacts.filter((contact) => selectedDeviceKeys.includes(contact.key));
+    const selectedPhones = new Set(selected.map((contact) => normalizedPhone(contact.phone)));
+    const savedDeviceContacts = saved.filter((contact) => deviceContacts.some((device) => normalizedPhone(device.phone) === normalizedPhone(contact.phoneNumber)));
+    const toRemove = savedDeviceContacts.filter((contact) => !selectedPhones.has(normalizedPhone(contact.phoneNumber)));
+    const savedPhones = new Set(saved.map((contact) => normalizedPhone(contact.phoneNumber)));
+    const toAdd = selected.filter((contact) => !savedPhones.has(normalizedPhone(contact.phone)));
+
+    setSaving(true);
+    try {
+      await Promise.all([
+        ...toRemove.map((contact) => emergencyContactsService.remove(contact.id)),
+        ...toAdd.map((contact) => emergencyContactsService.add(contact.name, contact.phone)),
+      ]);
+      setSaved(await emergencyContactsService.list());
+      setMode('overview');
+    } catch {
+      dialog({ title: t('safety.title'), message: t('safety.addFailed') });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const confirmRemove = (contact: EmergencyContact) => {
     dialog({
       title: t('safety.removeTitle'),
@@ -140,9 +178,12 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
   };
 
   if (mode === 'picker') {
-    const savedPhones = new Set(saved.map((contact) => contact.phoneNumber.replace(/\s+/g, '')));
     return (
-      <ScreenShell back={() => setMode('overview')} title={t('safety.pickTitle')}>
+      <ScreenShell
+        back={() => setMode('overview')}
+        title={t('safety.pickTitle')}
+        rightAction={{ label: saving ? t('login.pleaseWait') : t('actions.done'), onPress: () => void savePickerSelection(), disabled: saving }}
+      >
         {deviceLoading ? <Text style={styles.note}>{t('login.pleaseWait')}</Text> : deviceContacts.length === 0 ? (
           <View style={[styles.card, shadows.soft]}>
             <Text style={styles.cardTitle}>{t('safety.emptyDevice')}</Text>
@@ -152,7 +193,7 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
         ) : (
           <View style={[styles.card, shadows.soft]}>
             {deviceContacts.map((contact, index) => {
-              const alreadySaved = addedKeys.includes(contact.key) || savedPhones.has(contact.phone.replace(/\s+/g, ''));
+              const selected = selectedDeviceKeys.includes(contact.key);
               return (
                 <View key={contact.key} style={[styles.row, index < deviceContacts.length - 1 && styles.rowDivider]}>
                   <View style={styles.rowText}>
@@ -161,12 +202,12 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
                   </View>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityState={{ selected: alreadySaved }}
-                    disabled={alreadySaved || saving}
-                    onPress={() => void addContact(contact.name, contact.phone, contact.key)}
-                    style={[styles.plusButton, alreadySaved && styles.plusButtonAdded]}
+                    accessibilityState={{ selected }}
+                    disabled={saving}
+                    onPress={() => toggleDeviceContact(contact.key)}
+                    style={[styles.plusButton, selected && styles.plusButtonAdded]}
                   >
-                    <Text style={[styles.plusText, alreadySaved && styles.plusTextAdded]}>{alreadySaved ? '✓' : '+'}</Text>
+                    <Text style={[styles.plusText, selected && styles.plusTextAdded]}>{selected ? '✓' : '+'}</Text>
                   </Pressable>
                 </View>
               );
@@ -189,7 +230,7 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
   const hasContacts = saved.length > 0;
 
   return (
-    <ScreenShell back={onBack} title={t('safety.title')}>
+    <ScreenShell back={onBack} title={t('safety.title')} keyboardAvoiding scrollRef={scrollRef}>
       {loadFailed && <Text style={[styles.note, styles.noteError]}>{t('safety.loadFailed')}</Text>}
 
       {hasContacts && <View style={[styles.card, shadows.soft]}>
@@ -208,6 +249,12 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
       </View>}
 
       {hasContacts && <PrimaryButton label={t('safety.addContact')} onPress={openAddFlow} />}
+
+      {hasContacts && permission === 'granted' && !loadFailed && (
+        <Pressable accessibilityRole="button" onPress={() => setManualEntry(true)} style={styles.linkWrap}>
+          <Text style={styles.linkText}>{t('safety.manual')}</Text>
+        </Pressable>
+      )}
 
       {!hasContacts && permission === 'granted' && !loadFailed && (
         <View style={[styles.card, shadows.soft]}>
@@ -239,8 +286,8 @@ export function EmergencyContactsScreen({ onBack }: { onBack: () => void }) {
       {(!hasContacts || manualEntry) && (
         <View style={[styles.card, shadows.soft]}>
           <Text style={styles.cardTitle}>{t('safety.manualTitle')}</Text>
-          <TextInput value={manualName} onChangeText={setManualName} placeholder={t('safety.namePlaceholder')} placeholderTextColor={colors.textMuted} style={styles.input} />
-          <TextInput value={manualPhone} onChangeText={setManualPhone} placeholder={t('safety.phonePlaceholder')} placeholderTextColor={colors.textMuted} keyboardType="phone-pad" style={styles.input} />
+          <TextInput value={manualName} onChangeText={setManualName} onFocus={() => requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }))} placeholder={t('safety.namePlaceholder')} placeholderTextColor={colors.textMuted} style={styles.input} />
+          <TextInput value={manualPhone} onChangeText={setManualPhone} onFocus={() => requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }))} placeholder={t('safety.phonePlaceholder')} placeholderTextColor={colors.textMuted} keyboardType="phone-pad" style={styles.input} />
           <PrimaryButton label={saving ? t('login.pleaseWait') : t('safety.save')} onPress={saveManual} disabled={saving} />
         </View>
       )}

@@ -1,0 +1,22 @@
+# Local credentials and generated caches are never needed by EAS Build.
+.env
+.env.local
+.git
+.npm-cache/
+node_modules/
+.expo/
+**/.expo/
+
+# Build outputs are recreated by the EAS build pipeline.
+dist/
+**/dist/
+android/
+apps/customer/android/
+apps/customer/ios/
+apps/captain/android/
+apps/captain/ios/
+dashboard/dist/
+
+# Local reports and Finder metadata do not belong in the build archive.
+health-reports/
+**/.DS_Store

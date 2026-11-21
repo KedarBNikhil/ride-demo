@@ -447,6 +447,8 @@ interface IssueRideFacts {
   final_fare: number | null;
 }
 
+interface CustomerIssueProfile { id: string; full_name: string | null; }
+
 async function enrichIssues<T extends { ride_id: string }>(issues: T[]): Promise<Map<string, IssueRideFacts>> {
   const rideIds = [...new Set(issues.map((i) => i.ride_id))];
   if (rideIds.length === 0) return new Map();
@@ -482,6 +484,7 @@ export interface EnrichedCustomerIssue extends CustomerPaymentIssue {
   paymentStatus: string | null;
   paymentMethod: string | null;
   finalFare: number | null;
+  customerName: string | null;
 }
 
 export async function fetchCustomerIssues(): Promise<EnrichedCustomerIssue[]> {
@@ -489,12 +492,16 @@ export async function fetchCustomerIssues(): Promise<EnrichedCustomerIssue[]> {
     supabase!.from('customer_payment_issues').select('*').order('opened_at', { ascending: false }).limit(200),
   ) as unknown as CustomerPaymentIssue[];
   const facts = await enrichIssues(issues);
+  const customerIds = [...new Set(issues.map((issue) => issue.customer_id))];
+  const profiles = customerIds.length ? await unwrap(() => supabase!.from('profiles').select('id, full_name').in('id', customerIds)) as unknown as CustomerIssueProfile[] : [];
+  const customerNames = new Map(profiles.map((profile) => [profile.id, profile.full_name]));
   return issues.map((issue) => ({
     ...issue,
     rideStatus: facts.get(issue.ride_id)?.status ?? null,
     paymentStatus: facts.get(issue.ride_id)?.payment_status ?? null,
     paymentMethod: facts.get(issue.ride_id)?.payment_method ?? null,
     finalFare: facts.get(issue.ride_id)?.final_fare ?? null,
+    customerName: customerNames.get(issue.customer_id) ?? null,
   }));
 }
 
@@ -511,6 +518,9 @@ export interface UnifiedDispute {
   paymentStatus: string | null;
   paymentMethod: string | null;
   finalFare: number | null;
+  customerName?: string | null;
+  customerNote?: string | null;
+  supportRequestedAt?: string | null;
   financialAdjustment?: DisputeFinancialAdjustment;
 }
 
@@ -520,7 +530,7 @@ export async function fetchAllDisputes(): Promise<UnifiedDispute[]> {
   return [
     ...payouts.map((issue) => ({ ...issue, source: 'payout' as const, operator_note: issue.operator_note, paymentStatus: null, paymentMethod: null, finalFare: null })),
     ...captains.map((issue) => ({ ...issue, source: 'captain' as const, operator_note: issue.resolution_note, paymentStatus: issue.paymentStatus, paymentMethod: issue.paymentMethod, finalFare: issue.finalFare, financialAdjustment: byDispute.get(issue.id) })),
-    ...customers.map((issue) => ({ ...issue, source: 'customer' as const, operator_note: issue.resolution_note, paymentStatus: issue.paymentStatus, paymentMethod: issue.paymentMethod, finalFare: issue.finalFare, financialAdjustment: byDispute.get(issue.id) })),
+    ...customers.map((issue) => ({ ...issue, source: 'customer' as const, operator_note: issue.resolution_note, paymentStatus: issue.paymentStatus, paymentMethod: issue.paymentMethod, finalFare: issue.finalFare, customerName: issue.customerName, customerNote: issue.customer_note, supportRequestedAt: issue.support_requested_at, financialAdjustment: byDispute.get(issue.id) })),
   ].sort((a, b) => b.opened_at.localeCompare(a.opened_at));
 }
 

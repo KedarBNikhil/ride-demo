@@ -27,6 +27,7 @@ export function ToPickupScreen({ request, arrived, onPrimaryAction, onBack, onOp
   const lastPublishedLocation = useRef<LiveCoordinate | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [storedRoute, setStoredRoute] = useState<LiveCoordinate[]>([]);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const hasFramedRoute = useRef(false);
   const routeStart = location ?? routeFallback;
 
@@ -66,6 +67,16 @@ export function ToPickupScreen({ request, arrived, onPrimaryAction, onBack, onOp
     if (!mapReady || hasFramedRoute.current || (!location && storedRoute.length < 2)) return;
     hasFramedRoute.current = fitRouteInVisibleViewport(mapRef.current, storedRoute.length > 1 ? storedRoute : [routeStart, request.pickup], getVisibleMapPadding({ top: 72, bottomSheetHeight: 260, bottomInset: tabBarHeight }));
   }, [location, mapReady, request.pickup, routeStart, storedRoute, tabBarHeight]);
+  useEffect(() => {
+    let active = true;
+    const refreshUnreadCount = () => {
+      void rideDispatchService.unreadRideMessageCount(request.rideId)
+        .then((count) => { if (active) setUnreadMessageCount(count); })
+        .catch(() => { if (active) setUnreadMessageCount(0); });
+    };
+    refreshUnreadCount();
+    return rideDispatchService.subscribeToRideMessages(request.rideId, refreshUnreadCount);
+  }, [request.rideId]);
 
   const canContactCustomer = Boolean(request.maskedCustomerNumber);
   const callCustomer = () => { if (canContactCustomer) void Linking.openURL(`tel:${request.maskedCustomerNumber}`); };
@@ -80,10 +91,10 @@ export function ToPickupScreen({ request, arrived, onPrimaryAction, onBack, onOp
       <View style={styles.contact}>
         <Pressable disabled={!canContactCustomer} onPress={() => { selectionHaptic(); callCustomer(); }} style={[styles.contactButton, !canContactCustomer && styles.contactDisabled]}><Text style={styles.contactText}>☎ {t('captain.call')}</Text></Pressable>
       </View>
-      <Pressable onPress={() => { selectionHaptic(); onOpenChat(); }} accessibilityRole="button" style={styles.chatButton}><Text style={styles.chatButtonText}>💬 {t('captain.message')}</Text></Pressable>
+      <Pressable onPress={() => { selectionHaptic(); onOpenChat(); }} accessibilityRole="button" style={styles.chatButton}><Text style={styles.chatButtonText}>💬 {t('captain.message')}</Text>{unreadMessageCount > 0 && <View style={styles.messageUnreadBadge}><Text style={styles.messageUnreadBadgeText}>{unreadMessageCount > 9 ? '9+' : unreadMessageCount}</Text></View>}</Pressable>
       <PrimaryButton label={t('captain.navigate')} onPress={() => openGoogleMapsNavigation(request.pickup)} secondary />
       <PrimaryButton label={t(arrived ? 'captain.startRideTitle' : 'captain.arrivedAtPickup')} onPress={onPrimaryAction} />
     </DraggableMapSheet>
   </SafeAreaView>;
 }
-const styles = StyleSheet.create({ safe: { backgroundColor: colors.bg, flex: 1 }, back: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 44, justifyContent: 'center', left: 16, position: 'absolute', top: 12, width: 44 }, backText: { color: colors.primary, fontSize: 32, lineHeight: 34 }, sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, gap: 6, left: 0, padding: 22, position: 'absolute', right: 0 }, eyebrow: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '900', textTransform: 'uppercase' }, name: { color: colors.textPrimary, fontFamily, fontSize: fontSize['2xl'], fontWeight: '900' }, area: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md }, contact: { flexDirection: 'row', gap: 10, marginVertical: 8 }, contactButton: { alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: radii.pill, flex: 1, minHeight: 44, justifyContent: 'center' }, contactDisabled: { opacity: 0.45 }, contactText: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' }, chatButton: { alignItems: 'center', borderColor: colors.primary, borderRadius: radii.pill, borderWidth: 1, justifyContent: 'center', minHeight: 42 }, chatButtonText: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' } });
+const styles = StyleSheet.create({ safe: { backgroundColor: colors.bg, flex: 1 }, back: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.pill, height: 44, justifyContent: 'center', left: 16, position: 'absolute', top: 12, width: 44 }, backText: { color: colors.primary, fontSize: 32, lineHeight: 34 }, sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, gap: 6, left: 0, padding: 22, position: 'absolute', right: 0 }, eyebrow: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '900', textTransform: 'uppercase' }, name: { color: colors.textPrimary, fontFamily, fontSize: fontSize['2xl'], fontWeight: '900' }, area: { color: colors.textSecondary, fontFamily, fontSize: fontSize.md }, contact: { flexDirection: 'row', gap: 10, marginVertical: 8 }, contactButton: { alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: radii.pill, flex: 1, minHeight: 44, justifyContent: 'center' }, contactDisabled: { opacity: 0.45 }, contactText: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' }, chatButton: { alignItems: 'center', borderColor: colors.primary, borderRadius: radii.pill, borderWidth: 1, flexDirection: 'row', justifyContent: 'center', minHeight: 48, position: 'relative' }, chatButtonText: { color: colors.primary, fontFamily, fontSize: fontSize.sm, fontWeight: '800' }, messageUnreadBadge: { alignItems: 'center', backgroundColor: colors.error, borderColor: colors.surface, borderRadius: 9, borderWidth: 1, justifyContent: 'center', minWidth: 17, paddingHorizontal: 3, position: 'absolute', right: 14, top: 4 }, messageUnreadBadgeText: { color: colors.surface, fontFamily, fontSize: 10, fontWeight: '900', lineHeight: 15 } });

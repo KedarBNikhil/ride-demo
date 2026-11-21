@@ -431,7 +431,7 @@ function DisputesTab() {
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState<{ dispute: UnifiedDispute; decision: 'resolved' | 'rejected' } | null>(null);
   const [chatIssue, setChatIssue] = useState<UnifiedDispute | null>(null);
-  const disputes = useQuery({ queryKey: ['disputes'], queryFn: fetchAllDisputes });
+  const disputes = useQuery({ queryKey: ['disputes'], queryFn: fetchAllDisputes, refetchInterval: 5_000, refetchIntervalInBackground: true });
   const resolveMutation = useMutation({
     mutationFn: (args: { dispute: UnifiedDispute; decision: 'resolved' | 'rejected'; note: string; resolution?: 'NO_ACTION' | 'CUSTOMER_LIABLE' | 'CAPTAIN_LIABLE'; amount?: string; reason?: string; internalNotes?: string }) => {
       if (args.dispute.source !== 'payout' && args.decision === 'resolved') return resolveDisputeWithAdjustment(args.dispute.source, args.dispute.id, args.resolution ?? 'NO_ACTION', args.amount ? Number(args.amount) : undefined, args.reason, args.internalNotes || args.note);
@@ -459,9 +459,9 @@ function DisputesTab() {
           data={disputes.data ?? []}
           columns={[
             { header: 'Opened', accessorFn: (r) => r.opened_at, cell: (c) => formatDateTime(c.getValue<string>()) },
-            { header: 'Source', accessorFn: (r) => r.source, cell: (c) => <Badge tone={c.getValue<string>() === 'customer' ? 'blue' : c.getValue<string>() === 'captain' ? 'amber' : 'red'}>{titleize(c.getValue<string>())}</Badge> },
+            { header: 'Source', accessorFn: (r) => r.source, cell: (c) => { const row = c.row.original; const requestedSupport = row.source === 'customer' && row.status === 'open' && Boolean(row.supportRequestedAt); return <div className="relative inline-flex pt-3"><span className={requestedSupport ? 'absolute right-0 top-0 flex h-3 w-3' : 'hidden'} title="Customer is online for resolution and requested customer support chat"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" /></span><Badge tone={c.getValue<string>() === 'customer' ? 'blue' : c.getValue<string>() === 'captain' ? 'amber' : 'red'}>{row.source === 'customer' && row.customerName ? `Customer · ${row.customerName}` : titleize(c.getValue<string>())}</Badge></div>; } },
             { header: 'Ride', accessorFn: (r) => r.ride_id ?? '—', cell: (c) => <code className="rounded bg-slate-100 px-1 text-xs">{String(c.getValue()).slice(0, 8)}</code> },
-            { header: 'Reason', accessorFn: (r) => r.reason },
+            { header: 'Reason', accessorFn: (r) => r.reason, cell: (c) => <span>{titleize(c.getValue<string>())}{c.row.original.source === 'customer' && c.row.original.customerNote ? ` · ${c.row.original.customerNote}` : ''}</span> },
             { header: 'Ride payment', accessorFn: (r) => r.paymentStatus ? `${r.paymentMethod ?? '—'} / ${r.paymentStatus}` : '—' },
             { header: 'Operator note', accessorFn: (r) => r.operator_note ?? '—' },
             { header: 'Adjustment', accessorFn: (r) => r.financialAdjustment, cell: (c) => { const a = c.getValue<UnifiedDispute['financialAdjustment']>(); return a ? <span>{formatFare(Number(a.original_amount))} · applied {formatFare(Number(a.applied_amount))} · remaining {formatFare(Number(a.remaining_amount))} · {titleize(a.status)}</span> : '—'; } },

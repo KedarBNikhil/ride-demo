@@ -73,6 +73,7 @@ export function SettingsScreen({
   onSafety,
   onAbout,
   onDocuments,
+  onHelp,
   onAccountDeleted,
   onLoggedOut,
 }: {
@@ -83,6 +84,7 @@ export function SettingsScreen({
   onSafety?: () => void;
   onAbout?: () => void;
   onDocuments?: () => void;
+  onHelp?: () => void;
   onAccountDeleted?: () => void;
   onLoggedOut?: () => void;
 }) {
@@ -154,14 +156,14 @@ export function SettingsScreen({
         <Pressable accessibilityRole="button" onPress={onAbout} style={({ pressed }) => [styles.settingsRow, pressed && styles.rowPressed]}>
           <Text style={styles.settingsTitle}>{t('profile.about')}</Text><Text style={styles.rowChevron}>›</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" onPress={() => dialog({ title: t('home.helpTitle'), message: t('profile.helpComingSoon') })} style={({ pressed }) => [styles.settingsRow, pressed && styles.rowPressed]}>
+        <Pressable accessibilityRole="button" onPress={onHelp ?? (() => dialog({ title: t('home.helpTitle'), message: t('profile.helpComingSoon') }))} style={({ pressed }) => [styles.settingsRow, pressed && styles.rowPressed]}>
           <Text style={styles.settingsTitle}>{t('profile.help')}</Text><Text style={styles.rowChevron}>›</Text>
         </Pressable>
       </View>
     </ScreenShell>;
   }
   return (
-    <ScreenShell back={onBack} title={t(profile ? 'screens.profile' : 'screens.settings')}>
+    <ScreenShell back={onBack} title={t(profile ? 'screens.profile' : 'screens.settings')} largeTitle={profile}>
       {/* Section: Language */}
       {profile && <View style={styles.profileCard}>
         <View style={styles.profileAvatar} accessibilityLabel="Profile picture placeholder"><View style={styles.profileAvatarHead} /><View style={styles.profileAvatarBody} /></View>
@@ -242,6 +244,13 @@ export function SettingsScreen({
             <Text style={styles.rowChevron}>›</Text>
           </Pressable>
         </View>
+      </View>}
+
+      {profile && ratingRole === 'captain' && <View style={styles.section}>
+        <Text style={styles.sectionLabel}>{t('profile.help')}</Text>
+        <View style={styles.groupedRows}><Pressable onPress={onHelp} accessibilityRole="button" style={styles.groupedRow}>
+          <Text style={styles.chipName}>{t('captain.supportIssues.title')}</Text><Text style={styles.rowChevron}>›</Text>
+        </Pressable></View>
       </View>}
 
       {profile && ratingRole && <Pressable onPress={() => { selectionHaptic(); void logout(); }} disabled={deletingAccount || loggingOut} accessibilityRole="button" style={[styles.logoutButton, loggingOut && styles.deleteAccountButtonDisabled]}>

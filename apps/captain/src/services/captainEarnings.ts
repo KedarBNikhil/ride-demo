@@ -8,6 +8,14 @@ function localDateKey(date: Date) { return `${date.getFullYear()}-${String(date.
 const fare = (value: unknown) => Number(value ?? 0);
 
 export const captainEarningsService = {
+  async getDailyAnalytics(reference = new Date()) {
+    if (!supabase) throw new Error('SUPABASE_NOT_CONFIGURED');
+    const monthStart = `${reference.getFullYear()}-${String(reference.getMonth() + 1).padStart(2, '0')}-01`;
+    const { data, error } = await supabase.rpc('captain_daily_analytics', { p_month_start: monthStart });
+    if (error) throw error;
+    const key = localDateKey(reference);
+    return ((data ?? []) as Array<{ day: string; completed_rides: number; total_earnings: number; ride_km: number; pickup_km: number; last_ride_earnings: number | null; last_ride_km: number | null }>).find((row) => row.day === key) ?? null;
+  },
   async getMonth(reference = new Date()): Promise<CaptainEarningsOverview> {
     const start = startOfMonth(reference);
     const end = nextMonth(reference);

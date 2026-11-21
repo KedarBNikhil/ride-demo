@@ -9,7 +9,7 @@ fi
 
 readonly PACKAGE="com.nandyalride.customer"
 readonly PROJECT="1158ff7e-1da5-4a6a-9080-14791394da7a"
-readonly RUNTIME="customer-1.0.3"
+readonly RUNTIME="customer-1.0.4"
 readonly CHANNEL="production-customer"
 readonly VARIANT="customer"
 readonly MODE="customer"
@@ -46,6 +46,8 @@ NODE
 printf -v export_command 'APP_VARIANT=%q EXPO_PUBLIC_APP_MODE=%q EXPO_PUBLIC_AUTH_MODE=production npx expo export --platform android --clear --max-workers 1 --output-dir %q' "$VARIANT" "$MODE" "$export_dir"
 run_with_eas_production_environment "$export_command"
 test -f "$export_dir/metadata.json"
+printf -v bundle_validation_command 'node ../../scripts/verify-ota-production-bundle.mjs %q' "$export_dir"
+run_with_eas_production_environment "$bundle_validation_command"
 if [[ "$action" == "--preflight" ]]; then echo "Customer OTA preflight passed; nothing published."; exit 0; fi
 npx --yes eas-cli@latest update --branch "$CHANNEL" --platform android --skip-bundler --input-dir "$export_dir" --message "${OTA_MESSAGE:?Set OTA_MESSAGE before publishing}"
 npx --yes eas-cli@latest update:list --branch "$CHANNEL" --platform android --runtime-version "$RUNTIME" --limit 1 --json

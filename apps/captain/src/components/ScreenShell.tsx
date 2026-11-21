@@ -1,5 +1,7 @@
 import React from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,21 +10,23 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { colors, fontFamily, fontSize, layout, shadows } from '../theme';
+import { colors, fontFamily, fontFamilyExtraBold, fontFamilySemiBold, fontSize, layout, shadows } from '../theme';
 
 type Props = {
   children: React.ReactNode;
   back?: () => void;
   title?: string;
+  largeTitle?: boolean;
   noHeader?: boolean;
+  scrollRef?: React.RefObject<ScrollView | null>;
 };
 
-export function ScreenShell({ children, back, title, noHeader = false }: Props) {
+export function ScreenShell({ children, back, title, largeTitle = false, noHeader = false, scrollRef }: Props) {
   const { t } = useTranslation();
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       {!noHeader && (
-        <View style={styles.header}>
+        <View style={[styles.header, largeTitle && styles.largeHeader]}>
           {back ? (
             <Pressable
               accessibilityRole="button"
@@ -36,20 +40,26 @@ export function ScreenShell({ children, back, title, noHeader = false }: Props) 
             <View style={styles.backPlaceholder} />
           )}
           {title ? (
-            <Text style={styles.headerTitle} numberOfLines={1}>
+            <Text style={[styles.headerTitle, largeTitle && styles.largeHeaderTitle]} numberOfLines={1}>
               {title}
             </Text>
           ) : null}
           <View style={styles.backPlaceholder} />
         </View>
       )}
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        behavior={Platform.select({ ios: 'padding', android: 'height' })}
+        style={styles.keyboardAvoidingView}
       >
-        {children}
-      </ScrollView>
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {children}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -58,6 +68,9 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   header: {
     alignItems: 'center',
@@ -78,9 +91,8 @@ const styles = StyleSheet.create({
   },
   backText: {
     color: colors.textPrimary,
-    fontFamily,
+    fontFamily: fontFamilySemiBold,
     fontSize: fontSize.sm,
-    fontWeight: '700',
   },
   backPlaceholder: {
     minWidth: 64,
@@ -88,11 +100,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     color: colors.textPrimary,
     flex: 1,
-    fontFamily,
+    fontFamily: fontFamilyExtraBold,
     fontSize: fontSize.md,
-    fontWeight: '800',
     textAlign: 'center',
   },
+  largeHeader: { minHeight: 66 },
+  largeHeaderTitle: { fontSize: fontSize.xl, fontWeight: '900' },
   scroll: {
     flexGrow: 1,
     gap: layout.sectionGap,

@@ -12,11 +12,25 @@ type RazorpayCheckoutModule = {
     name: string;
     description: string;
     order_id: string;
+    method?: 'upi';
     theme: { color: string };
   }): Promise<Record<string, unknown>>;
 };
 
 export const isRazorpayRideCheckoutEnabled = Constants.expoConfig?.extra?.razorpayRideCheckoutEnabled === true;
+
+export class RazorpayCheckoutCancelled extends Error {
+  constructor() { super('Razorpay checkout was cancelled'); this.name = 'RazorpayCheckoutCancelled'; }
+}
+
+// Closing Razorpay without completing a payment is a normal customer action.
+// The native module rejects its Promise in that case, so callers must not show
+// it as a checkout failure.
+export function isRazorpayCheckoutCancelled(error: unknown) {
+  if (error instanceof RazorpayCheckoutCancelled) return true;
+  const text = error instanceof Error ? error.message : typeof error === 'string' ? error : JSON.stringify(error ?? '');
+  return /cancel|dismiss|back pressed/i.test(text);
+}
 
 function getAndroidRazorpayCheckout(): RazorpayCheckoutModule {
   if (Platform.OS !== 'android') {
@@ -32,7 +46,7 @@ function result<T>(response: { data: T | null; error: { message: string } | null
   return response.data;
 }
 
-export async function startRazorpayRideCheckout(rideId: string) {
+export async function startRazorpayRideCheckout(rideId: string, preferredMethod?: 'upi') {
   if (!isRazorpayRideCheckoutEnabled) throw new Error('Online payment is not enabled for this release');
   const RazorpayCheckout = getAndroidRazorpayCheckout();
   const supabase = getSupabaseClient();
@@ -44,7 +58,14 @@ export async function startRazorpayRideCheckout(rideId: string) {
     name: 'Sawaari',
     description: 'Ride payment',
     order_id: order.orderId,
+    ...(preferredMethod ? { method: preferredMethod } : {}),
     theme: { color: '#0B6B5C' },
   });
+  // Android Razorpay versions differ: dismissal can reject the Promise or
+  // resolve it without the credentials required for server verification.
+  // Both are normal cancellations, never a failed payment attempt.
+  if (typeof payment.razorpay_payment_id !== 'string' || typeof payment.razorpay_order_id !== 'string' || typeof payment.razorpay_signature !== 'string') {
+    throw new RazorpayCheckoutCancelled();
+  }
   return result(await supabase.functions.invoke<VerifiedPayment>('razorpay-ride-checkout', { body: { action: 'verify', rideId, ...payment } }));
 }

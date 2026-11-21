@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { colors, fontFamily, fontSize, radii, shadows } from '../theme';
+import { colors, fontFamily, fontFamilyExtraBold, fontFamilySemiBold, fontSize, radii, shadows } from '../theme';
 
 export type DialogButton = { text: string; style?: 'cancel' | 'default' | 'destructive'; onPress?: () => void };
 export type DialogOptions = { title: string; message?: string; buttons?: DialogButton[] };
@@ -60,11 +60,11 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
 const styles = StyleSheet.create({
   overlay: { alignItems: 'center', backgroundColor: 'rgba(23, 26, 24, 0.55)', flex: 1, justifyContent: 'center', paddingHorizontal: 28 },
   card: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.xl, borderWidth: 1, overflow: 'hidden', width: '100%' },
-  title: { color: colors.textPrimary, fontFamily, fontSize: fontSize.lg, fontWeight: '900', paddingHorizontal: 22, paddingTop: 22 },
+  title: { color: colors.textPrimary, fontFamily: fontFamilyExtraBold, fontSize: fontSize.lg, paddingHorizontal: 22, paddingTop: 22 },
   message: { color: colors.textSecondary, fontFamily, fontSize: fontSize.sm, lineHeight: 20, paddingHorizontal: 22, paddingTop: 8 },
   buttons: { marginTop: 18 },
   button: { alignItems: 'center', borderColor: colors.border, borderTopWidth: 1, minHeight: 52, justifyContent: 'center', paddingHorizontal: 22 },
-  buttonText: { color: colors.primaryDark, fontFamily, fontSize: fontSize.md, fontWeight: '800' },
-  buttonDestructive: { color: colors.accent, fontWeight: '900' },
-  buttonCancel: { color: colors.textSecondary, fontWeight: '700' },
+  buttonText: { color: colors.primaryDark, fontFamily: fontFamilySemiBold, fontSize: fontSize.md },
+  buttonDestructive: { color: colors.accent },
+  buttonCancel: { color: colors.textSecondary },
 });

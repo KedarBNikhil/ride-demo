@@ -12,6 +12,7 @@ declare module 'react-native-razorpay' {
     name: string;
     description?: string;
     order_id: string;
+    method?: 'upi';
     theme?: { color?: string };
   };
 

@@ -11,6 +11,7 @@ import { TripInProgressScreen } from '../screens/captain/TripInProgressScreen';
 import { EndRideScreen } from '../screens/captain/EndRideScreen';
 import { CaptainRideDetailsScreen } from '../screens/captain/CaptainRideDetailsScreen';
 import { CaptainPaymentIssueSupportScreen } from '../screens/captain/CaptainPaymentIssueSupportScreen';
+import { CaptainIssueDetailsScreen, CaptainIssueHistoryScreen } from '../screens/captain/CaptainIssueHistoryScreens';
 import { YourDocumentsScreen } from '../screens/captain/YourDocumentsScreen';
 import { RateCustomerScreen } from '../screens/captain/RateCustomerScreen';
 import { CaptainRideChat } from '../components/CaptainRideChat';
@@ -27,6 +28,8 @@ import { colors, fontFamily, radii } from '../theme';
 import { selectionHaptic } from '../utils/haptics';
 import { useBottomTabBarMetrics } from '../utils/safeAreaLayout';
 import { activeRideGpsTracking } from '../services/activeRideGpsTracking';
+import { captainNavigationRef } from './captainNavigationRef';
+import { IncomingRideRequestSheet } from '../screens/captain/IncomingRideRequestSheet';
 
 const Stack = createNativeStackNavigator();
 
@@ -115,12 +118,28 @@ export function CaptainMainStack({ online, onToggle, onLanguageChange, onTripCom
       else void dismissCaptainOfferNotification({ rideId, offerId }).catch(() => undefined);
     }).catch(() => undefined);
   }), [presentRequest]);
-  useEffect(() => subscribeToDirectCaptainOfferResponses(({ rideId, offerId }) => {
+  useEffect(() => subscribeToDirectCaptainOfferResponses(({ rideId, offerId, action }) => {
     void rideDispatchService.getCaptainPendingOffer(rideId, offerId).then((offer) => {
-      if (offer) presentRequest(offer);
-      else incomingRideAlertService.stop(offerId);
+      if (!offer) { incomingRideAlertService.stop(offerId); return; }
+      if (action === 'reject') {
+        dismissRequest(offer);
+        void rideDispatchService.respondToOffer(offerId, false).catch(() => undefined);
+        return;
+      }
+      if (action === 'accept') {
+        if (acceptingOfferId.current === offerId) return;
+        acceptingOfferId.current = offerId;
+        incomingRideAlertService.stop(offerId);
+        void dismissCaptainOfferNotification({ rideId, offerId }).catch(() => undefined);
+        void rideDispatchService.respondToOffer(offerId, true).then(() => {
+          dismissRequest(offer);
+          if (captainNavigationRef.isReady()) captainNavigationRef.navigate('CaptainMain', { screen: 'ToPickup', params: { request: offer } });
+        }).catch(() => undefined).finally(() => { acceptingOfferId.current = null; });
+        return;
+      }
+      presentRequest(offer);
     }).catch(() => undefined);
-  }), [presentRequest]);
+  }), [dismissRequest, presentRequest]);
   useEffect(() => {
     if (request && online && AppState.currentState === 'active') incomingRideAlertService.start(request.offerId);
     else incomingRideAlertService.stop();
@@ -139,11 +158,15 @@ export function CaptainMainStack({ online, onToggle, onLanguageChange, onTripCom
   useEffect(() => {
     if (!online && request) dismissRequest(request);
   }, [dismissRequest, online, request]);
-  return <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', animationDuration: 260 }}>
-    <Stack.Screen name="CaptainHome">{({ navigation }) => <CaptainDashboardScreen online={online} onToggle={onToggle} onSettings={() => navigation.navigate('Settings')} onBookings={() => navigation.navigate('CaptainBookings')} onEarnings={() => navigation.navigate('CaptainEarnings')} onRequest={presentRequest} request={request} requestCycle={requestCycle} onResumeRide={(ride) => { if (ride.status === 'accepted') navigation.navigate('ToPickup', { request: ride }); else if (ride.status === 'arrived') navigation.navigate('StartRide', { request: ride }); else navigation.navigate('TripInProgress', { request: ride }); }} onReject={() => { const active = request; dismissRequest(active); if (active) void rideDispatchService.respondToOffer(active.offerId, false); }} onAccept={async () => { const active = request; if (!active || acceptingOfferId.current) return; acceptingOfferId.current = active.offerId; incomingRideAlertService.stop(active.offerId); void dismissCaptainOfferNotification({ rideId: active.rideId, offerId: active.offerId }).catch(() => undefined); try { await rideDispatchService.respondToOffer(active.offerId, true); dismissRequest(active); navigation.navigate('ToPickup', { request: active }); } catch (error) { const recoveredRide = await rideDispatchService.getCaptainActiveRide().catch(() => null); if (recoveredRide?.rideId === active.rideId) { dismissRequest(active); navigation.navigate('ToPickup', { request: recoveredRide }); return; } const message = error instanceof Error ? error.message : ''; const unavailable = message.includes('RIDE_ALREADY_ACCEPTED_BY_ANOTHER_CAPTAIN') || message.includes('Ride was already accepted') || message.includes('Offer is no longer available'); const pickupTooClose = message.includes('CAPTAIN_TOO_CLOSE_TO_PICKUP'); if (unavailable) { dismissRequest(active); dialog({ title: 'Ride already accepted', message: 'Ride already accepted by another captain.', buttons: [{ text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'CaptainHome' }] }) }] }); } else if (pickupTooClose) { dismissRequest(active); dialog({ title: t('captain.pickupTooCloseTitle'), message: t('captain.pickupTooCloseMessage') }); } else dialog({ title: t('login.tryAgain') }); } finally { acceptingOfferId.current = null; } }} />}</Stack.Screen>
+  const rejectRequest = () => { const active = request; dismissRequest(active); if (active) void rideDispatchService.respondToOffer(active.offerId, false); };
+  const acceptRequest = async () => { const active = request; if (!active || acceptingOfferId.current) return; acceptingOfferId.current = active.offerId; incomingRideAlertService.stop(active.offerId); void dismissCaptainOfferNotification({ rideId: active.rideId, offerId: active.offerId }).catch(() => undefined); try { await rideDispatchService.respondToOffer(active.offerId, true); dismissRequest(active); if (captainNavigationRef.isReady()) captainNavigationRef.navigate('CaptainMain', { screen: 'ToPickup', params: { request: active } }); } catch (error) { const recoveredRide = await rideDispatchService.getCaptainActiveRide().catch(() => null); if (recoveredRide?.rideId === active.rideId) { dismissRequest(active); if (captainNavigationRef.isReady()) captainNavigationRef.navigate('CaptainMain', { screen: 'ToPickup', params: { request: recoveredRide } }); return; } const message = error instanceof Error ? error.message : ''; const unavailable = message.includes('RIDE_ALREADY_ACCEPTED_BY_ANOTHER_CAPTAIN') || message.includes('Ride was already accepted') || message.includes('Offer is no longer available'); const pickupTooClose = message.includes('CAPTAIN_TOO_CLOSE_TO_PICKUP'); if (unavailable) { dismissRequest(active); dialog({ title: 'Ride already accepted', message: 'Ride already accepted by another captain.' }); } else if (pickupTooClose) dialog({ title: t('captain.pickupTooCloseTitle'), message: t('captain.pickupTooCloseMessage') }); else dialog({ title: t('login.tryAgain') }); } finally { acceptingOfferId.current = null; } };
+  return <View style={{ flex: 1 }}><Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', animationDuration: 260 }}>
+    <Stack.Screen name="CaptainHome">{({ navigation }) => <CaptainDashboardScreen online={online} onToggle={onToggle} onSettings={() => navigation.navigate('Settings')} onBookings={() => navigation.navigate('CaptainBookings')} onEarnings={() => navigation.navigate('CaptainEarnings')} onRequest={presentRequest} request={null} requestCycle={requestCycle} onResumeRide={(ride) => { if (ride.status === 'accepted') navigation.navigate('ToPickup', { request: ride }); else if (ride.status === 'arrived') navigation.navigate('StartRide', { request: ride }); else navigation.navigate('TripInProgress', { request: ride }); }} onReject={rejectRequest} onAccept={acceptRequest} />}</Stack.Screen>
     <Stack.Screen name="CaptainBookings">{({ navigation }) => <CaptainBookingsScreen onHome={() => navigation.navigate('CaptainHome')} onSettings={() => navigation.navigate('Settings')} onEarnings={() => navigation.navigate('CaptainEarnings')} onOpenRideDetails={(rideId) => navigation.navigate('CaptainRideDetails', { rideId })} onResumeRide={(ride) => { if (ride.status === 'accepted') navigation.navigate('ToPickup', { request: ride }); else if (ride.status === 'arrived') navigation.navigate('StartRide', { request: ride }); else navigation.navigate('TripInProgress', { request: ride }); }} />}</Stack.Screen>
     <Stack.Screen name="CaptainRideDetails">{({ navigation, route }) => { const { rideId } = route.params as { rideId: string }; return <CaptainRideDetailsScreen rideId={rideId} onBack={() => navigation.goBack()} onOpenSupportChat={() => navigation.navigate('CaptainPaymentIssueSupport', { rideId })} />; }}</Stack.Screen>
     <Stack.Screen name="CaptainPaymentIssueSupport">{({ navigation, route }) => <CaptainPaymentIssueSupportScreen rideId={(route.params as { rideId: string }).rideId} onBack={() => navigation.goBack()} />}</Stack.Screen>
+    <Stack.Screen name="CaptainIssueHistory">{({ navigation }) => <CaptainIssueHistoryScreen onBack={() => navigation.goBack()} onOpenIssue={(id) => navigation.navigate('CaptainIssueDetails', { issueId: id })} />}</Stack.Screen>
+    <Stack.Screen name="CaptainIssueDetails">{({ navigation, route }) => <CaptainIssueDetailsScreen issueId={(route.params as { issueId: string }).issueId} onBack={() => navigation.goBack()} />}</Stack.Screen>
     <Stack.Screen name="CaptainEarnings">{({ navigation }) => <CaptainEarningsScreen onHome={() => navigation.navigate('CaptainHome')} onBookings={() => navigation.navigate('CaptainBookings')} onSettings={() => navigation.navigate('Settings')} />}</Stack.Screen>
     <Stack.Screen name="ToPickup">{({ navigation, route }) => { const params = route.params as { request: CaptainRideRequest; arrived?: boolean }; const active = params.request; const goHome = () => navigation.reset({ index: 0, routes: [{ name: 'CaptainHome' }] }); return <CaptainRideCancellationFlow rideId={active.rideId} onDone={goHome}><ToPickupScreen request={active} arrived={params.arrived} onBack={() => navigation.goBack()} onOpenChat={() => navigation.navigate('CaptainRideChat', { rideId: active.rideId, customerName: active.customerName })} onPrimaryAction={() => { if (params.arrived) navigation.navigate('StartRide', { request: active }); else void rideDispatchService.transitionRide(active.rideId, 'arrived').then(() => navigation.navigate('StartRide', { request: active })); }} /><CaptainActiveTabBar onHome={goHome} onBookings={() => navigation.navigate('CaptainBookings')} onEarnings={() => navigation.navigate('CaptainEarnings')} onSettings={() => navigation.navigate('Settings')} /></CaptainRideCancellationFlow>; }}</Stack.Screen>
     <Stack.Screen name="StartRide">{({ navigation, route }) => { const active = (route.params as { request: CaptainRideRequest }).request; const goHome = () => navigation.reset({ index: 0, routes: [{ name: 'CaptainHome' }] }); return <CaptainRideCancellationFlow rideId={active.rideId} onDone={goHome}><StartRideScreen onBack={() => navigation.replace('ToPickup', { request: active, arrived: true })} onVerified={async (otp) => { const ride = await rideDispatchService.startRide(active.rideId, otp); navigation.replace('TripInProgress', { request: active }); void activeRideGpsTracking.start(ride.id).catch((error) => { if (error instanceof Error && error.message === 'ACTIVE_RIDE_BACKGROUND_LOCATION_REQUIRED') return; dialog({ title: 'Ride started', message: 'Ride tracking could not start. Please try again from the active ride screen.' }); }); }} /><CaptainActiveTabBar onHome={goHome} onBookings={() => navigation.navigate('CaptainBookings')} onEarnings={() => navigation.navigate('CaptainEarnings')} onSettings={() => navigation.navigate('Settings')} /></CaptainRideCancellationFlow>; }}</Stack.Screen>
@@ -151,8 +174,8 @@ export function CaptainMainStack({ online, onToggle, onLanguageChange, onTripCom
     <Stack.Screen name="CaptainRideChat">{({ navigation, route }) => { const { rideId, customerName } = route.params as { rideId: string; customerName: string }; return <CaptainRideChat rideId={rideId} customerName={customerName} onBack={() => navigation.goBack()} />; }}</Stack.Screen>
     <Stack.Screen name="EndRide" options={{ gestureEnabled: false }}>{({ navigation, route }) => { const params = route.params as { rideId: string }; return <EndRideScreen rideId={params.rideId} onConfirmed={() => navigation.replace('RateCustomer', { rideId: params.rideId })} onIssueDone={() => { onTripComplete(); navigation.reset({ index: 0, routes: [{ name: 'CaptainHome' }] }); }} />; }}</Stack.Screen>
     <Stack.Screen name="RateCustomer" options={{ gestureEnabled: false }}>{({ navigation, route }) => <RateCustomerScreen rideId={(route.params as { rideId: string }).rideId} onDone={() => { onTripComplete(); navigation.reset({ index: 0, routes: [{ name: 'CaptainHome' }] }); }} />}</Stack.Screen>
-    <Stack.Screen name="Settings">{({ navigation }) => <SettingsScreen profile ratingRole="captain" onBack={() => navigation.goBack()} onLanguageChange={(language) => { void onLanguageChange(language).then(() => navigation.goBack()); }} onAbout={() => navigation.navigate('About')} onDocuments={() => navigation.navigate('YourDocuments')} onAccountDeleted={onAccountDeleted} onLoggedOut={onLoggedOut} />}</Stack.Screen>
+    <Stack.Screen name="Settings">{({ navigation }) => <SettingsScreen profile ratingRole="captain" onBack={() => navigation.goBack()} onLanguageChange={(language) => { void onLanguageChange(language).then(() => navigation.goBack()); }} onAbout={() => navigation.navigate('About')} onDocuments={() => navigation.navigate('YourDocuments')} onHelp={() => navigation.navigate('CaptainIssueHistory')} onAccountDeleted={onAccountDeleted} onLoggedOut={onLoggedOut} />}</Stack.Screen>
     <Stack.Screen name="YourDocuments">{({ navigation }) => <YourDocumentsScreen onBack={() => navigation.goBack()} />}</Stack.Screen>
     <Stack.Screen name="About">{({ navigation }) => <AboutScreen onBack={() => navigation.goBack()} />}</Stack.Screen>
-  </Stack.Navigator>;
+  </Stack.Navigator>{request && <IncomingRideRequestSheet request={request} onAccept={acceptRequest} onReject={rejectRequest} />}</View>;
 }

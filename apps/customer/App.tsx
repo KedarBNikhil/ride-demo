@@ -1,4 +1,5 @@
 import { useFonts, NotoSansTelugu_400Regular, NotoSansTelugu_700Bold, NotoSansTelugu_800ExtraBold } from '@expo-google-fonts/noto-sans-telugu';
+import { PlusJakartaSans_400Regular, PlusJakartaSans_500Medium, PlusJakartaSans_600SemiBold, PlusJakartaSans_700Bold, PlusJakartaSans_800ExtraBold } from '@expo-google-fonts/plus-jakarta-sans';
 import { lazy, Suspense, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -17,6 +18,11 @@ configureCrashReporting();
 export default function App() {
   const [productionConfigStatus, setProductionConfigStatus] = useState(getProductionConfigStatus);
   const [fontsLoaded] = useFonts({
+    PlusJakartaSans: PlusJakartaSans_400Regular,
+    'PlusJakartaSans-Medium': PlusJakartaSans_500Medium,
+    'PlusJakartaSans-SemiBold': PlusJakartaSans_600SemiBold,
+    'PlusJakartaSans-Bold': PlusJakartaSans_700Bold,
+    'PlusJakartaSans-ExtraBold': PlusJakartaSans_800ExtraBold,
     NotoSansTelugu: NotoSansTelugu_400Regular,
     'NotoSansTelugu-Bold': NotoSansTelugu_700Bold,
     'NotoSansTelugu-ExtraBold': NotoSansTelugu_800ExtraBold,

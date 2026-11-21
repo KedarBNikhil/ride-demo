@@ -14,6 +14,8 @@ import { captainOnboardingService } from '../services/captainOnboarding';
 import { configurePushNotifications, registerPushNotifications } from '../services/pushNotifications';
 import { rideDispatchService } from '../services/rideDispatch';
 import { supabase } from '../lib/supabase';
+import { CaptainOfferOverlayPermissionGate } from '../components/CaptainOfferOverlayPermissionGate';
+import { captainNavigationRef } from './captainNavigationRef';
 
 const Stack = createNativeStackNavigator();
 
@@ -67,10 +69,10 @@ export function CaptainAppNavigator() {
   }, [accountStatus]);
   const chooseLanguage = async (next: AppLanguage) => { setLanguage(next); await i18n.changeLanguage(next); await AsyncStorage.setItem('sawaari.captain.language', next); setHasLanguage(true); };
   if (hasLanguage === null || !accountReady) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
-  return <I18nextProvider i18n={i18n}><DialogProvider><GestureHandlerRootView style={{ flex: 1 }}><NavigationContainer>
+  return <I18nextProvider i18n={i18n}><DialogProvider><GestureHandlerRootView style={{ flex: 1 }}><NavigationContainer ref={captainNavigationRef}>
     <Stack.Navigator key={accountStatus} screenOptions={{ headerShown: false }}>
       {accountStatus === 'approved'
-        ? <Stack.Screen name="CaptainMain">{() => <CaptainMainStack online={captainOnline} onToggle={() => setCaptainOnline((online) => !online)} onLanguageChange={chooseLanguage} onTripComplete={() => setCaptainOnline(true)} onAccountDeleted={() => { setCaptainOnline(false); setAccountStatus('unauthenticated'); setOnboardingRoute('signup'); }} onLoggedOut={() => { setCaptainOnline(false); setAccountStatus('unauthenticated'); setOnboardingRoute('signup'); }} />}</Stack.Screen>
+        ? <Stack.Screen name="CaptainMain">{() => <CaptainOfferOverlayPermissionGate><CaptainMainStack online={captainOnline} onToggle={() => setCaptainOnline((online) => !online)} onLanguageChange={chooseLanguage} onTripComplete={() => setCaptainOnline(true)} onAccountDeleted={() => { setCaptainOnline(false); setAccountStatus('unauthenticated'); setOnboardingRoute('signup'); }} onLoggedOut={() => { setCaptainOnline(false); setAccountStatus('unauthenticated'); setOnboardingRoute('signup'); }} /></CaptainOfferOverlayPermissionGate>}</Stack.Screen>
         : <Stack.Screen name="CaptainOnboarding">{() => <CaptainOnboardingStack language={language} onLanguageChange={(next) => { void chooseLanguage(next); }} profile={profile} onProfileChange={setProfile} onExit={() => undefined} onboardingRoute={accountStatus === 'unauthenticated' ? 'signup' : onboardingRoute} onOtpVerified={async () => { setAccountReady(false); const account = await captainOnboardingService.resolveAuthenticatedAccount(); setProfile(account.profile); setAccountStatus(account.status); setOnboardingRoute(account.onboardingRoute); setAccountReady(true); }} onSubmitted={async () => { setOnboardingRoute('review'); setAccountStatus('submitted'); }} onApproved={async () => { const account = await captainOnboardingService.resolveAuthenticatedAccount(); setProfile(account.profile); setAccountStatus(account.status); setOnboardingRoute(account.onboardingRoute); }} />}</Stack.Screen>}
     </Stack.Navigator>
   </NavigationContainer></GestureHandlerRootView></DialogProvider></I18nextProvider>;

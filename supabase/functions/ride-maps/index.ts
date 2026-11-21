@@ -66,7 +66,13 @@ async function googleJson(endpoint: string, init: RequestInit) {
   return body as Record<string, unknown>;
 }
 
-async function computeRoute(origin: Coordinate, destination: Coordinate, routeKind: 'initial_trip' | 'captain_to_pickup'): Promise<{ route: Route; callId: string }> {
+async function computeRoute(origin: Coordinate, destination: Coordinate, routeKind: 'initial_trip' | 'captain_to_pickup' | 'manual_refresh'): Promise<{ route: Route; callId: string }> {
+  // Google Routes may omit `routes` altogether when both coordinates represent
+  // the same physical location. That is a valid pickup state, not a failed
+  // route. Handle it before reserving a billable route request.
+  if (routeKind === 'captain_to_pickup' && straightLineDistanceMeters(origin, destination) <= 15) {
+    return { route: { distanceMeters: 0, durationSeconds: 0, encodedPolyline: 'AT_PICKUP' }, callId: '' };
+  }
   const callId = await reserveGoogleRoutesCall(null, routeKind);
   try {
     const body = await googleJson('https://routes.googleapis.com/directions/v2:computeRoutes', {
@@ -87,6 +93,43 @@ async function computeRoute(origin: Coordinate, destination: Coordinate, routeKi
     return { route, callId };
   } catch (error) {
     await finishGoogleRoutesCall(callId, false, Number((error as { httpStatus?: number }).httpStatus) || undefined, (error as Error).message).catch(() => undefined);
+    throw error;
+  }
+}
+
+type SuggestionRouteDestination = { id: string; placeId?: string; coordinate?: Coordinate };
+
+async function computeSuggestionRouteDistances(origin: Coordinate, destinations: SuggestionRouteDestination[]) {
+  // A matrix is one network request, but its billable unit is a route element.
+  // Reserve one slot per suggested destination so the existing daily guard
+  // remains a conservative financial boundary.
+  const callIds: string[] = [];
+  try {
+    for (const _destination of destinations) callIds.push(await reserveGoogleRoutesCall(null, 'manual_refresh'));
+    const payload = await googleJson('https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix', {
+      method: 'POST', headers: { 'X-Goog-FieldMask': 'destinationIndex,status,condition,distanceMeters' },
+      body: JSON.stringify({
+        origins: [{ waypoint: { location: { latLng: origin } } }],
+        destinations: destinations.map((destination) => ({ waypoint: destination.placeId ? { placeId: destination.placeId } : { location: { latLng: destination.coordinate } } })),
+        travelMode: 'DRIVE', routingPreference: 'TRAFFIC_AWARE', languageCode: 'en-IN', units: 'METRIC',
+      }),
+    });
+    const elements = Array.isArray(payload) ? payload : [];
+    const byIndex = new Map<number, number>();
+    for (const element of elements) {
+      if (!element || typeof element !== 'object') continue;
+      const item = element as Record<string, unknown>;
+      const index = Number(item.destinationIndex);
+      const distanceMeters = Number(item.distanceMeters);
+      if (Number.isInteger(index) && index >= 0 && Number.isFinite(distanceMeters) && distanceMeters > 0) byIndex.set(index, distanceMeters);
+    }
+    await Promise.all(callIds.map((callId) => finishGoogleRoutesCall(callId, true, 200)));
+    return destinations.flatMap((destination, index) => {
+      const distanceMeters = byIndex.get(index);
+      return distanceMeters ? [{ id: destination.id, distanceMeters }] : [];
+    });
+  } catch (error) {
+    await Promise.all(callIds.map((callId) => finishGoogleRoutesCall(callId, false, Number((error as { httpStatus?: number }).httpStatus) || undefined, (error as Error).message).catch(() => undefined)));
     throw error;
   }
 }
@@ -120,7 +163,7 @@ Deno.serve(async (request) => {
   if (typeof action !== 'string') return fail('Action is required');
 
   try {
-    await requirePilotIdentity(userData.user.id, action === 'accept_offer' ? 'captain' : 'customer');
+    await requirePilotIdentity(userData.user.id, ['accept_offer', 'check_near_completion'].includes(action) ? 'captain' : 'customer');
     if (action === 'autocomplete') {
       const input = String(body?.input ?? '').trim();
       if (input.length < 3 || input.length > 160) return response([]);
@@ -137,6 +180,23 @@ Deno.serve(async (request) => {
         const text = (prediction?.text as Record<string, unknown> | undefined)?.text;
         return typeof placeId === 'string' && typeof text === 'string' ? [{ placeId, text }] : [];
       }));
+    }
+
+    if (action === 'suggestion_route_distances') {
+      const origin = coordinate(body?.origin);
+      const rawCandidates = Array.isArray(body?.candidates) ? body.candidates.slice(0, 5) : [];
+      const candidates = rawCandidates.flatMap((candidate): SuggestionRouteDestination[] => {
+        if (!candidate || typeof candidate !== 'object') return [];
+        const item = candidate as Record<string, unknown>;
+        const id = String(item.id ?? '');
+        const placeId = String(item.placeId ?? '');
+        const destination = coordinate(item.coordinate);
+        if (!/^[A-Za-z0-9:_-]{1,160}$/.test(id)) return [];
+        if (/^[-_A-Za-z0-9]+$/.test(placeId)) return [{ id, placeId }];
+        return destination ? [{ id, coordinate: destination }] : [];
+      });
+      if (!origin || candidates.length === 0) return fail('Valid pickup and destination suggestions are required');
+      return response(await computeSuggestionRouteDistances(origin, candidates));
     }
 
     if (action === 'place_details') {
@@ -203,6 +263,30 @@ Deno.serve(async (request) => {
       return response({ id: quote.id, ...route });
     }
 
+    if (action === 'check_near_completion') {
+      const { data: activeRide, error: activeRideError } = await admin
+        .from('rides')
+        .select('id, captain_latitude, captain_longitude, drop_latitude, drop_longitude')
+        .eq('captain_id', userData.user.id)
+        .eq('status', 'in_progress')
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (activeRideError) throw activeRideError;
+      const origin = coordinate({ latitude: activeRide?.captain_latitude, longitude: activeRide?.captain_longitude });
+      const destination = coordinate({ latitude: activeRide?.drop_latitude, longitude: activeRide?.drop_longitude });
+      if (!activeRide || !origin || !destination) return response({ offerId: null, remainingDistanceMeters: null });
+      const { route, callId } = await computeRoute(origin, destination, 'manual_refresh');
+      await admin.from('google_routes_call_log').update({ ride_id: activeRide.id }).eq('id', callId);
+      if (route.distanceMeters > 500) return response({ offerId: null, remainingDistanceMeters: route.distanceMeters });
+      const { data: offerId, error: offerError } = await admin.rpc('offer_near_completion_ride', {
+        p_captain_id: userData.user.id,
+        p_remaining_distance_meters: route.distanceMeters,
+      });
+      if (offerError) throw offerError;
+      return response({ offerId: offerId ?? null, remainingDistanceMeters: route.distanceMeters });
+    }
+
     if (action === 'accept_offer') {
       const offerId = String(body?.offerId ?? '');
       if (!/^[0-9a-f-]{36}$/i.test(offerId)) return fail('Invalid offer');
@@ -227,9 +311,17 @@ Deno.serve(async (request) => {
         }
       }
       const pickup = coordinate({ latitude: offer?.rides?.pickup_latitude, longitude: offer?.rides?.pickup_longitude });
+      const { data: activeRide, error: activeRideError } = await admin
+        .from('rides')
+        .select('captain_latitude, captain_longitude')
+        .eq('captain_id', userData.user.id)
+        .eq('status', 'in_progress')
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
       const { data: availability, error: availabilityError } = await admin.from('captain_availability').select('latitude, longitude').eq('captain_id', userData.user.id).single();
-      const captain = coordinate({ latitude: availability?.latitude, longitude: availability?.longitude });
-      if (offerError || !offer || !pickup || availabilityError || !captain) throw new Error('Offer or captain location is no longer available');
+      const captain = coordinate({ latitude: activeRide?.captain_latitude ?? availability?.latitude, longitude: activeRide?.captain_longitude ?? availability?.longitude });
+      if (offerError || !offer || !pickup || activeRideError || availabilityError || !captain) throw new Error('Offer or captain location is no longer available');
 
       // Route computation is deliberately before the atomic claim. A Maps
       // failure therefore leaves the ride searching rather than accepted with

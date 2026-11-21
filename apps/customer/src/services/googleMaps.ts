@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import type { Coordinate } from '../screens/CustomerScreens';
 
 export type PlaceSuggestion = { placeId: string; text: string };
+export type RouteDistanceCandidate = { id: string; placeId?: string; coordinate?: Coordinate };
 
 type MapsResponse<T> = { data?: T; error?: string };
 
@@ -28,6 +29,10 @@ async function invoke<T>(body: Record<string, unknown>): Promise<T> {
 export const googleMapsService = {
   autocomplete(input: string, sessionToken: string, languageCode?: string) {
     return invoke<PlaceSuggestion[]>({ action: 'autocomplete', input, sessionToken, languageCode });
+  },
+
+  suggestionRouteDistances(origin: Coordinate, candidates: RouteDistanceCandidate[]) {
+    return invoke<Array<{ id: string; distanceMeters: number }>>({ action: 'suggestion_route_distances', origin, candidates });
   },
 
   placeDetails(placeId: string, sessionToken: string) {

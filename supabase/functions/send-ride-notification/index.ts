@@ -21,14 +21,18 @@ type RideNotification = {
 
 const incomingRideChannel = 'incoming-ride-requests-v2';
 const incomingRideSound = 'incoming_ride_alert.mp3';
-const incomingRideAlertIntervalMs = 2_000;
-const incomingRideAlertMaxDeliveries = 6;
 type FirebaseServiceAccount = { client_email: string; private_key: string; project_id: string };
 let firebaseToken: { value: string; expiresAt: number } | null = null;
 
 function notificationsFor(payload: WebhookPayload): RideNotification[] {
   const record = payload.record ?? {};
   const oldRecord = payload.old_record ?? {};
+  if (payload.table === 'customer_payment_issue_messages' && payload.type === 'INSERT' && record.sender_type === 'support' && typeof record.issue_id === 'string') {
+    return [{ userId: '', variant: 'customer', title: 'New support message', body: 'A Sawaari support representative replied to your ride issue.', data: { issueId: record.issue_id, type: 'customer_support_message' } }];
+  }
+  if (payload.table === 'ride_messages' && payload.type === 'INSERT' && typeof record.ride_id === 'string' && typeof record.sender_id === 'string') {
+    return [{ userId: '', variant: 'customer', title: 'New message', body: 'You have a new message about your ride.', data: { rideId: record.ride_id, senderId: record.sender_id, senderRole: record.sender_role, type: 'ride_message' } }];
+  }
   if (payload.table === 'ride_offers' && payload.type === 'INSERT' && record.status === 'offered' && typeof record.captain_id === 'string') {
     return [{ userId: record.captain_id, variant: 'captain', title: 'New ride request', body: 'A nearby ride is available.', data: { rideId: record.ride_id, offerId: record.id, expiresAt: record.expires_at, type: 'ride_offer' }, channelId: incomingRideChannel, collapseId: `ride-offer-${record.id}` }];
   }
@@ -119,6 +123,27 @@ async function firebaseAccessToken() {
   return firebaseToken.value;
 }
 
+/** The overlay is rendered natively while React is suspended, so pass only the
+ * offer information a Captain is already authorised to view. */
+async function withCaptainOfferPresentation(notification: RideNotification) {
+  if (notification.data.type !== 'ride_offer' || typeof notification.data.rideId !== 'string') return notification;
+  const { data, error } = await supabase
+    .from('rides')
+    .select('pickup_address, drop_address, estimated_fare')
+    .eq('id', notification.data.rideId)
+    .maybeSingle();
+  if (error || !data) return notification;
+  return {
+    ...notification,
+    data: {
+      ...notification.data,
+      pickup: String(data.pickup_address ?? '').slice(0, 120),
+      drop: String(data.drop_address ?? '').slice(0, 120),
+      fare: `₹${Number(data.estimated_fare ?? 0).toFixed(0)}`,
+    },
+  };
+}
+
 async function sendDirectCaptainOfferSignal(notification: RideNotification, tokens: string[]) {
   const accessToken = await firebaseAccessToken();
   if (!accessToken || !tokens.length) return false;
@@ -130,29 +155,12 @@ async function sendDirectCaptainOfferSignal(notification: RideNotification, toke
   const ttlMs = Math.max(0, new Date(expiresAt).getTime() - Date.now());
   let sent = false;
   for (const token of tokens) {
-    const response = await fetch(`https://fcm.googleapis.com/v1/projects/${raw.project_id}/messages:send`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: { token, data: isOffer ? { type: 'ride_offer', rideId: String(notification.data.rideId), offerId, expiresAt } : { type: 'ride_offer_closed', offerId }, android: { priority: 'high', ttl: `${isOffer ? ttlMs : 10_000}ms` } } }) });
+    const response = await fetch(`https://fcm.googleapis.com/v1/projects/${raw.project_id}/messages:send`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: { token, data: isOffer ? { type: 'ride_offer', rideId: String(notification.data.rideId), offerId, expiresAt, ...(typeof notification.data.pickup === 'string' ? { pickup: notification.data.pickup } : {}), ...(typeof notification.data.drop === 'string' ? { drop: notification.data.drop } : {}), ...(typeof notification.data.fare === 'string' ? { fare: notification.data.fare } : {}) } : { type: 'ride_offer_closed', offerId }, android: { priority: 'high', ttl: `${isOffer ? ttlMs : 10_000}ms` } } }) });
     if (response.ok) { sent = true; continue; }
     const error = await response.text();
     if (error.includes('UNREGISTERED') || error.includes('INVALID_ARGUMENT')) await supabase.from('captain_fcm_device_tokens').delete().eq('fcm_token', token);
   }
   return sent;
-}
-
-/**
- * Remote pushes are handled by Android even when the Captain process is not
- * running. Re-delivering the same collapsed notification gives an incoming
- * offer a brief, bounded alert loop without a fragile background JS timer.
- */
-async function sendIncomingRideAlertLoop(notification: RideNotification, tokens: string[]) {
-  const offerId = notification.data.offerId;
-  if (typeof offerId !== 'string') return;
-  for (let delivery = 0; delivery < incomingRideAlertMaxDeliveries; delivery += 1) {
-    if (!(await isStillActionableOffer(offerId))) return;
-    await sendToTokens(notification, tokens);
-    if (delivery + 1 < incomingRideAlertMaxDeliveries) {
-      await new Promise<void>((resolve) => setTimeout(resolve, incomingRideAlertIntervalMs));
-    }
-  }
 }
 
 Deno.serve(async (request) => {
@@ -164,6 +172,38 @@ Deno.serve(async (request) => {
   const notifications = notificationsFor(payload);
   let delivered = 0;
   for (const notification of notifications) {
+    if (notification.data.type === 'customer_support_message' && typeof notification.data.issueId === 'string') {
+      const { data: issue, error: issueError } = await supabase.from('customer_payment_issues').select('customer_id, ride_id').eq('id', notification.data.issueId).maybeSingle();
+      if (issueError) return Response.json({ error: issueError.message }, { status: 500, headers: corsHeaders });
+      if (!issue) continue;
+      notification.userId = issue.customer_id;
+      notification.data = { ...notification.data, rideId: issue.ride_id };
+    }
+    if (notification.data.type === 'ride_message' && typeof notification.data.rideId === 'string' && typeof notification.data.senderId === 'string') {
+      const { data: ride, error: rideError } = await supabase
+        .from('rides')
+        .select('customer_id, captain_id')
+        .eq('id', notification.data.rideId)
+        .maybeSingle();
+      if (rideError) return Response.json({ error: rideError.message }, { status: 500, headers: corsHeaders });
+      if (!ride) continue;
+      const senderRole = notification.data.senderRole;
+      if (senderRole === 'customer' && typeof ride.captain_id === 'string') {
+        notification.userId = ride.captain_id;
+        notification.variant = 'captain';
+      } else if (senderRole === 'captain' && typeof ride.customer_id === 'string') {
+        notification.userId = ride.customer_id;
+        notification.variant = 'customer';
+      } else if (ride.customer_id === notification.data.senderId && typeof ride.captain_id === 'string') {
+        notification.userId = ride.captain_id;
+        notification.variant = 'captain';
+      } else if (ride.captain_id === notification.data.senderId && typeof ride.customer_id === 'string') {
+        notification.userId = ride.customer_id;
+        notification.variant = 'customer';
+      } else {
+        continue;
+      }
+    }
     const { data: tokens, error } = await supabase.from('push_device_tokens')
       .select('expo_push_token').eq('user_id', notification.userId).eq('app_variant', notification.variant);
     if (error) return Response.json({ error: error.message }, { status: 500, headers: corsHeaders });
@@ -171,10 +211,14 @@ Deno.serve(async (request) => {
     if (notification.channelId === incomingRideChannel) {
       const { data: fcmTokens, error: fcmError } = await supabase.from('captain_fcm_device_tokens').select('fcm_token').eq('user_id', notification.userId);
       if (fcmError) return Response.json({ error: fcmError.message }, { status: 500, headers: corsHeaders });
-      const directDelivered = await sendDirectCaptainOfferSignal(notification, fcmTokens?.map(({ fcm_token }) => fcm_token) ?? []);
-      // Expo's bounded delivery loop remains the compatibility fallback for
-      // legacy builds, unregistered devices, or unavailable FCM credentials.
-      if (!directDelivered && notification.data.type === 'ride_offer' && values.length) await sendIncomingRideAlertLoop(notification, values);
+      const directNotification = await withCaptainOfferPresentation(notification);
+      const directDelivered = await sendDirectCaptainOfferSignal(directNotification, fcmTokens?.map(({ fcm_token }) => fcm_token) ?? []);
+      // Legacy builds and devices without a direct-FCM registration receive
+      // exactly one actionable notification per offer. A remote delivery must
+      // never become a server-side alert loop.
+      if (!directDelivered && notification.data.type === 'ride_offer' && values.length && await isStillActionableOffer(String(notification.data.offerId))) {
+        await sendToTokens(notification, values);
+      }
     } else if (values.length) {
       await sendToTokens(notification, values);
     }

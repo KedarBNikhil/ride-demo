@@ -25,6 +25,7 @@ function LangChip({
   value,
   onPress,
   active,
+  grouped = false,
 }: {
   symbol: string;
   name: string;
@@ -32,6 +33,7 @@ function LangChip({
   value: AppLanguage;
   onPress: (l: AppLanguage) => void;
   active?: boolean;
+  grouped?: boolean;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   return (
@@ -48,6 +50,7 @@ function LangChip({
       <Animated.View
         style={[
           styles.chip,
+          grouped && styles.groupedChip,
           active && styles.chipActive,
           { transform: [{ scale }] },
         ]}
@@ -73,6 +76,7 @@ export function SettingsScreen({
   onSafety,
   onAbout,
   onAccountDeleted,
+  languageOnly = false,
 }: {
   onLanguageChange: (language: AppLanguage) => void;
   onBack: () => void;
@@ -81,6 +85,7 @@ export function SettingsScreen({
   onSafety?: () => void;
   onAbout?: () => void;
   onAccountDeleted?: () => void;
+  languageOnly?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const dialog = useDialog();
@@ -124,6 +129,14 @@ export function SettingsScreen({
       ],
     });
   };
+  if (languageOnly) {
+    return <ScreenShell back={onBack} title={t('profile.language')}>
+      <View style={styles.languageGroup}>
+        <LangChip symbol="త" name="తెలుగు" sub="" value="te" onPress={onLanguageChange} active={i18n.language === 'te'} grouped />
+        <LangChip symbol="E" name="English" sub="" value="en" onPress={onLanguageChange} active={i18n.language === 'en'} grouped />
+      </View>
+    </ScreenShell>;
+  }
   if (!profile) {
     return <ScreenShell back={onBack} title={t('screens.settings')}>
       <View style={styles.settingsGroup}>
@@ -259,6 +272,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   chips: { gap: layout.compactGap },
+  languageGroup: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.xl, borderWidth: 1, overflow: 'hidden' },
   chip: {
     alignItems: 'center',
     backgroundColor: colors.surface,
@@ -274,6 +288,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,
     borderColor: colors.primary,
   },
+  groupedChip: { borderBottomColor: colors.divider, borderBottomWidth: 1, borderRadius: 0, borderWidth: 0, minHeight: 68 },
   chipPressed: { opacity: 0.76 },
   languageMark: {
     alignItems: 'center',

@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from './PrimaryButton';
 import { ScreenShell } from './ScreenShell';
 import { NumericCodeInput } from './NumericCodeInput';
-import { colors, fontFamily, fontSize, radii, shadows } from '../theme';
+import { colors, fontFamily, fontFamilyExtraBold, fontSize, radii, shadows } from '../theme';
 import { toIndianE164 } from '../services/authMode';
 
 // Supabase Auth's configured SMS OTP lifetime for this Customer flow.
@@ -205,11 +205,11 @@ const styles = StyleSheet.create({
   customerLoginHeaderLeft: { alignItems: 'center', flexDirection: 'row', gap: 4, marginLeft: -12 },
   customerLoginBack: { alignItems: 'center', height: 44, justifyContent: 'center', width: 32 },
   customerLoginBackIcon: { color: colors.textPrimary, fontFamily: 'System', fontSize: 42, fontWeight: '300', lineHeight: 42, marginTop: -4 },
-  customerLoginBrand: { color: colors.primary, fontFamily: 'NotoSansTelugu-ExtraBold', fontSize: fontSize['3xl'], letterSpacing: -1.4 },
+  customerLoginBrand: { color: colors.primary, fontFamily: fontFamilyExtraBold, fontSize: fontSize['3xl'], letterSpacing: -1.4 },
   customerLoginLanguageButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 28, height: 56, justifyContent: 'center', width: 56 },
   customerLoginLanguageLabel: { color: colors.textOnPrimary, fontFamily, fontSize: fontSize.md, fontWeight: '900' },
   customerLoginContent: { paddingHorizontal: 28, paddingTop: 34 },
-  customerLoginTitle: { color: colors.textPrimary, fontFamily: 'NotoSansTelugu-ExtraBold', fontSize: 32, letterSpacing: -0.9 },
+  customerLoginTitle: { color: colors.textPrimary, fontFamily: fontFamilyExtraBold, fontSize: 32, letterSpacing: -0.9 },
   customerLoginSubtitle: { color: colors.textSecondary, fontFamily, fontSize: fontSize.lg, lineHeight: 28, marginTop: 12, maxWidth: 340 },
   customerLoginLabel: { color: colors.textPrimary, fontFamily, fontSize: fontSize.sm, fontWeight: '800', marginTop: 48 },
   customerLoginRequired: { color: colors.error },
