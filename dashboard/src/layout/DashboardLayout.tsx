@@ -5,12 +5,14 @@ import { initialsOf } from '@/lib/format';
 const navItems = [
   { to: '/', label: 'Overview', end: true },
   { to: '/customers', label: 'Customers' },
-  { to: '/captains', label: 'Captains' },
   { to: '/payments', label: 'Payments & Issues' },
-  { to: '/captain-settlements', label: 'Captain Settlements' },
-  { to: '/captain-document-changes', label: 'Document Changes' },
   { to: '/fraud', label: 'Fraud Signals' },
   { to: '/system-health', label: 'System Health' },
+];
+
+const captainNavItems = [
+  { to: '/captain-settlements', label: 'Settlements & daily payouts' },
+  { to: '/captain-document-changes', label: 'Document changes' },
 ];
 
 export function DashboardLayout() {
@@ -25,17 +27,25 @@ export function DashboardLayout() {
           <div className="text-xs text-slate-400">Operator Dashboard</div>
         </div>
         <nav className="mt-2 flex-1 space-y-1 px-3">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                `block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 hover:text-white'
-                }`
-              }
-            >
+          {navItems.slice(0, 2).map((item) => (
+            <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => `block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
+              {item.label}
+            </NavLink>
+          ))}
+          <div className="space-y-1">
+            <NavLink to="/captains" end className={({ isActive }) => `block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
+              Captains
+            </NavLink>
+            <div className="ml-3 space-y-1 border-l border-slate-700 pl-2">
+              {captainNavItems.map((item) => (
+                <NavLink key={item.to} to={item.to} className={({ isActive }) => `block rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+          {navItems.slice(2).map((item) => (
+            <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => `block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
               {item.label}
             </NavLink>
           ))}

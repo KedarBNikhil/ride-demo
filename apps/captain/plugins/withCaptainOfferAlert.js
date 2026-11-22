@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { AndroidConfig, withAndroidManifest, withDangerousMod } = require('@expo/config-plugins');
+const { AndroidConfig, withAndroidManifest, withAppBuildGradle, withDangerousMod } = require('@expo/config-plugins');
 
 const serviceSource = (packageName) => `package ${packageName}
 
@@ -68,6 +68,87 @@ class CaptainOfferActionReceiver : BroadcastReceiver() {
   }
 }`;
 
+const messagingReceiverSource = (packageName) => `package ${packageName}
+
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import com.google.firebase.messaging.RemoteMessage
+import io.invertase.firebase.messaging.ReactNativeFirebaseMessagingReceiver
+import java.text.SimpleDateFormat
+import java.util.Locale
+
+// Receives a direct FCM ride offer before React Native's headless task is
+// started. Starting the alert service here avoids relying on JS/AppState while
+// Captain is behind another app or its JS runtime is suspended.
+class CaptainRideMessagingReceiver : ReactNativeFirebaseMessagingReceiver() {
+  override fun onReceive(context: Context, intent: Intent) {
+    val message = intent.extras?.let(::RemoteMessage)
+    val data = message?.data
+    val type = data?.get("type")
+
+    if (type == "ride_offer_closed") {
+      context.stopService(Intent(context, CaptainOfferAlertService::class.java)
+        .setAction(CaptainOfferAlertService.STOP)
+        .putExtra(CaptainOfferAlertService.OFFER_ID, data?.get("offerId")))
+      if (!CaptainAppVisibility.isForeground) return
+    }
+
+    if (type == "ride_offer" && !CaptainAppVisibility.isForeground) {
+      val offerData = data ?: run { super.onReceive(context, intent); return }
+      val rideId = offerData["rideId"]
+      val offerId = offerData["offerId"]
+      val expiresAt = offerData["expiresAt"]?.let(::parseEpochMillis)
+      if (!rideId.isNullOrBlank() && !offerId.isNullOrBlank() && expiresAt != null && expiresAt > System.currentTimeMillis()) {
+        val alert = Intent(context, CaptainOfferAlertService::class.java)
+          .setAction(CaptainOfferAlertService.START)
+          .putExtra(CaptainOfferAlertService.RIDE_ID, rideId)
+          .putExtra(CaptainOfferAlertService.OFFER_ID, offerId)
+          .putExtra(CaptainOfferAlertService.EXPIRES_AT, expiresAt)
+          .putExtra(CaptainOfferAlertService.PICKUP, offerData["pickup"])
+          .putExtra(CaptainOfferAlertService.DROP, offerData["drop"])
+          .putExtra(CaptainOfferAlertService.FARE, offerData["fare"])
+        try {
+          if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(alert) else context.startService(alert)
+        } catch (error: Exception) {
+          android.util.Log.e("CaptainRideFCM", "Unable to start the ride alert service", error)
+        }
+        // The foreground service is now responsible for this background offer.
+        // Do not enqueue the same offer through headless JS a second time.
+        return
+      }
+    }
+
+    super.onReceive(context, intent)
+  }
+
+  private fun parseEpochMillis(value: String): Long? = runCatching {
+    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSX", Locale.US).parse(value)?.time
+      ?: SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX", Locale.US).parse(value)?.time
+  }.getOrNull()
+}`;
+
+const appVisibilitySource = (packageName) => `package ${packageName}
+
+import android.app.Activity
+import android.app.Application
+import android.os.Bundle
+
+// Unlike React Native Firebase's process-level foreground check, this tracks
+// whether a Captain activity is actually resumed. A broadcast receiver can
+// otherwise mistake a paused Captain activity for a foreground app.
+object CaptainAppVisibility : Application.ActivityLifecycleCallbacks {
+  @Volatile private var resumedActivities = 0
+  val isForeground: Boolean get() = resumedActivities > 0
+  override fun onActivityResumed(activity: Activity) { resumedActivities += 1 }
+  override fun onActivityPaused(activity: Activity) { resumedActivities = (resumedActivities - 1).coerceAtLeast(0) }
+  override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
+  override fun onActivityStarted(activity: Activity) = Unit
+  override fun onActivityStopped(activity: Activity) = Unit
+  override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+  override fun onActivityDestroyed(activity: Activity) = Unit
+}`;
+
 const moduleSource = (packageName) => `package ${packageName}
 
 import android.content.Intent
@@ -108,7 +189,20 @@ module.exports = function withCaptainOfferAlert(config) {
     const app = manifest.application?.[0]; app.service = app.service || [];
     if (!app.service.some((item) => item.$['android:name'] === '.CaptainOfferAlertService')) app.service.push({ $: { 'android:name': '.CaptainOfferAlertService', 'android:exported': 'false', 'android:foregroundServiceType': 'mediaPlayback' } });
     app.receiver = app.receiver || [];
+    // The RN Firebase receiver sends background data messages through headless
+    // JS. Replace it with a subclass that starts our native ride alert first.
+    if (!app.receiver.some((item) => item.$['android:name'] === 'io.invertase.firebase.messaging.ReactNativeFirebaseMessagingReceiver' && item.$['tools:node'] === 'remove')) app.receiver.push({ $: { 'android:name': 'io.invertase.firebase.messaging.ReactNativeFirebaseMessagingReceiver', 'tools:node': 'remove' } });
+    if (!app.receiver.some((item) => item.$['android:name'] === '.CaptainRideMessagingReceiver')) app.receiver.push({ $: { 'android:name': '.CaptainRideMessagingReceiver', 'android:exported': 'true', 'android:permission': 'com.google.android.c2dm.permission.SEND' }, 'intent-filter': [{ action: [{ $: { 'android:name': 'com.google.android.c2dm.intent.RECEIVE' } }] }] });
     if (!app.receiver.some((item) => item.$['android:name'] === '.CaptainOfferActionReceiver')) app.receiver.push({ $: { 'android:name': '.CaptainOfferActionReceiver', 'android:exported': 'false' } });
+    return mod;
+  });
+  // The React Native Firebase module keeps Firebase Messaging as an internal
+  // dependency. Our receiver imports RemoteMessage directly, so expose the
+  // same BoM-managed dependency to the app module as well.
+  config = withAppBuildGradle(config, (mod) => {
+    if (!mod.modResults.contents.includes('com.google.firebase:firebase-messaging')) {
+      mod.modResults.contents = mod.modResults.contents.replace('dependencies {', 'dependencies {\n    implementation(platform("com.google.firebase:firebase-bom:34.18.0"))\n    implementation("com.google.firebase:firebase-messaging")');
+    }
     return mod;
   });
   return withDangerousMod(config, ['android', async (mod) => {
@@ -116,10 +210,13 @@ module.exports = function withCaptainOfferAlert(config) {
     fs.mkdirSync(sourceDir, { recursive: true });
     fs.writeFileSync(path.join(sourceDir, 'CaptainOfferAlertService.kt'), serviceSource(packageName));
     fs.writeFileSync(path.join(sourceDir, 'CaptainOfferActionReceiver.kt'), receiverSource(packageName));
+    fs.writeFileSync(path.join(sourceDir, 'CaptainRideMessagingReceiver.kt'), messagingReceiverSource(packageName));
+    fs.writeFileSync(path.join(sourceDir, 'CaptainAppVisibility.kt'), appVisibilitySource(packageName));
     fs.writeFileSync(path.join(sourceDir, 'CaptainOfferAlertModule.kt'), moduleSource(packageName));
     fs.writeFileSync(path.join(sourceDir, 'CaptainOfferAlertPackage.kt'), packageSource(packageName));
     const applicationPath = path.join(sourceDir, 'MainApplication.kt'); let application = fs.readFileSync(applicationPath, 'utf8');
     if (!application.includes('CaptainOfferAlertPackage()')) application = application.replace('// Packages that cannot be autolinked yet can be added manually here, for example:', 'add(CaptainOfferAlertPackage())\n              // Packages that cannot be autolinked yet can be added manually here, for example:');
+    if (!application.includes('registerActivityLifecycleCallbacks(CaptainAppVisibility)')) application = application.replace('loadReactNative(this)', 'registerActivityLifecycleCallbacks(CaptainAppVisibility)\n    loadReactNative(this)');
     fs.writeFileSync(applicationPath, application);
     return mod;
   }]);

@@ -152,13 +152,21 @@ async function sendDirectCaptainOfferSignal(notification: RideNotification, toke
   if (typeof offerId !== 'string' || (isOffer && !(await isStillActionableOffer(offerId)))) return false;
   const raw = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON')!) as FirebaseServiceAccount;
   const expiresAt = typeof notification.data.expiresAt === 'string' ? notification.data.expiresAt : '';
-  const ttlMs = Math.max(0, new Date(expiresAt).getTime() - Date.now());
+  // FCM's HTTP v1 API accepts protobuf Durations only: seconds with an `s`
+  // suffix (for example, "22s"). Millisecond strings such as "22000ms" are
+  // rejected, which would otherwise silently send the legacy Expo fallback
+  // instead of waking the native Captain alert service.
+  const ttlSeconds = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
   let sent = false;
   for (const token of tokens) {
-    const response = await fetch(`https://fcm.googleapis.com/v1/projects/${raw.project_id}/messages:send`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: { token, data: isOffer ? { type: 'ride_offer', rideId: String(notification.data.rideId), offerId, expiresAt, ...(typeof notification.data.pickup === 'string' ? { pickup: notification.data.pickup } : {}), ...(typeof notification.data.drop === 'string' ? { drop: notification.data.drop } : {}), ...(typeof notification.data.fare === 'string' ? { fare: notification.data.fare } : {}) } : { type: 'ride_offer_closed', offerId }, android: { priority: 'high', ttl: `${isOffer ? ttlMs : 10_000}ms` } } }) });
+    const response = await fetch(`https://fcm.googleapis.com/v1/projects/${raw.project_id}/messages:send`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: { token, data: isOffer ? { type: 'ride_offer', rideId: String(notification.data.rideId), offerId, expiresAt, ...(typeof notification.data.pickup === 'string' ? { pickup: notification.data.pickup } : {}), ...(typeof notification.data.drop === 'string' ? { drop: notification.data.drop } : {}), ...(typeof notification.data.fare === 'string' ? { fare: notification.data.fare } : {}) } : { type: 'ride_offer_closed', offerId }, android: { priority: 'high', ttl: `${isOffer ? ttlSeconds : 10}s` } } }) });
     if (response.ok) { sent = true; continue; }
     const error = await response.text();
-    if (error.includes('UNREGISTERED') || error.includes('INVALID_ARGUMENT')) await supabase.from('captain_fcm_device_tokens').delete().eq('fcm_token', token);
+    // INVALID_ARGUMENT can describe a malformed message payload, not just a
+    // bad token. Only remove a device token when FCM explicitly says it is no
+    // longer registered, and retain the error in logs for diagnosis.
+    console.error('Direct Captain FCM delivery failed', { status: response.status, fcmError: error.slice(0, 1_000) });
+    if (error.includes('UNREGISTERED')) await supabase.from('captain_fcm_device_tokens').delete().eq('fcm_token', token);
   }
   return sent;
 }

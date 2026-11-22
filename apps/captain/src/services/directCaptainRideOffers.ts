@@ -27,12 +27,15 @@ function parseOffer(data: unknown): OfferData | null {
     : null;
 }
 
-export function startDirectCaptainOfferAlert(data: unknown) {
+export function startDirectCaptainOfferAlert(data: unknown, forceNativeAlert = false) {
   const offer = parseOffer(data);
   if (!offer) return null;
   // The active app already owns the full in-app request sheet. Keep the
-  // overlay exclusively for backgrounded/locked-device delivery.
-  if (AppState.currentState === 'active' || Platform.OS !== 'android' || isExpoGo || !nativeAlert) return offer;
+  // overlay exclusively for backgrounded/locked-device delivery. A Firebase
+  // background handler runs in a headless JS context, where AppState can
+  // report `active` despite the Captain UI being behind another app; force the
+  // native service for that delivery path.
+  if ((!forceNativeAlert && AppState.currentState === 'active') || Platform.OS !== 'android' || isExpoGo || !nativeAlert) return offer;
   activeOfferId = offer.offerId;
   nativeAlert.start(offer.rideId, offer.offerId, Date.parse(offer.expiresAt), offer.pickup, offer.drop, offer.fare);
   return offer;
@@ -99,7 +102,7 @@ export function configureCaptainFcmBackgroundHandling() {
     const Messaging = require('@react-native-firebase/messaging') as typeof import('@react-native-firebase/messaging');
     Messaging.setBackgroundMessageHandler(Messaging.getMessaging(), async (message) => {
       if (message.data?.type === 'ride_offer_closed' && typeof message.data.offerId === 'string') stopDirectCaptainOfferAlert(message.data.offerId);
-      else startDirectCaptainOfferAlert(message.data);
+      else startDirectCaptainOfferAlert(message.data, true);
     });
   } catch {
     // Expo Push stays available when the direct native bridge is unavailable.

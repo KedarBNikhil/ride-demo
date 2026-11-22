@@ -1,6 +1,8 @@
 export type FareRideType = 'bike' | 'auto';
 
-export const SOFT_LAUNCH_FARE_RULE_VERSION = 'soft-launch-bike-18-2026-09-10';
+// Matches the server-side create_routed_ride tariff. Keep this version in
+// sync whenever either implementation changes.
+export const SOFT_LAUNCH_FARE_RULE_VERSION = 'google-routes-fare-v2-2026-11-22';
 
 export type FareInput = {
   rideType: FareRideType;

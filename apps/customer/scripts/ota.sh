@@ -9,7 +9,10 @@ fi
 
 readonly PACKAGE="com.nandyalride.customer"
 readonly PROJECT="1158ff7e-1da5-4a6a-9080-14791394da7a"
-readonly RUNTIME="customer-1.0.4"
+# Default to the newest completed Customer store build. Set
+# SAWAARI_OTA_RUNTIME_VERSION only when deliberately servicing an older
+# compatible binary.
+readonly RUNTIME="${SAWAARI_OTA_RUNTIME_VERSION:-customer-1.0.5}"
 readonly CHANNEL="production-customer"
 readonly VARIANT="customer"
 readonly MODE="customer"
@@ -37,17 +40,17 @@ git diff --check
 channel_file="$(mktemp "${TMPDIR:-/tmp}/sawaari-customer-channel.XXXXXX")"
 export_dir="$(mktemp -d "${TMPDIR:-/tmp}/sawaari-customer-export.XXXXXX")"
 trap 'rm -f "$channel_file"; rm -rf "$export_dir"' EXIT
-run_with_eas_production_environment "APP_VARIANT=$VARIANT EXPO_PUBLIC_APP_MODE=$MODE EXPO_PUBLIC_AUTH_MODE=production node ../../scripts/ota-production-preflight.mjs Customer $VARIANT $MODE $PACKAGE $PROJECT $RUNTIME $CHANNEL $MAPS_VARIABLES"
+run_with_eas_production_environment "APP_VARIANT=$VARIANT EXPO_PUBLIC_APP_MODE=$MODE EXPO_PUBLIC_AUTH_MODE=production SAWAARI_UPDATE_RUNTIME_VERSION=$RUNTIME node ../../scripts/ota-production-preflight.mjs Customer $VARIANT $MODE $PACKAGE $PROJECT $RUNTIME $CHANNEL $MAPS_VARIABLES"
 npx --yes eas-cli@latest channel:view "$CHANNEL" --json > "$channel_file"
 node - "$channel_file" "$CHANNEL" <<'NODE'
 const fs = require('fs'); const [file, channel] = process.argv.slice(2); const result = JSON.parse(fs.readFileSync(file, 'utf8'));
 if (!(result.currentPage?.updateBranches ?? []).some((branch) => branch.name === channel)) { throw new Error(`Channel ${channel} is not mapped to its own branch.`); }
 NODE
-printf -v export_command 'APP_VARIANT=%q EXPO_PUBLIC_APP_MODE=%q EXPO_PUBLIC_AUTH_MODE=production npx expo export --platform android --clear --max-workers 1 --output-dir %q' "$VARIANT" "$MODE" "$export_dir"
+printf -v export_command 'APP_VARIANT=%q EXPO_PUBLIC_APP_MODE=%q EXPO_PUBLIC_AUTH_MODE=production SAWAARI_UPDATE_RUNTIME_VERSION=%q npx expo export --platform android --clear --max-workers 1 --output-dir %q' "$VARIANT" "$MODE" "$RUNTIME" "$export_dir"
 run_with_eas_production_environment "$export_command"
 test -f "$export_dir/metadata.json"
 printf -v bundle_validation_command 'node ../../scripts/verify-ota-production-bundle.mjs %q' "$export_dir"
 run_with_eas_production_environment "$bundle_validation_command"
 if [[ "$action" == "--preflight" ]]; then echo "Customer OTA preflight passed; nothing published."; exit 0; fi
-npx --yes eas-cli@latest update --branch "$CHANNEL" --platform android --skip-bundler --input-dir "$export_dir" --message "${OTA_MESSAGE:?Set OTA_MESSAGE before publishing}"
+SAWAARI_UPDATE_RUNTIME_VERSION="$RUNTIME" npx --yes eas-cli@latest update --branch "$CHANNEL" --platform android --skip-bundler --input-dir "$export_dir" --message "${OTA_MESSAGE:?Set OTA_MESSAGE before publishing}"
 npx --yes eas-cli@latest update:list --branch "$CHANNEL" --platform android --runtime-version "$RUNTIME" --limit 1 --json

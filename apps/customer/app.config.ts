@@ -10,7 +10,9 @@ export default {
   icon: './assets/images/sawaari-app-icon.png',
   splash: { resizeMode: 'contain', backgroundColor: '#FFFFFF' },
   assetBundlePatterns: ['**/*'],
-  runtimeVersion: 'customer-1.0.6',
+  // Production OTA exports may deliberately target the runtime in the
+  // currently installed store binary. Store builds use the default.
+  runtimeVersion: process.env.SAWAARI_UPDATE_RUNTIME_VERSION ?? 'customer-1.0.6',
   updates: {
     url: `https://u.expo.dev/${projectId}`,
     enabled: true,
