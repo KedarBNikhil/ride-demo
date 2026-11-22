@@ -8,7 +8,7 @@ alter table public.rides add constraint rides_customer_charge_payment_consistenc
   (customer_charge_type = 'free' and customer_charge_amount = 0 and customer_charge_status = 'not_required' and payment_status = 'not_required' and payment_method is null)
   or (customer_charge_type = 'standard' and customer_charge_amount >= 0 and customer_charge_status in ('pending', 'declared', 'confirmed') and payment_status in ('pending', 'declared', 'confirmed')
     and ((payment_status = 'pending' and payment_method is null) or (payment_status in ('declared', 'confirmed') and payment_method in ('cash', 'upi', 'razorpay', 'external')))
-);
+));
 
 create or replace function public.captain_confirm_payment_received(p_ride_id uuid)
 returns public.rides language plpgsql security definer set search_path = '' as $$

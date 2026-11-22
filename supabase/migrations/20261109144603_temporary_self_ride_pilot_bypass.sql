@@ -12,7 +12,9 @@ create table private.temporary_self_ride_bypasses (
 revoke all on table private.temporary_self_ride_bypasses from public, anon, authenticated;
 
 insert into private.temporary_self_ride_bypasses (customer_id, expires_at)
-values ('c9c58592-4d16-461a-94bb-063ba6cb4c78', now() + interval '2 hours')
+select profile.id, now() + interval '2 hours'
+from public.profiles profile
+where profile.id = 'c9c58592-4d16-461a-94bb-063ba6cb4c78'
 on conflict (customer_id) do update set expires_at = excluded.expires_at;
 
 create or replace function private.has_active_captain_for_verified_phone(p_customer_id uuid)

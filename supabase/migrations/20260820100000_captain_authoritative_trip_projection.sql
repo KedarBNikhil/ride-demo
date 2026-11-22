@@ -1,7 +1,9 @@
 -- Captain-facing ride data is deliberately projected through narrow RPCs.
 -- Captains never receive general access to customer profiles.
 
-create or replace function public.captain_open_offer()
+drop function public.captain_open_offer();
+
+create function public.captain_open_offer()
 returns table (
   offer_id uuid, ride_id uuid, pickup_address text, drop_address text,
   pickup_latitude numeric, pickup_longitude numeric, drop_latitude numeric, drop_longitude numeric,

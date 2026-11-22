@@ -136,7 +136,7 @@ select
     select sum(ledger.amount) from public.captain_earnings_ledger ledger where ledger.captain_id = captain.user_id
   ), 0)::numeric as lifetime_earnings,
   coalesce((
-    select sum(session.extract(epoch from (coalesce(session.ended_at, now()) - session.started_at)) / 60)
+    select sum(extract(epoch from (coalesce(session.ended_at, now()) - session.started_at)) / 60)
     from public.captain_online_sessions session where session.captain_id = captain.user_id
   ), 0)::numeric as online_minutes,
   (select count(*)::integer from public.ride_offers offer where offer.captain_id = captain.user_id) as offers_received,
