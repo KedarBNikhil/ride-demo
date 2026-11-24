@@ -34,6 +34,13 @@ export function PhoneOtpAuth({ title, subtitle, emoji, onBack, onSendOtp, onVeri
   const phoneIsValid = () => {
     try { toIndianE164(phone); return true; } catch { return false; }
   };
+  const errorMessage = (caught: unknown) => {
+    const message = caught instanceof Error ? caught.message.toLowerCase() : '';
+    if (message.includes('network request failed') || message.includes('failed to fetch') || message.includes('network')) return t('login.networkError');
+    if (message.includes('rate limit') || message.includes('too many requests')) return t('login.rateLimited');
+    if (message.includes('supabase_not_configured') || message.includes('production_configuration')) return t('login.serviceUnavailable');
+    return t('login.tryAgain');
+  };
 
   useEffect(() => {
     if (step === 'phone') setPhone(initialPhone);
@@ -47,7 +54,7 @@ export function PhoneOtpAuth({ title, subtitle, emoji, onBack, onSendOtp, onVeri
       if (step === 'phone') { const result = await onSendOtp(phone); if (result !== false) setStep('otp'); }
       else await onVerifyOtp(phone, otp);
     } catch (caught) {
-      setError(t('login.tryAgain'));
+      setError(errorMessage(caught));
     } finally { setLoading(false); }
   };
 

@@ -12,7 +12,7 @@ import { colors, fontFamily, fontSize, radii, shadows } from '../../../theme';
 const documentTypes: { type: CaptainDocumentType; icon: string; label: string }[] = [
   { type: 'license', icon: '🪪', label: 'captain.drivingLicense' },
   { type: 'rc', icon: '🚗', label: 'captain.vehicleRc' },
-  { type: 'insurance', icon: '🛡️', label: 'captain.insurance' },
+  { type: 'aadhar', icon: '🪪', label: 'captain.aadharDetails' },
 ];
 
 export function DocumentUploadScreen({ onBack, onComplete }: { onBack: () => void; onComplete: () => void }) {

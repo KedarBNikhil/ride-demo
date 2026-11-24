@@ -13,6 +13,7 @@ import { CaptainRideDetailsScreen } from '../screens/captain/CaptainRideDetailsS
 import { CaptainPaymentIssueSupportScreen } from '../screens/captain/CaptainPaymentIssueSupportScreen';
 import { CaptainIssueDetailsScreen, CaptainIssueHistoryScreen } from '../screens/captain/CaptainIssueHistoryScreens';
 import { YourDocumentsScreen } from '../screens/captain/YourDocumentsScreen';
+import { EditPayoutDetailsScreen, EditPayoutFormScreen } from '../screens/captain/EditPayoutDetailsScreen';
 import { RateCustomerScreen } from '../screens/captain/RateCustomerScreen';
 import { CaptainRideChat } from '../components/CaptainRideChat';
 import type { CaptainRideRequest, DispatchRide } from '../services/rideDispatch';
@@ -174,8 +175,10 @@ export function CaptainMainStack({ online, onToggle, onLanguageChange, onTripCom
     <Stack.Screen name="CaptainRideChat">{({ navigation, route }) => { const { rideId, customerName } = route.params as { rideId: string; customerName: string }; return <CaptainRideChat rideId={rideId} customerName={customerName} onBack={() => navigation.goBack()} />; }}</Stack.Screen>
     <Stack.Screen name="EndRide" options={{ gestureEnabled: false }}>{({ navigation, route }) => { const params = route.params as { rideId: string }; return <EndRideScreen rideId={params.rideId} onConfirmed={() => navigation.replace('RateCustomer', { rideId: params.rideId })} onIssueDone={() => { onTripComplete(); navigation.reset({ index: 0, routes: [{ name: 'CaptainHome' }] }); }} />; }}</Stack.Screen>
     <Stack.Screen name="RateCustomer" options={{ gestureEnabled: false }}>{({ navigation, route }) => <RateCustomerScreen rideId={(route.params as { rideId: string }).rideId} onDone={() => { onTripComplete(); navigation.reset({ index: 0, routes: [{ name: 'CaptainHome' }] }); }} />}</Stack.Screen>
-    <Stack.Screen name="Settings">{({ navigation }) => <SettingsScreen profile ratingRole="captain" onBack={() => navigation.goBack()} onLanguageChange={(language) => { void onLanguageChange(language).then(() => navigation.goBack()); }} onAbout={() => navigation.navigate('About')} onDocuments={() => navigation.navigate('YourDocuments')} onHelp={() => navigation.navigate('CaptainIssueHistory')} onAccountDeleted={onAccountDeleted} onLoggedOut={onLoggedOut} />}</Stack.Screen>
+    <Stack.Screen name="Settings">{({ navigation }) => <SettingsScreen profile ratingRole="captain" onBack={() => navigation.goBack()} onLanguageChange={(language) => { void onLanguageChange(language).then(() => navigation.goBack()); }} onAbout={() => navigation.navigate('About')} onDocuments={() => navigation.navigate('YourDocuments')} onPayoutDetails={() => navigation.navigate('EditPayoutDetails')} onHelp={() => navigation.navigate('CaptainIssueHistory')} onAccountDeleted={onAccountDeleted} onLoggedOut={onLoggedOut} />}</Stack.Screen>
     <Stack.Screen name="YourDocuments">{({ navigation }) => <YourDocumentsScreen onBack={() => navigation.goBack()} />}</Stack.Screen>
+    <Stack.Screen name="EditPayoutDetails">{({ navigation }) => <EditPayoutDetailsScreen onBack={() => navigation.goBack()} onEdit={(method) => navigation.navigate('EditPayoutForm', { method })} />}</Stack.Screen>
+    <Stack.Screen name="EditPayoutForm">{({ navigation, route }) => <EditPayoutFormScreen method={(route.params as { method: 'bank' | 'upi' }).method} onBack={() => navigation.goBack()} />}</Stack.Screen>
     <Stack.Screen name="About">{({ navigation }) => <AboutScreen onBack={() => navigation.goBack()} />}</Stack.Screen>
   </Stack.Navigator>{request && <IncomingRideRequestSheet request={request} onAccept={acceptRequest} onReject={rejectRequest} />}</View>;
 }

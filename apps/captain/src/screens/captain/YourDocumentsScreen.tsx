@@ -8,8 +8,8 @@ import { useDialog } from '../../components/ThemedDialog';
 import { captainDocumentsService, type CaptainManagedDocument } from '../../services/captainDocuments';
 import { colors, fontFamily, fontSize, radii, shadows } from '../../theme';
 
-const labels = { license: 'captain.drivingLicense', rc: 'captain.vehicleRc', insurance: 'captain.insurance' } as const;
-const icon = { license: '🪪', rc: '🚗', insurance: '🛡️' } as const;
+const labels = { license: 'captain.drivingLicense', rc: 'captain.vehicleRc', aadhar: 'captain.aadharDetails' } as const;
+const icon = { license: '🪪', rc: '🚗', aadhar: '🪪' } as const;
 
 export function YourDocumentsScreen({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation(); const dialog = useDialog();

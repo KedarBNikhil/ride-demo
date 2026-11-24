@@ -333,6 +333,8 @@
     "awaitingCaptainPaymentConfirmation": "చెల్లింపు అందినట్టు కెప్టెన్ నిర్ధారించే వరకు వేచి ఉండండి.",
     "paymentConfirmed": "కెప్టెన్ చెల్లింపు అందినట్టు నిర్ధారించారు. మీ రైడ్‌కు రేటింగ్ ఇవ్వడానికి కొనసాగించండి.",
     "raisePaymentIssue": "సమస్యను తెలియజేయండి",
+    "youCancelledThisRide": "మీరు ఈ రైడ్‌ను రద్దు చేసారు.",
+    "vehiclePlateNumber": "వాహన నంబర్: {{plate}}",
     "paymentIssueRequired": "కొనసాగడానికి చెల్లింపు సమస్యను ఎంచుకోండి.",
     "paymentIssueDetailsRequired": "కొనసాగడానికి సమస్యను వివరించండి.",
     "paymentIssueDetailsPlaceholder": "ఏమి జరిగిందో వివరించండి",

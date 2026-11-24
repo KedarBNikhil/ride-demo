@@ -24,7 +24,8 @@
     "cancel": "← Cancel",
     "confirm": "Confirm",
     "done": "Done",
-    "delete": "⌫ Delete"
+    "delete": "⌫ Delete",
+    "retry": "Retry"
   },
   "screens": {
     "customerLogin": "Welcome to Nandyal Ride",
@@ -70,6 +71,10 @@
     "invalidPhone": "Enter a valid Indian mobile number",
     "invalidOtp": "Enter the 6-digit OTP",
     "tryAgain": "Something went wrong. Please try again.",
+    "networkError": "Unable to reach the login service. Check your internet connection and try again.",
+    "rateLimited": "Please wait a moment before requesting another OTP.",
+    "serviceUnavailable": "Login service is unavailable. Please update the app and try again.",
+    "restoreSessionError": "We could not restore your signed-in account. Your account is still safe. Check your internet connection and retry.",
     "pleaseWait": "Please wait…"
   },
   "home": {
@@ -356,7 +361,7 @@
     "documentsSubtitle": "Upload all documents for staff verification",
     "drivingLicense": "Driving license",
     "vehicleRc": "Vehicle RC",
-    "insurance": "Insurance",
+    "aadharDetails": "Aadhar details",
     "upload": "Upload",
     "uploadHint": "Add a clear photo",
     "documentSidesHint": "Upload both the front and back photos.",
@@ -386,6 +391,10 @@
     "documentReuploadRequired": "Replacement required",
     "documentsUnavailable": "Your documents are not available yet.",
     "payoutTitle": "Payout details",
+    "editPayoutDetails": "Edit payout details",
+    "editPayoutDetailsHint": "Update where your ride earnings are paid.",
+    "savePayoutDetails": "Save payout details",
+    "payoutSaved": "Payout details saved",
     "payoutSubtitle": "Where should we send your ride earnings?",
     "payoutMethod": "Payout method",
     "bankAccount": "Bank account",

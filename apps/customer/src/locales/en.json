@@ -333,6 +333,8 @@
     "awaitingCaptainPaymentConfirmation": "Waiting for the captain to confirm payment received.",
     "paymentConfirmed": "The captain confirmed payment received. You can continue to rate your ride.",
     "raisePaymentIssue": "Raise issue",
+    "youCancelledThisRide": "You cancelled this ride.",
+    "vehiclePlateNumber": "Vehicle number: {{plate}}",
     "paymentIssueRequired": "Choose a payment issue to continue.",
     "paymentIssueDetailsRequired": "Describe the issue to continue.",
     "paymentIssueDetailsPlaceholder": "Describe what happened",

@@ -73,6 +73,7 @@ export function SettingsScreen({
   onSafety,
   onAbout,
   onDocuments,
+  onPayoutDetails,
   onHelp,
   onAccountDeleted,
   onLoggedOut,
@@ -84,6 +85,7 @@ export function SettingsScreen({
   onSafety?: () => void;
   onAbout?: () => void;
   onDocuments?: () => void;
+  onPayoutDetails?: () => void;
   onHelp?: () => void;
   onAccountDeleted?: () => void;
   onLoggedOut?: () => void;
@@ -237,6 +239,10 @@ export function SettingsScreen({
         <View style={styles.groupedRows}>
           {ratingRole === 'captain' && <Pressable onPress={onDocuments} accessibilityRole="button" style={styles.groupedRow}>
             <Text style={styles.chipName}>{t('captain.yourDocuments')}</Text>
+            <Text style={styles.rowChevron}>›</Text>
+          </Pressable>}
+          {ratingRole === 'captain' && <Pressable onPress={onPayoutDetails} accessibilityRole="button" style={styles.groupedRow}>
+            <Text style={styles.chipName}>{t('captain.editPayoutDetails')}</Text>
             <Text style={styles.rowChevron}>›</Text>
           </Pressable>}
           <Pressable onPress={onAbout} accessibilityRole="button" style={styles.groupedRow}>

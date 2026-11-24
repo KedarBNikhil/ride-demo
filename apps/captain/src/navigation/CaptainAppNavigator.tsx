@@ -2,7 +2,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DialogProvider } from '../components/ThemedDialog';
@@ -28,6 +28,8 @@ export function CaptainAppNavigator() {
   const [accountStatus, setAccountStatus] = useState<CaptainAccountStatus>('unauthenticated');
   const [onboardingRoute, setOnboardingRoute] = useState<CaptainOnboardingRoute>('signup');
   const [accountReady, setAccountReady] = useState(false);
+  const [accountRestoreFailed, setAccountRestoreFailed] = useState(false);
+  const [accountReloadRequest, setAccountReloadRequest] = useState(0);
 
   useEffect(() => { configurePushNotifications(); }, []);
   useEffect(() => {
@@ -47,12 +49,20 @@ export function CaptainAppNavigator() {
   useEffect(() => {
     let mounted = true;
     const resolve = async () => {
+      setAccountRestoreFailed(false);
       try {
         const account = await captainOnboardingService.resolveAuthenticatedAccount();
         if (!mounted) return;
         setProfile(account.profile); setAccountStatus(account.status); setOnboardingRoute(account.onboardingRoute);
       } catch {
-        if (mounted) { setAccountStatus('unauthenticated'); setOnboardingRoute('signup'); }
+        // A valid persisted session can briefly fail profile restoration during
+        // an OTA cold start or a transient network failure. Do not present that
+        // Captain as logged out; only a missing session may enter sign-up.
+        const { data: { session } } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
+        if (mounted) {
+          if (session) setAccountRestoreFailed(true);
+          else { setAccountStatus('unauthenticated'); setOnboardingRoute('signup'); }
+        }
       } finally { if (mounted) setAccountReady(true); }
     };
     void resolve();
@@ -63,12 +73,16 @@ export function CaptainAppNavigator() {
       setAccountReady(false); void resolve();
     });
     return () => { mounted = false; subscription.unsubscribe(); };
-  }, []);
+  }, [accountReloadRequest]);
   useEffect(() => {
     if (accountStatus === 'approved') void rideDispatchService.getCaptainAvailability().then(setCaptainOnline).catch(() => setCaptainOnline(false));
   }, [accountStatus]);
   const chooseLanguage = async (next: AppLanguage) => { setLanguage(next); await i18n.changeLanguage(next); await AsyncStorage.setItem('sawaari.captain.language', next); setHasLanguage(true); };
   if (hasLanguage === null || !accountReady) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator /></View>;
+  if (accountRestoreFailed) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 }}>
+    <Text style={{ textAlign: 'center' }}>{i18n.t('login.restoreSessionError')}</Text>
+    <Pressable accessibilityRole="button" onPress={() => { setAccountReady(false); setAccountReloadRequest((request) => request + 1); }}><Text style={{ fontWeight: '800' }}>{i18n.t('actions.retry')}</Text></Pressable>
+  </View>;
   return <I18nextProvider i18n={i18n}><DialogProvider><GestureHandlerRootView style={{ flex: 1 }}><NavigationContainer ref={captainNavigationRef}>
     <Stack.Navigator key={accountStatus} screenOptions={{ headerShown: false }}>
       {accountStatus === 'approved'
