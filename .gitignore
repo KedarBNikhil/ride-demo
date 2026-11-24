@@ -5,3 +5,6 @@ node_modules
 .env.local
 dashboard/dist
 health-reports/
+.DS_Store
+*.jks
+credentials.json

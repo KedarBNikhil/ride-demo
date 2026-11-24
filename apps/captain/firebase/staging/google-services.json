@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "43285667226",
+    "project_id": "sawaari-staging",
+    "storage_bucket": "sawaari-staging.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:43285667226:android:66ffb0b4690b0c0b442e23",
+        "android_client_info": {
+          "package_name": "com.nandyalride.captain.staging"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAYcYsm26hye3evNXnEul1K0VyrsdhcR4Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:43285667226:android:d94ec39d31134b3a442e23",
+        "android_client_info": {
+          "package_name": "com.nandyalride.customer.staging"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAYcYsm26hye3evNXnEul1K0VyrsdhcR4Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

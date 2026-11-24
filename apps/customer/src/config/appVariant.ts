@@ -2,20 +2,37 @@ import Constants from 'expo-constants';
 import { applicationId } from 'expo-application';
 
 export type AppVariant = 'customer';
-const expectedApplicationId = 'com.nandyalride.customer';
-const expectedProjectId = '1158ff7e-1da5-4a6a-9080-14791394da7a';
 
-// `applicationId`/bundle ID is compiled into the installed native binary and
-// cannot be changed by an OTA. Expo config and EXPO_PUBLIC_* values are part
-// of the update manifest/bundle and must therefore be treated as untrusted at
-// startup. A mismatch deliberately prevents either app flow from rendering.
+const expectedIdentities = {
+  production: {
+    applicationId: 'com.nandyalride.customer',
+    projectId: '1158ff7e-1da5-4a6a-9080-14791394da7a',
+  },
+  staging: {
+    applicationId: 'com.nandyalride.customer.staging',
+    projectId: '27afc445-8b40-4df5-b574-ef52c4e36274',
+  },
+} as const;
+
 const manifestVariant = Constants.expoConfig?.extra?.appMode;
+const manifestEnvironment = Constants.expoConfig?.extra?.appEnvironment;
 const manifestProjectId = Constants.expoConfig?.extra?.eas?.projectId;
 
-if (applicationId !== expectedApplicationId || manifestVariant !== 'customer' || manifestProjectId !== expectedProjectId) {
+const expectedIdentity = manifestEnvironment === 'production'
+  ? expectedIdentities.production
+  : manifestEnvironment === 'staging'
+    ? expectedIdentities.staging
+    : null;
+
+if (
+  !expectedIdentity
+  || applicationId !== expectedIdentity.applicationId
+  || manifestVariant !== 'customer'
+  || manifestProjectId !== expectedIdentity.projectId
+) {
   throw new Error(
-    `Application identity mismatch: native ${String(applicationId)} requires customer/${expectedProjectId}, ` +
-    `but the loaded update declares ${String(manifestVariant)}/${String(manifestProjectId)}.`
+    `Application identity mismatch: native ${String(applicationId)} cannot load ` +
+    `${String(manifestEnvironment)}/${String(manifestVariant)}/${String(manifestProjectId)}.`,
   );
 }
 

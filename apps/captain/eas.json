@@ -1,7 +1,24 @@
 {
-  "cli": { "appVersionSource": "local" },
+  "cli": {
+    "appVersionSource": "local"
+  },
   "build": {
-    "development": { "developmentClient": true, "distribution": "internal" },
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "staging": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "preview",
+      "channel": "staging-captain",
+      "env": {
+        "APP_VARIANT": "captain",
+        "SAWAARI_ENVIRONMENT": "staging",
+        "EXPO_PUBLIC_APP_MODE": "captain",
+        "EXPO_PUBLIC_AUTH_MODE": "production"
+      }
+    },
     "internal": {
       "distribution": "internal",
       "environment": "production",
@@ -22,5 +39,7 @@
       }
     }
   },
-  "submit": { "production": {} }
+  "submit": {
+    "production": {}
+  }
 }
