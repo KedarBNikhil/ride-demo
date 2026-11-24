@@ -78,6 +78,7 @@ export type AssignedCaptainDetails = {
   fullName: string;
   vehicleType: RideKind | null;
   phone: string | null;
+  vehiclePlateNumber: string | null;
 };
 
 export type RideMessage = { id: string; sender_id: string; sender_role: 'customer' | 'captain' | null; body: string; created_at: string };
@@ -379,12 +380,12 @@ export const rideDispatchService = {
 
   async getAssignedCaptain(rideId: string): Promise<AssignedCaptainDetails | null> {
     const { data, error } = await requireClient()
-      .rpc('customer_assigned_captain_contact', { p_ride_id: rideId })
+      .rpc('customer_assigned_captain_details', { p_ride_id: rideId })
       .maybeSingle();
     if (error) throw error;
     if (!data) return null;
-    const assignedCaptain = data as { full_name: string; vehicle_type: RideKind | null; phone: string | null };
-    return { fullName: assignedCaptain.full_name, vehicleType: assignedCaptain.vehicle_type, phone: assignedCaptain.phone };
+    const assignedCaptain = data as { full_name: string; vehicle_type: RideKind | null; phone: string | null; vehicle_plate_number: string | null };
+    return { fullName: assignedCaptain.full_name, vehicleType: assignedCaptain.vehicle_type, phone: assignedCaptain.phone, vehiclePlateNumber: assignedCaptain.vehicle_plate_number };
   },
 
   async getRideMessages(rideId: string): Promise<RideMessage[]> {
