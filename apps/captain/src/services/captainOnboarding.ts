@@ -8,13 +8,13 @@ export type CaptainProfile = { name: string; language: AppLanguage; vehicleType:
 export type CaptainAccountStatus = 'unauthenticated' | 'new' | 'draft' | 'submitted' | 'approved' | 'rejected';
 export type CaptainOnboardingRoute = 'signup' | 'profile' | 'documents' | 'payout' | 'review';
 export type CaptainAccount = { status: CaptainAccountStatus; profile: CaptainProfile; onboardingRoute: CaptainOnboardingRoute };
-export type CaptainDocumentType = 'license' | 'rc' | 'insurance';
+export type CaptainDocumentType = 'license' | 'rc' | 'aadhar';
 export type CaptainDocument = { uri: string; name: string };
 export type CaptainDocumentPair = { front: CaptainDocument; back: CaptainDocument };
 export type CaptainPayout = { method: 'bank' | 'upi'; accountNumber?: string; confirmAccountNumber?: string; ifsc?: string; accountHolder?: string; upiId?: string };
 const delay = (ms = 450) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-const requiredDocumentTypes: CaptainDocumentType[] = ['license', 'rc', 'insurance'];
+const requiredDocumentTypes: CaptainDocumentType[] = ['license', 'rc', 'aadhar'];
 const productionAuth = createProductionAuthService('captain');
 
 function requireSupabase() {
@@ -175,6 +175,33 @@ export const captainOnboardingService = {
       return { submitted: true, autoApproved: false };
     }
     return { submitted: true, autoApproved: testApproval?.autoApproved === true };
+  },
+  async getPayout() {
+    const user = await currentCaptainUser();
+    const { data, error } = await requireSupabase().from('captain_onboarding_applications')
+      .select('payout_method, payout_details').eq('user_id', user.id).maybeSingle();
+    if (error) throw error;
+    if (!data?.payout_method || !data.payout_details) return null;
+    const details = data.payout_details as Record<string, unknown>;
+    if (data.payout_method === 'bank') return {
+      method: 'bank' as const,
+      accountNumber: typeof details.account_number === 'string' ? details.account_number : '',
+      confirmAccountNumber: typeof details.account_number === 'string' ? details.account_number : '',
+      ifsc: typeof details.ifsc === 'string' ? details.ifsc : '',
+      accountHolder: typeof details.account_holder === 'string' ? details.account_holder : '',
+    };
+    if (data.payout_method === 'upi') return { method: 'upi' as const, upiId: typeof details.upi_id === 'string' ? details.upi_id : '' };
+    return null;
+  },
+  async updatePayout(payout: CaptainPayout) {
+    if (!payoutIsValid(payout.method, payout)) throw new Error('Invalid payout details');
+    const user = await currentCaptainUser();
+    const { data, error } = await requireSupabase().from('captain_onboarding_applications').update({
+      payout_method: payout.method,
+      payout_details: payoutDetails(payout),
+    }).eq('user_id', user.id).select('id').maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error('PAYOUT_APPLICATION_NOT_FOUND');
   },
   async getReviewStatus() {
     const user = await currentCaptainUser();

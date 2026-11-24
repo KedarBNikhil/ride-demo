@@ -1,13 +1,13 @@
 import { supabase } from '../lib/supabase';
 
-export type CaptainDocumentType = 'license' | 'rc' | 'insurance';
+export type CaptainDocumentType = 'license' | 'rc' | 'aadhar';
 export type CaptainManagedDocument = {
   id: string; document_type: CaptainDocumentType; verification_status: 'pending' | 'verified' | 'rejected' | 'reupload_required';
   change_request_status: 'none' | 'requested' | 'approved' | 'rejected'; review_note: string | null;
 };
 export type ReplacementFile = { uri: string; name: string };
 
-const types: CaptainDocumentType[] = ['license', 'rc', 'insurance'];
+const types: CaptainDocumentType[] = ['license', 'rc', 'aadhar'];
 const contentType = (name: string) => name.toLowerCase().endsWith('.png') ? 'image/png' : name.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/jpeg';
 const requireClient = () => { if (!supabase) throw new Error('SUPABASE_NOT_CONFIGURED'); return supabase; };
 
