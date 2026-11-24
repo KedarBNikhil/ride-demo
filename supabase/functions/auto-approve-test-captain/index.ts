@@ -7,7 +7,7 @@ const corsHeaders = {
   "access-control-allow-origin": "*",
 };
 
-const requiredTypes = ["license", "rc", "insurance"] as const;
+const requiredTypes = ["license", "rc", "aadhar"] as const;
 type DocumentType = (typeof requiredTypes)[number];
 
 function json(body: Record<string, unknown>, status = 200) {
