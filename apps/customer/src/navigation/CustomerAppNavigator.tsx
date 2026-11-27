@@ -1,3 +1,4 @@
+import { CustomerIntro } from '../components/CustomerIntro';
 import { createNavigationContainerRef, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,7 +15,7 @@ import { AboutScreen } from '../screens/AboutScreen';
 import { HelpScreen } from '../screens/HelpScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { DialogProvider } from '../components/ThemedDialog';
-import { BookingConfirmScreen, CustomerAuthChoiceScreen, CustomerBookingsScreen, CustomerHomeScreen, CustomerIntroScreen, CustomerLoginScreen, CustomerSignupScreen, type CustomerRide, LocationPickerScreen, RideConfirmedScreen, RideTypeScreen, SearchingScreen } from '../screens/CustomerScreens';
+import { BookingConfirmScreen, CustomerAuthChoiceScreen, CustomerBookingsScreen, CustomerHomeScreen, CustomerLoginScreen, CustomerSignupScreen, type CustomerRide, LocationPickerScreen, RideConfirmedScreen, RideTypeScreen, SearchingScreen } from '../screens/CustomerScreens';
 import { CustomerRideChat } from '../components/CustomerRideChat';
 import { CustomerPaymentIssueSupportScreen } from '../screens/CustomerPaymentIssueSupportScreen';
 import { CustomerIssueDetailsScreen, CustomerIssueHistoryScreen } from '../screens/CustomerIssueHistoryScreens';
@@ -157,7 +158,7 @@ export function CustomerAppNavigator() {
   const chooseLanguage = async (next: AppLanguage) => { setLanguage(next); await i18n.changeLanguage(next); await AsyncStorage.setItem('sawaari.customer.language', next); setHasLanguage(true); };
   if (hasLanguage === null || !customerSessionReady) return <View style={{ alignItems: 'center', backgroundColor: colors.bg, flex: 1, justifyContent: 'center' }}><ActivityIndicator color={colors.primary} /></View>;
   return <I18nextProvider i18n={i18n}><DialogProvider><GestureHandlerRootView style={{ backgroundColor: colors.bg, flex: 1 }}><NavigationContainer ref={navigationRef} theme={customerNavigationTheme} linking={{ prefixes: ['exp+nandyal-ride-customer://'], config: { screens: { LiveRideTracking: 'live-ride/:token' } } }} onReady={() => { void reconcileCurrentCustomerRide().catch(() => undefined); }} onStateChange={() => { if (customerBookingRouteNames.has(currentRouteName() ?? '')) void reconcileCurrentCustomerRide().catch(() => undefined); }}><Stack.Navigator initialRouteName="CustomerIntro" screenOptions={{ animation: 'none', contentStyle: { backgroundColor: colors.bg }, headerShown: false }}>
-    <Stack.Screen name="CustomerIntro">{({ navigation }) => <CustomerIntroScreen onComplete={() => navigation.replace(hasCustomerSession ? 'CustomerHome' : 'CustomerAuthChoice')} />}</Stack.Screen>
+    <Stack.Screen name="CustomerIntro">{({ navigation }) => <CustomerIntro onComplete={() => navigation.replace(hasCustomerSession ? 'CustomerHome' : 'CustomerAuthChoice')} />}</Stack.Screen>
     <Stack.Screen name="CustomerAuthChoice">{({ navigation }) => <CustomerAuthChoiceScreen language={language} onLanguageChange={(next) => { void chooseLanguage(next); }} onLogin={() => navigation.navigate('CustomerLogin')} onSignup={() => navigation.navigate('CustomerSignup')} />}</Stack.Screen>
     <Stack.Screen name="CustomerLogin">{({ navigation }) => <CustomerLoginScreen language={language} onLanguageChange={(next) => { void chooseLanguage(next); }} onBack={() => navigation.goBack()} onComplete={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} />}</Stack.Screen>
     <Stack.Screen name="CustomerSignup">{({ navigation }) => <CustomerSignupScreen language={language} onLanguageChange={(next) => { void chooseLanguage(next); }} onBack={() => navigation.goBack()} onComplete={() => navigation.reset({ index: 0, routes: [{ name: 'CustomerHome' }] })} />}</Stack.Screen>

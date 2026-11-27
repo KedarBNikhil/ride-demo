@@ -22,6 +22,7 @@ import {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, { clamp, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import MapView, { Marker, type MapMarker, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -112,7 +113,7 @@ const SearchingCaptainMarker = React.memo(function SearchingCaptainMarker({ capt
   return <Marker ref={marker} coordinate={captain.coordinate} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}><View style={styles.searchingCaptainMarker}><VehicleIcon kind={captain.vehicleType} size={26} /></View></Marker>;
 });
 
-const SearchingMap = React.memo(function SearchingMap({ pickup, searchKey, nearbyCaptains = [], heartbeatScale, heartbeatOpacity }: { pickup?: Coordinate; searchKey?: string; nearbyCaptains?: NearbyCaptainLocation[]; heartbeatScale: Animated.Value; heartbeatOpacity: Animated.Value }) {
+const SearchingMap = React.memo(function SearchingMap({ pickup, searchKey, nearbyCaptains = [], heartbeatScale, heartbeatOpacity, jumpY }: { pickup?: Coordinate; searchKey?: string; nearbyCaptains?: NearbyCaptainLocation[]; heartbeatScale: Animated.Value; heartbeatOpacity: Animated.Value; jumpY: Animated.Value }) {
   const mapRef = useRef<MapView>(null);
   const [pickupPoint, setPickupPoint] = useState<{ x: number; y: number } | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -132,10 +133,10 @@ const SearchingMap = React.memo(function SearchingMap({ pickup, searchKey, nearb
   }, [pickup]);
   return <View style={StyleSheet.absoluteFill}>
     <MapView ref={mapRef} provider={mapProvider} initialRegion={region} scrollEnabled={false} zoomEnabled={false} rotateEnabled={false} onMapReady={() => { setMapReady(true); if (isValidMapCoordinate(pickup) && mapRef.current) void mapRef.current.pointForCoordinate(pickup).then(setPickupPoint).catch(() => setPickupPoint(null)); }} style={StyleSheet.absoluteFill}>
-      {pickup && <Marker coordinate={pickup} pinColor={colors.success} tracksViewChanges={false} />}
       {nearbyCaptains.slice(0, 3).map((captain) => <SearchingCaptainMarker key={captain.id} captain={captain} />)}
     </MapView>
-    {pickupPoint && !nearbyCaptains.length && <Animated.View pointerEvents="none" style={[styles.searchingHeartbeat, { left: pickupPoint.x - 145, top: pickupPoint.y - 145, opacity: heartbeatOpacity, transform: [{ scale: heartbeatScale }] }]}><View style={styles.searchingHeartbeatInner} /></Animated.View>}
+    {pickupPoint && <Animated.View pointerEvents="none" style={[styles.searchingHeartbeat, { left: pickupPoint.x - 145, top: pickupPoint.y - 145, opacity: heartbeatOpacity, transform: [{ scale: heartbeatScale }] }]}><View style={styles.searchingHeartbeatInner} /></Animated.View>}
+    {pickupPoint && <Animated.View pointerEvents="none" style={{ position: 'absolute', left: pickupPoint.x - 22, top: pickupPoint.y - 55, width: 44, height: 55, transform: [{ translateY: jumpY }] }}><Svg width={44} height={55} viewBox="0 0 44 55"><Path d="M22 2C11 2 3 10 3 21c0 11 11 22 19 31 8-9 19-20 19-31C41 10 33 2 22 2Z" fill={colors.primary} stroke="white" strokeWidth={3}/><Circle cx={22} cy={21} r={11} stroke="white" strokeWidth={2} fill="none"/><Circle cx={22} cy={21} r={9.2} stroke="white" strokeWidth={0.7} fill="none"/><Line x1={22} y1={11.8} x2={22} y2={30.2} stroke="white" strokeWidth={1.5}/><Line x1={12.8} y1={21} x2={31.2} y2={21} stroke="white" strokeWidth={1.5}/><Line x1={15.5} y1={14.5} x2={28.5} y2={27.5} stroke="white" strokeWidth={1.5}/><Line x1={28.5} y1={14.5} x2={15.5} y2={27.5} stroke="white" strokeWidth={1.5}/><Circle cx={22} cy={21} r={1.6} fill="white"/></Svg></Animated.View>}
   </View>;
 });
 
@@ -1429,6 +1430,7 @@ export function SearchingScreen({ rideId, rideKind, pickupCoordinate, nearbyCapt
   const { t } = useTranslation();
   const dialog = useDialog();
   const { tabBarHeight } = useBottomTabBarMetrics();
+  const jumpY = useRef(new Animated.Value(0)).current;
   const heartbeatScale = useRef(new Animated.Value(0.18)).current;
   const heartbeatOpacity = useRef(new Animated.Value(0.78)).current;
   const indicatorPhase = useRef(new Animated.Value(0)).current;
@@ -1474,14 +1476,17 @@ export function SearchingScreen({ rideId, rideKind, pickupCoordinate, nearbyCapt
 
   useEffect(() => {
     if (!isSearching) return;
-    const heartbeat = Animated.loop(Animated.parallel([
-      Animated.sequence([Animated.timing(heartbeatScale, { toValue: 1, duration: 2200, easing: Easing.out(Easing.quad), useNativeDriver: true }), Animated.timing(heartbeatScale, { toValue: 0.18, duration: 0, useNativeDriver: true })]),
-      Animated.sequence([Animated.timing(heartbeatOpacity, { toValue: 0, duration: 2200, easing: Easing.out(Easing.quad), useNativeDriver: true }), Animated.timing(heartbeatOpacity, { toValue: 0.78, duration: 0, useNativeDriver: true })]),
+    const heartbeat = Animated.loop(Animated.sequence([
+      Animated.parallel([
+        Animated.sequence([Animated.timing(jumpY, { toValue: -28, duration: 650, easing: Easing.out(Easing.quad), useNativeDriver: true }), Animated.timing(jumpY, { toValue: 0, duration: 650, easing: Easing.in(Easing.quad), useNativeDriver: true })]),
+        Animated.sequence([Animated.delay(1300), Animated.parallel([Animated.timing(heartbeatScale, { toValue: 1, duration: 1500, easing: Easing.out(Easing.quad), useNativeDriver: true }), Animated.timing(heartbeatOpacity, { toValue: 0, duration: 1500, easing: Easing.out(Easing.quad), useNativeDriver: true })])]),
+      ]),
+      Animated.parallel([Animated.timing(heartbeatScale, { toValue: 0.18, duration: 0, useNativeDriver: true }), Animated.timing(heartbeatOpacity, { toValue: 0.78, duration: 0, useNativeDriver: true })]),
     ]));
     const indicators = Animated.loop(Animated.sequence([Animated.timing(indicatorPhase, { toValue: 3, duration: 3000, easing: Easing.linear, useNativeDriver: true }), Animated.timing(indicatorPhase, { toValue: 0, duration: 0, useNativeDriver: true })]));
     heartbeat.start(); indicators.start();
     return () => { heartbeat.stop(); indicators.stop(); };
-  }, [heartbeatOpacity, heartbeatScale, indicatorPhase, isSearching]);
+  }, [heartbeatOpacity, heartbeatScale, indicatorPhase, isSearching, jumpY]);
 
   useEffect(() => {
     if (!isSearching) return;
@@ -1530,7 +1535,7 @@ export function SearchingScreen({ rideId, rideKind, pickupCoordinate, nearbyCapt
   }, [rideId, t]);
 
   return <View style={styles.searchingScreen}>
-    <SearchingMap pickup={pickupCoordinate} searchKey={rideId} nearbyCaptains={nearbyCaptains} heartbeatScale={heartbeatScale} heartbeatOpacity={heartbeatOpacity} />
+    <SearchingMap pickup={pickupCoordinate} searchKey={rideId} nearbyCaptains={nearbyCaptains} heartbeatScale={heartbeatScale} heartbeatOpacity={heartbeatOpacity} jumpY={jumpY} />
     <View pointerEvents="none" style={styles.searchingMapDim} />
     <SafeAreaView pointerEvents="box-none" style={styles.searchingSafe} edges={['top', 'left', 'right']}>
       <View style={styles.searchingHeader}>
@@ -1579,6 +1584,8 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
   const [captainDetails, setCaptainDetails] = useState<AssignedCaptainDetails | null>(null);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [pickupPin, setPickupPin] = useState<string | null>(ride.pickupOtp ?? null);
+  const [refreshingPickupPin, setRefreshingPickupPin] = useState(false);
+  const [pickupPinError, setPickupPinError] = useState('');
   const pickupOtpIssuedForRide = useRef<string | null>(null);
   const [captainRoute, setCaptainRoute] = useState<Coordinate[]>([]);
   const pickup = ride.pickupCoordinate ?? locationCoordinate(ride.pickup, 0);
@@ -1618,6 +1625,27 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
     setPickupPin(ride.pickupOtp ?? null);
     setCaptainRoute([]);
   }, [ride.id]);
+  useEffect(() => {
+    if (!ride.id || ride.id.startsWith('local-')) return;
+    let active = true;
+    const check = () => { void rideDispatchService.getStoredCustomerPickupOtp(ride.id!).then((otp) => { if (active) setPickupPin(otp); }); };
+    check();
+    const timer = setInterval(check, 15000);
+    return () => { active = false; clearInterval(timer); };
+  }, [ride.id, ride.pickupOtp]);
+  const refreshPickupPin = async () => {
+    if (!ride.id || refreshingPickupPin) return;
+    setRefreshingPickupPin(true);
+    setPickupPinError('');
+    try {
+      const otp = await rideDispatchService.issueCustomerPickupOtp(ride.id, true);
+      setPickupPin(otp);
+      if (otp) onPickupOtpIssued(otp);
+      else setPickupPinError(t('rides.pickupPinRefreshError'));
+    } catch {
+      setPickupPinError(t('rides.pickupPinRefreshError'));
+    } finally { setRefreshingPickupPin(false); }
+  };
   useEffect(() => {
     if (!ride.id || ride.id.startsWith('local-')) return;
     return rideDispatchService.subscribeToRide(ride.id, (updatedRide) => {
@@ -1713,7 +1741,7 @@ export function RideConfirmedScreen({ ride, onHome, onCancelled, onBookings, onP
       {hasCurrentRide && <View style={styles.assignedCaptainRow}><View style={styles.captainAvatar}><Text style={styles.captainAvatarEmoji}>👤</Text></View><View style={styles.assignedCaptainText}><Text style={styles.captainName}>{captainName}</Text><Text style={styles.assignedVehicle}>{vehicleType ? t(`rides.${vehicleType}`) : t('rides.captain')}</Text>{captainDetails?.vehiclePlateNumber ? <Text style={styles.assignedVehicle}>{t('rides.vehiclePlateNumber', { plate: captainDetails.vehiclePlateNumber })}</Text> : null}</View><View style={styles.assignedContact}><Pressable onPress={() => { if (ride.id) onOpenChat(ride.id, captainName); }} accessibilityRole="button" accessibilityLabel="Message captain" accessibilityState={{ disabled: !ride.id }} disabled={!ride.id} style={[styles.assignedCall, !ride.id && styles.assignedCallDisabled]}><View><Text style={styles.assignedCallText}>✉</Text>{unreadMessageCount > 0 && <View style={styles.messageUnreadBadge}><Text style={styles.messageUnreadBadgeText}>{unreadMessageCount > 9 ? '9+' : unreadMessageCount}</Text></View>}</View></Pressable><Pressable onPress={() => { void callCaptain(); }} accessibilityRole="button" accessibilityLabel="Call captain" accessibilityState={{ disabled: !captainDetails?.phone }} disabled={!captainDetails?.phone} style={[styles.assignedCall, !captainDetails?.phone && styles.assignedCallDisabled]}><Text style={styles.assignedCallText}>☎</Text></Pressable></View></View>}
       <View style={styles.assignedPickupRow}><View style={styles.assignedPickupDot} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.pickup')} · {ride.pickup}</Text></View>
       <View style={styles.assignedPickupRow}><View style={[styles.assignedPickupDot, styles.assignedDropDot]} /><Text style={styles.assignedPickupText} numberOfLines={2}>{t('rides.drop')} · {ride.drop}</Text></View>
-      {arrived && !!pickupPin && !inProgress && <View style={styles.pickupPinCard}><Text style={styles.pickupPinLabel}>{t('rides.pickupPinLabel')}</Text><Text style={styles.pickupPin}>{pickupPin}</Text><Text style={styles.pickupPinHint}>{t('rides.pickupPinHint')}</Text></View>}
+      {liveStatus === 'arrived' && !inProgress && <View style={styles.pickupPinCard}><Text style={styles.pickupPinLabel}>{t('rides.pickupPinLabel')}</Text>{pickupPin ? <><Text style={styles.pickupPin}>{pickupPin}</Text><Text style={styles.pickupPinHint}>{t('rides.pickupPinHint')}</Text></> : <Text style={styles.pickupPinHint}>{t('rides.pickupPinUnavailable')}</Text>}<Pressable onPress={() => { void refreshPickupPin(); }} disabled={refreshingPickupPin} accessibilityRole="button"><Text style={styles.pickupPinLabel}>{refreshingPickupPin ? t('login.pleaseWait') : t('rides.pickupPinRefresh')}</Text></Pressable>{!!pickupPinError && <Text style={styles.pickupPinHint}>{pickupPinError}</Text>}</View>}
       {inProgress && <><View style={styles.tripStatRow}><Text style={styles.tripStatLabel}>{t('rides.destinationDistance')}</Text><Text style={styles.tripStatValue}>{liveRide?.trip_distance_meters == null ? '—' : `${formatNumber(Number(liveRide.trip_distance_meters) / 1000, { maximumFractionDigits: 1 })} km`}</Text></View><Pressable onPress={() => { void emergencyContactsService.list().then((contacts) => { if (!contacts.length) { dialog({ title: 'Emergency contacts', message: 'You do not have any saved contacts.' }); return; } dialog({ title: 'Call emergency contact', message: 'Choose a saved contact to call.', buttons: [...contacts.map((contact) => ({ text: contact.contactName, onPress: () => { void Linking.openURL(`tel:${contact.phoneNumber}`); } })), { text: 'Call emergency services (112)', onPress: () => { void Linking.openURL('tel:112'); } }, { text: t('actions.cancel'), style: 'cancel' }] }); }).catch(() => dialog({ title: 'Emergency contacts', message: 'You do not have any saved contacts.' })); }} accessibilityRole="button" style={styles.sosButton}><Text style={styles.sosText}>{t('rides.sos')}</Text></Pressable><PrimaryButton label="Share live ride status" onPress={() => onShareLiveRide(liveRide?.id ?? ride.id!)} /></>}
       {canCancel && <PrimaryButton label={t('rides.cancelRide')} onPress={startCancellation} danger />}
     </DraggableMapSheet>

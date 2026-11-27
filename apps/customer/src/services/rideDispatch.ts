@@ -6,6 +6,17 @@ import type { Coordinate, RideKind } from '../screens/CustomerScreens';
 let rideSubscriptionSequence = 0;
 const pickupOtpRequests = new Map<string, Promise<string | null>>();
 const pickupOtpStorageKey = (rideId: string) => `nandyal-ride-demo.customer.pickupOtp.${rideId}`;
+const pickupOtpLifetimeMs = 29 * 60 * 1000;
+
+async function readValidPickupOtp(rideId: string): Promise<string | null> {
+  const stored = await AsyncStorage.getItem(pickupOtpStorageKey(rideId));
+  if (!stored) return null;
+  try {
+    const value = JSON.parse(stored) as { otp?: unknown; expiresAt?: unknown };
+    if (typeof value.otp === 'string' && /^\d{6}$/.test(value.otp) && typeof value.expiresAt === 'number' && value.expiresAt > Date.now()) return value.otp;
+  } catch { /* Older saved codes have no expiry and must be replaced. */ }
+  return null;
+}
 
 export type RideStatus = 'requested' | 'searching' | 'accepted' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
 export const customerActiveRideStatuses = ['requested', 'searching', 'accepted', 'arrived', 'in_progress'] as const satisfies readonly RideStatus[];
@@ -411,10 +422,10 @@ export const rideDispatchService = {
     return () => { void client.removeChannel(channel); };
   },
 
-  async issueCustomerPickupOtp(rideId: string) {
+  async issueCustomerPickupOtp(rideId: string, forceRefresh = false) {
     const inFlight = pickupOtpRequests.get(rideId);
     if (inFlight) return inFlight;
-    const request = AsyncStorage.getItem(pickupOtpStorageKey(rideId)).then((storedOtp) => {
+    const request = (forceRefresh ? Promise.resolve(null) : readValidPickupOtp(rideId)).then((storedOtp) => {
       if (storedOtp) return storedOtp;
       return requireClient().rpc('issue_customer_pickup_otp', { p_ride_id: rideId }).then(({ data, error }) => {
         if (error) throw error;
@@ -422,7 +433,7 @@ export const rideDispatchService = {
       })
     })
       .then(async (pickupOtp) => {
-        if (pickupOtp) await AsyncStorage.setItem(pickupOtpStorageKey(rideId), pickupOtp);
+        if (pickupOtp && (forceRefresh || !(await readValidPickupOtp(rideId)))) await AsyncStorage.setItem(pickupOtpStorageKey(rideId), JSON.stringify({ otp: pickupOtp, expiresAt: Date.now() + pickupOtpLifetimeMs }));
         return pickupOtp;
       })
       .finally(() => {
@@ -433,7 +444,7 @@ export const rideDispatchService = {
   },
 
   async getStoredCustomerPickupOtp(rideId: string) {
-    return AsyncStorage.getItem(pickupOtpStorageKey(rideId));
+    return readValidPickupOtp(rideId);
   },
 
   async clearStoredCustomerPickupOtp(rideId: string) {

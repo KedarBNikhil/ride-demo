@@ -4,6 +4,7 @@ import { getSupabaseClient } from '../lib/supabase';
 
 type CreatedOrder = { keyId: string; orderId: string; amountPaise: number; currency: string };
 type VerifiedPayment = { verified: true };
+type CreateResult = CreatedOrder | { alreadyPaid: true };
 type RazorpayCheckoutModule = {
   open(options: {
     key: string;
@@ -50,7 +51,8 @@ export async function startRazorpayRideCheckout(rideId: string, preferredMethod?
   if (!isRazorpayRideCheckoutEnabled) throw new Error('Online payment is not enabled for this release');
   const RazorpayCheckout = getAndroidRazorpayCheckout();
   const supabase = getSupabaseClient();
-  const order = result(await supabase.functions.invoke<CreatedOrder>('razorpay-ride-checkout', { body: { action: 'create', rideId } }));
+  const order = result(await supabase.functions.invoke<CreateResult>('razorpay-ride-checkout', { body: { action: 'create', rideId } }));
+  if ('alreadyPaid' in order) return { verified: true } as VerifiedPayment;
   const payment = await RazorpayCheckout.open({
     key: order.keyId,
     amount: String(order.amountPaise),
@@ -68,4 +70,10 @@ export async function startRazorpayRideCheckout(rideId: string, preferredMethod?
     throw new RazorpayCheckoutCancelled();
   }
   return result(await supabase.functions.invoke<VerifiedPayment>('razorpay-ride-checkout', { body: { action: 'verify', rideId, ...payment } }));
+}
+
+export async function checkRazorpayRidePayment(rideId: string): Promise<'confirmed' | 'pending' | 'not_started'> {
+  const supabase = getSupabaseClient();
+  const response = result(await supabase.functions.invoke<{ state: 'confirmed' | 'pending' | 'not_started' }>('razorpay-ride-checkout', { body: { action: 'reconcile', rideId } }));
+  return response.state;
 }

@@ -199,6 +199,9 @@
     "fare": "Est. {{fare}}",
     "selected": "✓ Selected",
     "routePreview": "Your route",
+    "checkOnlinePaymentStatus": "Check payment status",
+    "onlinePaymentStillPending": "No confirmed payment yet. If you completed payment, check again before retrying.",
+    "onlinePaymentCheckFailed": "Could not check payment status. Please try again.",
     "routeUnavailable": "Road route unavailable",
     "selectRide": "Choose your ride",
     "cash": "Cash",
@@ -379,7 +382,10 @@
     "ratingSessionRequired": "Your session needs to be refreshed before submitting a rating.",
     "ratingSaveFailed": "We could not save your rating. Please try again.",
     "submitRating": "Submit",
-    "skipRating": "Skip for now"
+    "skipRating": "Skip for now",
+    "pickupPinUnavailable": "Your pickup code has expired or is unavailable. Get a new code.",
+    "pickupPinRefresh": "Get a new code",
+    "pickupPinRefreshError": "Could not generate a code. Please wait a minute and try again."
   },
   "operator": {
     "title": "Settlement review",

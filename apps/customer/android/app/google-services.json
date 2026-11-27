@@ -1,40 +1,21 @@
 {
   "project_info": {
-    "project_number": "529449783984",
-    "project_id": "ride-demo-dcc50",
-    "storage_bucket": "ride-demo-dcc50.firebasestorage.app"
+    "project_number": "43285667226",
+    "project_id": "sawaari-staging",
+    "storage_bucket": "sawaari-staging.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:529449783984:android:59eef8e4cefa5f5911a175",
+        "mobilesdk_app_id": "1:43285667226:android:d94ec39d31134b3a442e23",
         "android_client_info": {
-          "package_name": "com.nandyalride.captain"
+          "package_name": "com.nandyalride.customer.staging"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCDtKUqqiLhzC5ydPe5fTVNukagyxTFYd0"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:529449783984:android:d5eda9ac863cde0711a175",
-        "android_client_info": {
-          "package_name": "com.nandyalride.customer"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyCDtKUqqiLhzC5ydPe5fTVNukagyxTFYd0"
+          "current_key": "AIzaSyAYcYsm26hye3evNXnEul1K0VyrsdhcR4Q"
         }
       ],
       "services": {

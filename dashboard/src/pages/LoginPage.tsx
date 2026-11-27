@@ -84,13 +84,13 @@ export function LoginPage() {
               onClick={() => void sendCode()}
               className="mt-3 w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
             >
-              {busy ? 'Sending…' : `Send code`}
+              {busy ? 'Sending…' : channel === 'email' ? 'Send sign-in link' : 'Send code'}
             </button>
           </>
         ) : (
           <>
-            <p className="mb-2 text-xs text-slate-500">Enter the 6-digit code sent to {destination}.</p>
-            <input
+            <p className="mb-2 text-xs text-slate-500">{channel === 'email' ? `Open the sign-in link sent to ${destination} on this computer. Keep this dashboard running.` : `Enter the 6-digit code sent to ${destination}.`}</p>
+            {channel === 'phone' && <><input
               value={code}
               onChange={(e) => setCode(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && code && void submitCode()}
@@ -104,7 +104,8 @@ export function LoginPage() {
               className="mt-3 w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
             >
               {busy ? 'Verifying…' : 'Verify & sign in'}
-            </button>
+            </button></>}
+            <button onClick={() => setStage('input')} className="mt-3 w-full text-sm text-slate-600 underline">Use a different address or resend</button>
           </>
         )}
 
