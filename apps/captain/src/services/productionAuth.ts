@@ -10,7 +10,9 @@ export function createProductionAuthService(appVariant: 'customer' | 'captain') 
   return {
     async sendOtp(phone: string) {
       const client = requireClient();
-      await client.auth.signOut({ scope: 'local' });
+      // Keep a valid session until the replacement OTP has been verified.
+      // Signing out here made a transient OTP request failure log a Captain
+      // out of the app with no route back to their existing session.
       const { error } = await client.auth.signInWithOtp({ phone: toIndianE164(phone) });
       if (error) throw error;
       return { requested: true };

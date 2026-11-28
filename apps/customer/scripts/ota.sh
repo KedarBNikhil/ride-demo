@@ -52,5 +52,5 @@ test -f "$export_dir/metadata.json"
 printf -v bundle_validation_command 'node ../../scripts/verify-ota-production-bundle.mjs %q' "$export_dir"
 run_with_eas_production_environment "$bundle_validation_command"
 if [[ "$action" == "--preflight" ]]; then echo "Customer OTA preflight passed; nothing published."; exit 0; fi
-SAWAARI_UPDATE_RUNTIME_VERSION="$RUNTIME" npx --yes eas-cli@latest update --branch "$CHANNEL" --platform android --skip-bundler --input-dir "$export_dir" --message "${OTA_MESSAGE:?Set OTA_MESSAGE before publishing}"
+SAWAARI_UPDATE_RUNTIME_VERSION="$RUNTIME" npx --yes eas-cli@latest update --environment production --branch "$CHANNEL" --platform android --skip-bundler --input-dir "$export_dir" --message "${OTA_MESSAGE:?Set OTA_MESSAGE before publishing}"
 npx --yes eas-cli@latest update:list --branch "$CHANNEL" --platform android --runtime-version "$RUNTIME" --limit 1 --json

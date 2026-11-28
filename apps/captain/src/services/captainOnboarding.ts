@@ -16,6 +16,7 @@ const delay = (ms = 450) => new Promise<void>((resolve) => setTimeout(resolve, m
 
 const requiredDocumentTypes: CaptainDocumentType[] = ['license', 'rc', 'aadhar'];
 const productionAuth = createProductionAuthService('captain');
+const normalizeVehiclePlateNumber = (value: string) => value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 12);
 
 function requireSupabase() {
   if (!supabase) throw new Error('SUPABASE_NOT_CONFIGURED');
@@ -106,6 +107,8 @@ export const captainOnboardingService = {
   },
   async saveProfile(profile: CaptainProfile) {
     if (!profile.vehicleType) throw new Error('Choose a vehicle type');
+    const vehiclePlateNumber = normalizeVehiclePlateNumber(profile.vehiclePlateNumber);
+    if (!vehiclePlateNumber) throw new Error('Enter a valid vehicle licence plate number');
     const user = await currentCaptainUser();
     const client = requireSupabase();
     const { error: profileError } = await client.from('profiles').update({ full_name: profile.name.trim(), preferred_language: profile.language }).eq('id', user.id);
@@ -115,11 +118,11 @@ export const captainOnboardingService = {
       full_name: profile.name.trim(),
       preferred_language: profile.language,
       vehicle_type: profile.vehicleType,
-      vehicle_plate_number: profile.vehiclePlateNumber.trim().toUpperCase(),
+      vehicle_plate_number: vehiclePlateNumber,
       status: 'draft',
     }, { onConflict: 'user_id' });
     if (error) throw error;
-    return { ...profile, id: user.id };
+    return { ...profile, vehiclePlateNumber, id: user.id };
   },
   async saveDocuments(documents: Record<CaptainDocumentType, CaptainDocumentPair>) {
     const user = await currentCaptainUser();

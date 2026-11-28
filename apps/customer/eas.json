@@ -27,6 +27,13 @@
         "EXPO_PUBLIC_APP_MODE": "customer",
         "EXPO_PUBLIC_AUTH_MODE": "production"
       }
+    },
+    "staging-preview": {
+      "extends": "staging",
+      "developmentClient": false,
+      "android": {
+        "buildType": "apk"
+      }
     }
   },
   "submit": {

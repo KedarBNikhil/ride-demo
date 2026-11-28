@@ -8,10 +8,12 @@
       "distribution": "internal"
     },
     "staging": {
-      "developmentClient": true,
       "distribution": "internal",
       "environment": "preview",
       "channel": "staging-captain",
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "APP_VARIANT": "captain",
         "SAWAARI_ENVIRONMENT": "staging",

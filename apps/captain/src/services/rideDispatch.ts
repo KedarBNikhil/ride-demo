@@ -508,16 +508,6 @@ export const rideDispatchService = {
     });
     if (error) throw error;
   },
-  async getCaptainOutstandingBalance() {
-    const { data, error } = await requireClient().rpc('captain_outstanding_sawaari_balance');
-    if (error) throw error;
-    return (data ?? []).map((row: any) => ({ amount_due: asNumber(row.amount_due), status: String(row.status), adjustment_id: String(row.adjustment_id), block_threshold: asNumber(row.block_threshold), rejection_reason: row.rejection_reason == null ? null : String(row.rejection_reason) }));
-  },
-  async submitAdjustmentPayment(adjustmentId: string, amount: number, utr: string) {
-    const { error } = await requireClient().rpc('submit_financial_adjustment_payment', { p_adjustment_id: adjustmentId, p_amount: amount, p_utr_reference: utr.trim() });
-    if (error) throw error;
-  },
-
   async getCaptainAvailability() {
     const captainId = await currentUserId();
     const { data, error } = await requireClient().from('captain_availability').select('is_online').eq('captain_id', captainId).maybeSingle();

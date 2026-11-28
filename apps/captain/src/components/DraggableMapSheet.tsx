@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleProp, StyleSheet, useWindowDimensions, View, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { clamp, runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { colors, radii } from '../theme';
 
 /** OTA-safe shared sheet used only by map-state panels. */
-export function DraggableMapSheet({ children, bottom = 0, collapsedHeight = 250, maxHeight = 680, style, contentContainerStyle, onSettled }: {
+export function DraggableMapSheet({ children, bottom = 0, collapsedHeight = 250, maxHeight = 680, style, contentContainerStyle, onSettled, expandOnChange }: {
   children: React.ReactNode;
   bottom?: number;
   collapsedHeight?: number;
@@ -13,6 +13,7 @@ export function DraggableMapSheet({ children, bottom = 0, collapsedHeight = 250,
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
   onSettled?: (expanded: boolean, visibleHeight: number) => void;
+  expandOnChange?: unknown;
 }) {
   const { height } = useWindowDimensions();
   const sheetHeight = Math.min(maxHeight, Math.max(collapsedHeight, height - bottom - 64));
@@ -22,6 +23,20 @@ export function DraggableMapSheet({ children, bottom = 0, collapsedHeight = 250,
   const scrollOffset = useSharedValue(0);
   const canDrag = useSharedValue(true);
   const [expanded, setExpanded] = useState(false);
+  const previouslyRequestedExpansion = useRef(false);
+  const scrollRef = useRef<React.ElementRef<typeof Animated.ScrollView>>(null);
+  useEffect(() => {
+    if (expandOnChange) {
+      offset.value = withSpring(0, { damping: 24, stiffness: 260, mass: 0.7 });
+      setExpanded(true);
+      previouslyRequestedExpansion.current = true;
+    } else if (previouslyRequestedExpansion.current) {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      offset.value = withSpring(collapsedOffset, { damping: 24, stiffness: 260, mass: 0.7 });
+      setExpanded(false);
+      previouslyRequestedExpansion.current = false;
+    }
+  }, [expandOnChange, collapsedOffset, offset]);
   const settle = (next: boolean) => {
     setExpanded(next);
     onSettled?.(next, next ? sheetHeight : collapsedHeight);
@@ -46,7 +61,7 @@ export function DraggableMapSheet({ children, bottom = 0, collapsedHeight = 250,
   return <Animated.View style={[styles.sheet, { bottom, height: sheetHeight }, style, animatedStyle]}>
     <GestureDetector gesture={Gesture.Simultaneous(pan, nativeScroll)}><View style={styles.gestureRoot} collapsable={false}>
       <View style={styles.dragSurface}><View style={styles.handle} /></View>
-      <Animated.ScrollView nestedScrollEnabled contentContainerStyle={[styles.content, contentContainerStyle]} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false}>{children}</Animated.ScrollView>
+      <Animated.ScrollView ref={scrollRef} nestedScrollEnabled contentContainerStyle={[styles.content, contentContainerStyle]} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false}>{children}</Animated.ScrollView>
     </View></GestureDetector>
   </Animated.View>;
 }

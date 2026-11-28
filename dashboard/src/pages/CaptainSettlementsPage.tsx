@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { supabase } from '@/lib/supabase';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorBlock, LoadingBlock, PageHeader, StatCard, StatusBadge } from '@/components/ui';
 import { DataTable } from '@/components/DataTable';
@@ -46,6 +47,56 @@ function GpsEvidenceDialog({ ride, onClose }: { ride: CaptainRideVerificationRow
   return <Dialog title="Ride GPS Trail / Tracking Evidence" onClose={onClose}>{evidence.isLoading ? <LoadingBlock /> : evidence.error ? <ErrorBlock error={evidence.error} /> : evidence.data ? <div className="mt-3 space-y-4"><div className="flex items-center justify-between"><EvidenceBadge status={evidence.data.tracking_status} /><span className="text-xs text-slate-500">{evidence.data.sample_count} samples</span></div>{evidence.data.tracking_reasons.map((reason) => <p key={reason} className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">{reason}</p>)}<div className="grid grid-cols-2 gap-2 text-sm"><span>Coverage: <b>{Number(evidence.data.coverage_percent).toFixed(1)}%</b></span><span>Largest gap: <b>{duration(evidence.data.largest_gap_seconds)}</b></span><span>Tracked distance: <b>{(Number(evidence.data.tracked_distance_meters) / 1000).toFixed(2)} km</b></span><span>Low accuracy: <b>{evidence.data.low_accuracy_sample_count}</b></span></div><GpsTrailPlot samples={evidence.data.samples} /><div className="max-h-40 overflow-auto rounded-lg border border-slate-200 text-xs"><table className="w-full text-left"><thead className="sticky top-0 bg-slate-100"><tr><th className="p-2">Captured</th><th>Coordinates</th><th>Accuracy</th></tr></thead><tbody>{evidence.data.samples.map((sample, index) => <tr key={`${sample.device_recorded_at}-${index}`} className="border-t border-slate-100"><td className="p-2">{formatDateTime(sample.device_recorded_at)}</td><td>{sample.latitude.toFixed(5)}, {sample.longitude.toFixed(5)}</td><td>{Math.round(sample.accuracy_meters)}m{sample.mocked_location ? ' · mocked' : ''}</td></tr>)}</tbody></table></div></div> : null}</Dialog>;
 }
 
+type RazorpayRidePayment = { ride_id: string; customer_name: string | null; captain_name: string | null; pickup_address: string; drop_address: string; fare: number; customer_charge: number; amount_paise: number; payment_status: string; ride_payment_status: string; ride_payment_method: string | null; provider_method: string | null; order_id: string; payment_id: string | null; created_at: string; verified_at: string | null };
+function RazorpayPaymentDetails({ payment, onClose }: { payment: RazorpayRidePayment; onClose: () => void }) {
+  const earning = useQuery({ queryKey: ['razorpay-ride-earning', payment.ride_id], queryFn: async () => { if (!supabase) throw new Error('Backend not configured'); const { data, error } = await supabase.rpc('operator_razorpay_ride_earning', { p_ride_id: payment.ride_id }); if (error) throw error; return (data as Array<{ captain_earning_amount: number | null }> | null)?.[0]?.captain_earning_amount ?? null; } });
+  const confirmed = payment.payment_status === 'verified';
+  const conflict = confirmed && payment.ride_payment_status === 'confirmed' && payment.ride_payment_method !== 'razorpay';
+  const line = (label: string, value: string, strong = false) => <div className={`flex justify-between gap-4 border-b border-slate-100 py-2.5 ${strong ? 'font-bold text-slate-900' : 'text-slate-700'}`}><span>{label}</span><span className="text-right">{value}</span></div>;
+  return <Dialog title="Ride payment breakdown" onClose={onClose}><div className="mt-3 max-h-[70vh] overflow-y-auto text-sm">
+    <p className="break-all text-xs text-slate-500">Ride ID: {payment.ride_id}</p>
+    <p className="mt-2 text-slate-700">{payment.customer_name ?? 'Customer unavailable'} → {payment.captain_name ?? 'Captain unavailable'}</p>
+    <p className="mt-1 text-xs text-slate-500">{payment.pickup_address} → {payment.drop_address}</p>
+    {conflict && <p role="alert" className="mt-3 rounded-md bg-amber-50 p-3 text-amber-900">Review needed: Razorpay captured a payment, but this ride was separately confirmed as {payment.ride_payment_method ?? 'another method'}. Check for duplicate payment before taking further action.</p>}
+    <h4 className="mt-4 font-semibold text-slate-900">Customer payment</h4>
+    {line('Ride fare', formatFare(Number(payment.fare)))}
+    {line('Customer charge', formatFare(Number(payment.customer_charge)))}
+    {line('Payment attempt amount', formatFare(Number(payment.amount_paise) / 100))}
+    {line('Customer paid amount', confirmed ? formatFare(Number(payment.amount_paise) / 100) : 'Not confirmed')}
+    {line('Payment status', `${payment.payment_status} · ride ${payment.ride_payment_status}`)}
+    {line('Ride payment method', payment.ride_payment_method ?? 'Not recorded')}
+    {line('Razorpay method', payment.provider_method ?? 'Unavailable')}
+    <h4 className="mt-4 font-semibold text-slate-900">Captain earning and charges</h4>
+    {earning.isLoading ? <LoadingBlock /> : earning.error ? <ErrorBlock error={earning.error} /> : line('Captain ride earning (recorded)', earning.data == null ? 'Unavailable' : formatFare(Number(earning.data)))}
+    {line('Platform fee', 'Not configured')}
+    {line('Razorpay charges', 'Not available')}
+    {line('GST and other applicable taxes', 'Not configured')}
+    {line('Other charges or adjustments', 'Not configured')}
+    {line('Amount payable to Captain', 'Not calculated', true)}
+    <h4 className="mt-4 font-semibold text-slate-900">Settlement and payout</h4>
+    {line('Settlement to Sawaari', 'Not tracked')}
+    {line('Captain payout', 'Not tracked')}
+    <p className="mt-3 text-xs text-slate-500">Charges, taxes and Captain payable are placeholders until the calculation and payout rules are decided. The recorded ride earning is not a payout confirmation.</p>
+    <p className="mt-3 break-all text-xs text-slate-500">Order: {payment.order_id}<br />Payment: {payment.payment_id ?? 'Not recorded'}</p>
+  </div><div className="mt-4 flex justify-end"><button onClick={onClose} className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white">Close</button></div></Dialog>;
+}
+function RazorpayRidePayments() {
+  const [selectedPayment, setSelectedPayment] = useState<RazorpayRidePayment | null>(null);
+  const payments = useQuery({ queryKey: ['razorpay-ride-payments'], queryFn: async () => { if (!supabase) throw new Error('Backend not configured'); const { data, error } = await supabase.rpc('operator_razorpay_ride_payments'); if (error) throw error; return (data ?? []) as RazorpayRidePayment[]; } });
+  return <section><div className="mb-3"><h2 className="text-base font-semibold text-slate-800">Razorpay ride payments</h2><p className="mt-1 text-sm text-slate-500">Latest 500 payment attempts recorded by Sawaari. A verified customer payment does not confirm settlement to the company or payment to the Captain.</p></div><Card>{payments.isLoading ? <LoadingBlock /> : payments.error ? <ErrorBlock error={payments.error} /> : <DataTable<RazorpayRidePayment> data={payments.data ?? []} onRowClick={setSelectedPayment} emptyMessage="No Razorpay ride payment attempts recorded." columns={[
+    { header: 'Created', accessorFn: r => r.created_at, cell: c => formatDateTime(c.getValue<string>()) },
+    { header: 'Ride ID', accessorFn: r => r.ride_id },
+    { header: 'Customer', accessorFn: r => r.customer_name ?? '—' },
+    { header: 'Captain', accessorFn: r => r.captain_name ?? '—' },
+    { header: 'Route', accessorFn: r => `${r.pickup_address} → ${r.drop_address}` },
+    { header: 'Ride fare', accessorFn: r => Number(r.fare), cell: c => formatFare(c.getValue<number>()) },
+    { header: 'Payment amount', accessorFn: r => Number(r.amount_paise) / 100, cell: c => formatFare(c.getValue<number>()) },
+    { header: 'Payment status', accessorFn: r => r.payment_status, cell: c => { const r=c.row.original; const conflict=r.payment_status === 'verified' && r.ride_payment_status === 'confirmed' && r.ride_payment_method !== 'razorpay'; return <span>{c.getValue<string>()} · ride {r.ride_payment_status}{conflict && <strong className="block text-amber-700">Payment method conflict</strong>}</span>; } },
+    { header: 'Razorpay IDs', accessorFn: r => r.order_id, cell: c => <span className="font-mono text-xs">{c.row.original.order_id}<br />{c.row.original.payment_id ?? 'Payment not recorded'}</span> },
+    { header: '', id: 'details', enableSorting: false, cell: c => <button onClick={(event) => { event.stopPropagation(); setSelectedPayment(c.row.original); }} className="whitespace-nowrap rounded-md border border-indigo-200 px-2.5 py-1 text-xs font-semibold text-indigo-700">View breakdown</button> },
+  ]} />}</Card>{selectedPayment && <RazorpayPaymentDetails payment={selectedPayment} onClose={() => setSelectedPayment(null)} />}</section>;
+}
+
 export function CaptainSettlementsPage() {
   const queryClient = useQueryClient();
   const [verificationFilter, setVerificationFilter] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'all'>('PENDING');
@@ -69,6 +120,7 @@ export function CaptainSettlementsPage() {
 
   return <div className="space-y-6">
     <PageHeader title="Captain Settlements" subtitle="Verify company-payable rides, create a daily manual payout batch, then record bank references." />
+    <RazorpayRidePayments />
     <section><div className="mb-3 flex items-center justify-between"><h2 className="text-base font-semibold text-slate-800">Company-payable ride verification</h2><select value={verificationFilter} onChange={(e) => setVerificationFilter(e.target.value as typeof verificationFilter)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm"><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option><option value="all">All</option></select></div><Card>{verifications.isLoading ? <LoadingBlock /> : verifications.error ? <ErrorBlock error={verifications.error} /> : <DataTable<CaptainRideVerificationRow> data={verifications.data ?? []} emptyMessage="No company-payable rides in this view." columns={[
       { header: 'Completed', accessorFn: (r) => r.completed_at, cell: (c) => formatDateTime(c.getValue<string>()) },
       { header: 'Customer / Captain', accessorFn: (r) => `${r.customer_name ?? '—'} / ${r.captain_name ?? '—'}` },

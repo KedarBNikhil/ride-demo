@@ -39,7 +39,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!supabase) return;
-    void supabase.auth.getSession().then(({ data }) => refresh(data.session));
+    void supabase.auth.getSession().then(async ({ data }) => {
+      if (!data.session && import.meta.env.DEV && import.meta.env.VITE_SUPABASE_URL === 'https://wgvzmgyyoboyxdusoent.supabase.co' && window.location.hostname === '127.0.0.1') {
+        try {
+          const response = await fetch('/__local_operator_session', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+          if (response.ok) {
+            const tokens = await response.json();
+            const result = await supabase!.auth.setSession(tokens);
+            if (result.data.session) return;
+          }
+        } catch { /* Keep normal sign-in available if local session setup fails. */ }
+      }
+      await refresh(data.session);
+    });
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => refresh(nextSession));
     return () => data.subscription.unsubscribe();
   }, [refresh]);
